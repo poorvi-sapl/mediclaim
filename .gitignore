@@ -1,0 +1,19 @@
+.env
+venv/
+__pycache__/
+*.pyc
+*.pyo
+# Data — excluded from git entirely (large/regenerable datasets)
+data/
+*.egg-info/
+.pytest_cache/
+dist/
+build/
+
+# Dependencies
+node_modules/
+
+# Logs & runtime output
+*.log
+sse*.txt
+*.cookie

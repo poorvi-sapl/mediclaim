@@ -1,0 +1,602 @@
+[
+  {
+    "npi": "1497701833",
+    "name": "01 A LL-STATES MEDICAL SUPPLY, INC",
+    "state": "NC",
+    "type": "DME"
+  },
+  {
+    "npi": "1437586237",
+    "name": "01 A LL-STATES MEDICAL SUPPLY, INC.",
+    "state": "TN",
+    "type": "DME"
+  },
+  {
+    "npi": "1083639934",
+    "name": "02 INVESTMENTS, INC",
+    "state": "TX",
+    "type": "DME"
+  },
+  {
+    "npi": "1093792863",
+    "name": "02 NEAL MEDICAL, INC.",
+    "state": "AL",
+    "type": "DME"
+  },
+  {
+    "npi": "1235989658",
+    "name": "02 NEAL MEDICAL, INC.",
+    "state": "AL",
+    "type": "DME"
+  },
+  {
+    "npi": "1992376982",
+    "name": "02 NEAL MEDICAL, INC.",
+    "state": "AL",
+    "type": "DME"
+  },
+  {
+    "npi": "1144252537",
+    "name": "03 INVESTMENTS, INC",
+    "state": "VA",
+    "type": "DME"
+  },
+  {
+    "npi": "1154353647",
+    "name": "03 INVESTMENTS, INC.",
+    "state": "TX",
+    "type": "DME"
+  },
+  {
+    "npi": "1740212133",
+    "name": "03 INVESTMENTS, INC.",
+    "state": "VA",
+    "type": "DME"
+  },
+  {
+    "npi": "1093035354",
+    "name": "0424 INC",
+    "state": "KY",
+    "type": "DME"
+  },
+  {
+    "npi": "1609101138",
+    "name": "1 ACTIVE MOBILITY LLC",
+    "state": "NJ",
+    "type": "DME"
+  },
+  {
+    "npi": "1942019682",
+    "name": "1 CAPITAL SOLUTIONS PLLC",
+    "state": "GA",
+    "type": "DME"
+  },
+  {
+    "npi": "1295465615",
+    "name": "1 CARE PREMIER MEDICAL SUPPLY",
+    "state": "TX",
+    "type": "DME"
+  },
+  {
+    "npi": "1770247926",
+    "name": "1 GLOBAL MED SERVICES, INC",
+    "state": "FL",
+    "type": "DME"
+  },
+  {
+    "npi": "1538925110",
+    "name": "1 HEART MEDICAL SUPPLIES LLC",
+    "state": "MD",
+    "type": "DME"
+  },
+  {
+    "npi": "1245851302",
+    "name": "1 MED SUPPLIER CORP",
+    "state": "FL",
+    "type": "DME"
+  },
+  {
+    "npi": "1447999719",
+    "name": "1 MEDICAL EQUIPMENT & SUPPLY LLC",
+    "state": "FL",
+    "type": "DME"
+  },
+  {
+    "npi": "1407487887",
+    "name": "1 MEDICAL SUPPLIES CORP",
+    "state": "FL",
+    "type": "DME"
+  },
+  {
+    "npi": "1891258828",
+    "name": "1 NATION MEDICAL GROUP LLC",
+    "state": "FL",
+    "type": "DME"
+  },
+  {
+    "npi": "1740606409",
+    "name": "1 NATURAL WAY LLC",
+    "state": "OH",
+    "type": "DME"
+  },
+  {
+    "npi": "1629789656",
+    "name": "1 SALONLIFE LLC",
+    "state": "FL",
+    "type": "DME"
+  },
+  {
+    "npi": "1578519039",
+    "name": "1 SOURCE MEDICAL EQUIP & SUPPLIES, INC.",
+    "state": "IN",
+    "type": "DME"
+  },
+  {
+    "npi": "1073407326",
+    "name": "1 SOURCE MEDICAL LLC",
+    "state": "NC",
+    "type": "DME"
+  },
+  {
+    "npi": "1790022457",
+    "name": "1 SOURCE MEDICAL, LLC",
+    "state": "NJ",
+    "type": "DME"
+  },
+  {
+    "npi": "1497926109",
+    "name": "1 SOURCE SOLUTIONS, LLC",
+    "state": "VA",
+    "type": "DME"
+  },
+  {
+    "npi": "1265979389",
+    "name": "1 STOP MEDICAL SUPPLY SHOP",
+    "state": "IL",
+    "type": "DME"
+  },
+  {
+    "npi": "1750624797",
+    "name": "10 MINUTE FITNESS INC.",
+    "state": "CA",
+    "type": "DME"
+  },
+  {
+    "npi": "1629937412",
+    "name": "100 URBAN ENTREPRENEURS INC",
+    "state": "DC",
+    "type": "DME"
+  },
+  {
+    "npi": "1902763030",
+    "name": "1000 FEET PROJECT",
+    "state": "NY",
+    "type": "DME"
+  },
+  {
+    "npi": "1003101296",
+    "name": "101 DIABETIC SUPPLIES, LLC",
+    "state": "FL",
+    "type": "DME"
+  },
+  {
+    "npi": "1134454531",
+    "name": "101 MEDICAL EQUIPMENT, INC.",
+    "state": "PA",
+    "type": "DME"
+  },
+  {
+    "npi": "1245759760",
+    "name": "101 MOBILITY, LLC",
+    "state": "NC",
+    "type": "DME"
+  },
+  {
+    "npi": "1568228633",
+    "name": "10137050 USA LTD",
+    "state": "TX",
+    "type": "DME"
+  },
+  {
+    "npi": "1598943177",
+    "name": "101MOBILITY, LLC",
+    "state": "NC",
+    "type": "DME"
+  },
+  {
+    "npi": "1679260855",
+    "name": "102 CENTER CARE PHARMACY INC",
+    "state": "NY",
+    "type": "DME"
+  },
+  {
+    "npi": "1780542290",
+    "name": "106 RQW FRG P0 INC",
+    "state": "NY",
+    "type": "DME"
+  },
+  {
+    "npi": "1477409464",
+    "name": "10SPHERE SYSTEMS LLC",
+    "state": "NY",
+    "type": "DME"
+  },
+  {
+    "npi": "1316489024",
+    "name": "11 HEALTH AND TECHNOLOGIES INC.",
+    "state": "CA",
+    "type": "DME"
+  },
+  {
+    "npi": "1477813459",
+    "name": "11/11 CONSULTING SERVICES, INC.",
+    "state": "NJ",
+    "type": "DME"
+  },
+  {
+    "npi": "1730951716",
+    "name": "110 DME STORE LLC",
+    "state": "NM",
+    "type": "DME"
+  },
+  {
+    "npi": "1215584958",
+    "name": "111 AESTHETICS",
+    "state": "FL",
+    "type": "DME"
+  },
+  {
+    "npi": "1720278997",
+    "name": "11941 BELSAY ROAD OPERATING COMPANY, LLC",
+    "state": "MI",
+    "type": "DME"
+  },
+  {
+    "npi": "1417429192",
+    "name": "121 MEDEQUIP INC",
+    "state": "MI",
+    "type": "DME"
+  },
+  {
+    "npi": "1396799722",
+    "name": "1223 SOUTH 15TH STREET CORPORATION",
+    "state": "PA",
+    "type": "DME"
+  },
+  {
+    "npi": "1629589593",
+    "name": "123 MOBILITY EXPRESS",
+    "state": "TX",
+    "type": "DME"
+  },
+  {
+    "npi": "1194042473",
+    "name": "123EZINSURE.ME INC",
+    "state": "FL",
+    "type": "DME"
+  },
+  {
+    "npi": "1033741681",
+    "name": "123GERMFREE, LLC",
+    "state": "FL",
+    "type": "DME"
+  },
+  {
+    "npi": "1821494501",
+    "name": "1450 ASSOCIATES, LLC",
+    "state": "NJ",
+    "type": "DME"
+  },
+  {
+    "npi": "1144189762",
+    "name": "147TH ROAD BLOCK COMMUMITY ASSOCIATION",
+    "state": "NY",
+    "type": "DME"
+  },
+  {
+    "npi": "1255622742",
+    "name": "1534 VICTORY DME, LLC",
+    "state": "NY",
+    "type": "DME"
+  },
+  {
+    "npi": "1144490855",
+    "name": "\"A\" CLASS HOME HEALTH AGENCY, INC.",
+    "state": "FL",
+    "type": "HOME_HEALTH"
+  },
+  {
+    "npi": "1700031077",
+    "name": "\"C\" CASTING CARE",
+    "state": "VA",
+    "type": "HOME_HEALTH"
+  },
+  {
+    "npi": "1073837829",
+    "name": "\"CHYNA CARES\" HEALTH SERVICES",
+    "state": "TX",
+    "type": "HOME_HEALTH"
+  },
+  {
+    "npi": "1144777426",
+    "name": "\"WE CARE\" NURSES, INC.",
+    "state": "PA",
+    "type": "HOME_HEALTH"
+  },
+  {
+    "npi": "1043765118",
+    "name": "\"WINGS OF TRINITY\" HOME HEALTH CARE",
+    "state": "VA",
+    "type": "HOME_HEALTH"
+  },
+  {
+    "npi": "1245661297",
+    "name": "# 1 HOME HEALTH CARE OF OHIO",
+    "state": "OH",
+    "type": "HOME_HEALTH"
+  },
+  {
+    "npi": "1770016313",
+    "name": "#LEADWITHLOVE INC.",
+    "state": "FL",
+    "type": "HOME_HEALTH"
+  },
+  {
+    "npi": "1518254648",
+    "name": "(EHH) ENTERPRISE HOME HEALTH SERVICES, LLC",
+    "state": "TX",
+    "type": "HOME_HEALTH"
+  },
+  {
+    "npi": "1083157689",
+    "name": ".MO'S SHOWER EXPRESS",
+    "state": "MI",
+    "type": "HOME_HEALTH"
+  },
+  {
+    "npi": "1114572344",
+    "name": "0-HASSLE PERSONAL CARE SERVICES LLC",
+    "state": "TX",
+    "type": "HOME_HEALTH"
+  },
+  {
+    "npi": "1184131435",
+    "name": "01030712 LLC",
+    "state": "FL",
+    "type": "HOME_HEALTH"
+  },
+  {
+    "npi": "1962743146",
+    "name": "1 & 1 HOME HEALTH, INC.",
+    "state": "CA",
+    "type": "HOME_HEALTH"
+  },
+  {
+    "npi": "1780367805",
+    "name": "1 ABOVE OF ALL AGENCY COPERATION",
+    "state": "OH",
+    "type": "HOME_HEALTH"
+  },
+  {
+    "npi": "1851023659",
+    "name": "1 ABOVE THE REST",
+    "state": "CO",
+    "type": "HOME_HEALTH"
+  },
+  {
+    "npi": "1922852573",
+    "name": "1 ABOVE THE REST",
+    "state": "CO",
+    "type": "HOME_HEALTH"
+  },
+  {
+    "npi": "1184198095",
+    "name": "1 ABOVE THE REST",
+    "state": "CO",
+    "type": "HOME_HEALTH"
+  },
+  {
+    "npi": "1619437100",
+    "name": "1 ACCESS CARE OF AMERICA",
+    "state": "TX",
+    "type": "HOME_HEALTH"
+  },
+  {
+    "npi": "1225480270",
+    "name": "1 ACCORD HOME HEALTH, LLC",
+    "state": "VA",
+    "type": "HOME_HEALTH"
+  },
+  {
+    "npi": "1669047619",
+    "name": "1 ACT HEALTHCARE CORP",
+    "state": "CA",
+    "type": "HOME_HEALTH"
+  },
+  {
+    "npi": "1699464461",
+    "name": "1 ACT HOME HEALTH CARE, INC.",
+    "state": "CA",
+    "type": "HOME_HEALTH"
+  },
+  {
+    "npi": "1619724879",
+    "name": "1 ACT OF KINDNESS INC",
+    "state": "TX",
+    "type": "HOME_HEALTH"
+  },
+  {
+    "npi": "1871930826",
+    "name": "1 AFFINITY HEALTHCARE SERVICES INC",
+    "state": "TX",
+    "type": "HOME_HEALTH"
+  },
+  {
+    "npi": "1952100562",
+    "name": "1 AGAPE HOME CARE LLC",
+    "state": "GA",
+    "type": "HOME_HEALTH"
+  },
+  {
+    "npi": "1457211906",
+    "name": "1 ALEPH HOME CARE SERVICES",
+    "state": "GA",
+    "type": "HOME_HEALTH"
+  },
+  {
+    "npi": "1730743279",
+    "name": "1 AMAZING HOME CARE, LLC",
+    "state": "OH",
+    "type": "HOME_HEALTH"
+  },
+  {
+    "npi": "1154681849",
+    "name": "1 AMAZING HOME HEALTH CARE LLC",
+    "state": "OH",
+    "type": "HOME_HEALTH"
+  },
+  {
+    "npi": "1013525476",
+    "name": "1 AMELIORATE HEALTHCARE SERVICES LLC",
+    "state": "VA",
+    "type": "HOME_HEALTH"
+  },
+  {
+    "npi": "1326708827",
+    "name": "1 AMERICAN FIRST HOME HEALTH CARE",
+    "state": "VA",
+    "type": "HOME_HEALTH"
+  },
+  {
+    "npi": "1598622995",
+    "name": "1 AND ONLY HOME CARE LLC",
+    "state": "NV",
+    "type": "HOME_HEALTH"
+  },
+  {
+    "npi": "1538555842",
+    "name": "1 AND ONLY HOME HEALTH SERVICES",
+    "state": "TN",
+    "type": "HOME_HEALTH"
+  },
+  {
+    "npi": "1003290032",
+    "name": "1 & 1 HOSPICE, INC",
+    "state": "CA",
+    "type": "HOSPICE"
+  },
+  {
+    "npi": "1104495795",
+    "name": "1 ACT PALLIATIVE AND HOSPICE CARE INC",
+    "state": "CA",
+    "type": "HOSPICE"
+  },
+  {
+    "npi": "1659955581",
+    "name": "1 BUSY BEE CARE SERVICES INC",
+    "state": "MN",
+    "type": "HOSPICE"
+  },
+  {
+    "npi": "1205652898",
+    "name": "1 CARE PARTNERS LLC",
+    "state": "MD",
+    "type": "HOSPICE"
+  },
+  {
+    "npi": "1174156285",
+    "name": "1 HEART HOSPICE AND PALLIATIVE CARE, INC.",
+    "state": "CA",
+    "type": "HOSPICE"
+  },
+  {
+    "npi": "1245123025",
+    "name": "1 HENLUCY HEALTH SYSTEM",
+    "state": "NJ",
+    "type": "HOSPICE"
+  },
+  {
+    "npi": "1134012917",
+    "name": "1 HENLUCY HEALTH SYSTEM",
+    "state": "NJ",
+    "type": "HOSPICE"
+  },
+  {
+    "npi": "1235990169",
+    "name": "1 LAUREL HIGHLANDS HOSPICE, LLC",
+    "state": "PA",
+    "type": "HOSPICE"
+  },
+  {
+    "npi": "1689337768",
+    "name": "1 STOP HOSPICE AND PALLIATIVE CARE, INC.",
+    "state": "CA",
+    "type": "HOSPICE"
+  },
+  {
+    "npi": "1972465375",
+    "name": "1 VISION HOME HEALTH AND HOSPICE LLC",
+    "state": "UT",
+    "type": "HOSPICE"
+  },
+  {
+    "npi": "1831083500",
+    "name": "10 COMMANDMENTS WOUND AND NURSING CARE PLLC",
+    "state": "TX",
+    "type": "HOSPICE"
+  },
+  {
+    "npi": "1134944754",
+    "name": "1103 HEALTH PARTNERS, LLC",
+    "state": "IL",
+    "type": "HOSPICE"
+  },
+  {
+    "npi": "1285480962",
+    "name": "123 GA HOME HEALTHCARE, LLLP",
+    "state": "GA",
+    "type": "HOSPICE"
+  },
+  {
+    "npi": "1437552239",
+    "name": "1ACCURATE HEALTHCARE SERVICES, INC.",
+    "state": "TX",
+    "type": "HOSPICE"
+  },
+  {
+    "npi": "1346915246",
+    "name": "1ACCURATE HOSPICE",
+    "state": "TX",
+    "type": "HOSPICE"
+  },
+  {
+    "npi": "1235701350",
+    "name": "1ST ACCURATE HOSPICE",
+    "state": "TX",
+    "type": "HOSPICE"
+  },
+  {
+    "npi": "1326222399",
+    "name": "1ST CALEBS SIL & PCA RESTORATION INC",
+    "state": "LA",
+    "type": "HOSPICE"
+  },
+  {
+    "npi": "1154505121",
+    "name": "1ST CALEBS SIL & PCA RESTORATION INC",
+    "state": "LA",
+    "type": "HOSPICE"
+  },
+  {
+    "npi": "1306063771",
+    "name": "1ST CALEBS SIL & PCA RESTORATION INC",
+    "state": "LA",
+    "type": "HOSPICE"
+  },
+  {
+    "npi": "1790969764",
+    "name": "1ST CALEBS SIL & PCA RESTORATION INC",
+    "state": "LA",
+    "type": "HOSPICE"
+  }
+]
