@@ -17,3 +17,6 @@ node_modules/
 *.log
 sse*.txt
 *.cookie
+
+# Claude Code local config
+.claude/
