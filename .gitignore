@@ -20,3 +20,7 @@ sse*.txt
 
 # Claude Code local config
 .claude/
+
+# Database dumps
+*.dump
+*.sql.gz

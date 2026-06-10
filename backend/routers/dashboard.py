@@ -391,6 +391,10 @@ NEW_RULE_BREAKDOWN = [
 @router.get("/plan/npi/{npi}/rule/{rule_name}")
 def rule_evidence(npi: str, rule_name: str, db: Session = Depends(get_db)):
     label, explanation = RULE_INFO.get(rule_name, (rule_name, "Fraud-detection rule."))
+    # Practice location (for the geographic_anomaly map: physician pin + polylines).
+    profile = db.query(NpiProfile).filter(NpiProfile.npi == npi).first()
+    p_lat = float(profile.practice_lat) if profile and profile.practice_lat is not None else None
+    p_lng = float(profile.practice_lng) if profile and profile.practice_lng is not None else None
     rows = (
         db.query(RulesFlag, Claim)
         .join(Claim, Claim.id == RulesFlag.claim_id)
@@ -408,10 +412,16 @@ def rule_evidence(npi: str, rule_name: str, db: Session = Depends(get_db)):
         "claim_amount": float(c.claim_amount),
         "why": rf.rule_description,
         "severity": rf.severity,
+        "patient_lat": float(c.patient_lat) if c.patient_lat is not None else None,
+        "patient_lng": float(c.patient_lng) if c.patient_lng is not None else None,
+        "practice_lat": p_lat,
+        "practice_lng": p_lng,
     } for rf, c in rows]
     return {
         "npi": npi, "rule_name": rule_name, "label": label,
         "explanation": explanation, "count": len(claims), "claims": claims,
+        "physician_name": profile.physician_name if profile else None,
+        "practice_lat": p_lat, "practice_lng": p_lng,
     }
 
 

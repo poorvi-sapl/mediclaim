@@ -1,7 +1,41 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, Fragment } from 'react'
+import { useJsApiLoader, GoogleMap, MarkerF, PolylineF } from '@react-google-maps/api'
 import { getRuleEvidence, getSuppliers, getSupplierPhysicians } from '../../api'
 import { Icon, fmtUSD, fmtDate } from '../../components/ui'
 import EvidencePanel, { volumeStats } from './EvidencePanel'
+
+// Embedded Google Map for the geographic_anomaly modal: physician (red) at center with a
+// polyline arrow out to each distant patient (blue → yellow when focused). Only mounted
+// for that rule, so the Google Maps script never loads for any other modal.
+const RED_PIN = 'https://maps.google.com/mapfiles/ms/icons/red-dot.png'
+const BLUE_PIN = 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png'
+const YELLOW_PIN = 'https://maps.google.com/mapfiles/ms/icons/yellow-dot.png'
+
+function GeoMap({ center, physicianLabel, patients, onMapLoad, focusedName }) {
+  const { isLoaded } = useJsApiLoader({
+    id: 'google-map-script',
+    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
+  })
+  if (!isLoaded) {
+    return <div className="h-full w-full bg-slate-100 animate-pulse" style={{ minHeight: '420px' }} />
+  }
+  return (
+    <GoogleMap mapContainerStyle={{ height: '100%', minHeight: '420px', width: '100%' }}
+               center={{ lat: Number(center.lat), lng: Number(center.lng) }} zoom={4}
+               onLoad={onMapLoad}>
+      {/* MarkerF/PolylineF (function components) are React-18 StrictMode safe; the legacy
+          Marker/Polyline silently fail to attach their overlays under StrictMode. */}
+      <MarkerF position={{ lat: Number(center.lat), lng: Number(center.lng) }} title={physicianLabel} icon={RED_PIN} />
+      {patients.map((p, i) => (
+        <Fragment key={i}>
+          <MarkerF position={{ lat: Number(p.lat), lng: Number(p.lng) }} title={`${p.name}${p.miles >= 0 ? ` · ${p.miles.toLocaleString()} miles` : ''}`} icon={focusedName === p.name ? YELLOW_PIN : BLUE_PIN} />
+          <PolylineF path={[{ lat: Number(center.lat), lng: Number(center.lng) }, { lat: Number(p.lat), lng: Number(p.lng) }]}
+                     options={{ strokeColor: '#EF4444', strokeWeight: 1.5, strokeOpacity: 0.6 }} />
+        </Fragment>
+      ))}
+    </GoogleMap>
+  )
+}
 
 function topSupplier(claims) {
   if (!claims || claims.length === 0) return null
@@ -97,6 +131,8 @@ export default function FraudPatternPanel({ npi, label, rule, focusClaim, practi
   const [evidence, setEvidence] = useState(null)
   const [physicians, setPhysicians] = useState([])
   const [error, setError] = useState(null)
+  const [focusedPatient, setFocusedPatient] = useState(null)  // patient NAME the geo map is flown to
+  const mapRef = useRef(null)                                 // GoogleMap instance for panTo/setZoom
 
   useEffect(() => {
     function onKey(e) { if (e.key === 'Escape') onClose?.() }
@@ -128,6 +164,20 @@ export default function FraudPatternPanel({ npi, label, rule, focusClaim, practi
   const vol = ready && rule === 'volume_spike' ? volumeStats(claims) : null
   const physCount = physicians.length || undefined
   const why = ready ? whyText(rule, { supplierName, physCount, practice, vol, explanation: evidence.explanation }) : ''
+
+  // geographic_anomaly map data — physician center + distant patients with valid coords
+  const isGeo = rule === 'geographic_anomaly'
+  const geoPatients = isGeo
+    ? claims
+        .filter((c) => c.patientLat != null && c.patientLng != null)
+        .map((c) => ({ lat: c.patientLat, lng: c.patientLng, name: c.patient, miles: milesOf(c.why) }))
+    : []
+  const practiceCoords = (() => {
+    if (!isGeo) return null
+    const c = claims.find((x) => x.practiceLat != null && x.practiceLng != null)
+    return c ? { lat: c.practiceLat, lng: c.practiceLng } : null
+  })()
+  const showMap = isGeo && !!practiceCoords && geoPatients.length > 0
 
   function renderContent() {
     // OIG — excluded suppliers grouped
@@ -206,10 +256,23 @@ export default function FraudPatternPanel({ npi, label, rule, focusClaim, practi
             {sorted.slice(0, 4).map((c) => (
               <div key={c.id} className="py-2.5">
                 <div className="flex items-center justify-between gap-3">
-                  <span className="text-sm font-semibold text-slate-800 truncate">{c.patient}{milesOf(c.why) >= 0 && <span className="text-amber-600 font-normal"> · {milesOf(c.why).toLocaleString()} miles</span>}</span>
+                  <span className="text-sm truncate">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFocusedPatient(c.patient)
+                        if (mapRef.current && c.patientLat != null && c.patientLng != null) {
+                          mapRef.current.panTo({ lat: Number(c.patientLat), lng: Number(c.patientLng) })
+                          mapRef.current.setZoom(7)
+                        }
+                      }}
+                      className="font-medium text-gray-900 hover:text-blue-600 transition-colors cursor-pointer"
+                    >{c.patient}</button>
+                    {milesOf(c.why) >= 0 && <span className="text-amber-600 font-normal"> · {milesOf(c.why).toLocaleString()} miles</span>}
+                  </span>
                   <span className="text-sm font-bold text-slate-800 tabular-nums flex-shrink-0">{fmtUSD(c.amount, 2)}</span>
                 </div>
-                <div className="text-[13px] text-slate-500 mt-0.5">{fmtDate(c.date)} · <SupplierLink name={c.supplier} onOpenSupplier={onOpenSupplier} /></div>
+                <div className="text-xs text-gray-400 mt-0.5">{fmtDate(c.date)} · <SupplierLink name={c.supplier} onOpenSupplier={onOpenSupplier} /></div>
               </div>
             ))}
           </div>
@@ -427,32 +490,56 @@ export default function FraudPatternPanel({ npi, label, rule, focusClaim, practi
     )
   }
 
+  // Existing modal content (unchanged) — header + why box + per-rule content.
+  const body = (
+    <>
+      {/* header */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-500 flex items-center justify-center flex-shrink-0"><Icon name="alertTri" size={18} /></div>
+          <div className="min-w-0">
+            <h3 className="text-[18px] font-bold text-slate-900 leading-tight">{label}</h3>
+            <p className="text-xs text-slate-400 mt-0.5">Why this fired · NPI {npi}</p>
+          </div>
+        </div>
+        <button onClick={onClose} aria-label="Close" className="flex-shrink-0 text-slate-400 hover:text-slate-700"><Icon name="x" size={18} /></button>
+      </div>
+
+      {error && <div className="mt-4 text-sm text-rose-600">{error}</div>}
+      {!ready && !error && <div className="mt-5 h-32 rounded-xl bg-slate-100 animate-pulse" />}
+
+      {ready && (
+        <div key={rule} className="animate-fade-in-up mt-4">
+          <div className="rounded-lg bg-[#F9FAFB] px-4 py-3.5 text-sm text-slate-700 leading-relaxed">{why}</div>
+          {renderContent()}
+        </div>
+      )}
+    </>
+  )
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.45)' }} onClick={onClose}>
-      <div className="bg-white rounded-xl w-full max-w-[560px] max-h-[80vh] overflow-y-auto p-6"
-           style={{ boxShadow: '0 8px 32px rgba(0,0,0,0.18)' }} onClick={(e) => e.stopPropagation()}>
-        {/* header */}
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-500 flex items-center justify-center flex-shrink-0"><Icon name="alertTri" size={18} /></div>
-            <div className="min-w-0">
-              <h3 className="text-[18px] font-bold text-slate-900 leading-tight">{label}</h3>
-              <p className="text-xs text-slate-400 mt-0.5">Why this fired · NPI {npi}</p>
-            </div>
+      {showMap ? (
+        // geographic_anomaly: two-column — existing content (left) + Google Map (right).
+        <div className="bg-white rounded-xl w-full max-w-6xl max-h-[90vh] overflow-y-auto flex"
+             style={{ boxShadow: '0 8px 32px rgba(0,0,0,0.18)' }} onClick={(e) => e.stopPropagation()}>
+          <div className="p-6 w-[420px] flex-shrink-0">{body}</div>
+          <div className="flex-1 min-w-[420px] border-l border-slate-100">
+            <GeoMap
+              center={practiceCoords}
+              physicianLabel={`${evidence?.physicianName || 'Physician'}${practice?.city ? ` · ${practice.city}` : ''}`}
+              patients={geoPatients}
+              onMapLoad={(map) => { mapRef.current = map }}
+              focusedName={focusedPatient}
+            />
           </div>
-          <button onClick={onClose} aria-label="Close" className="flex-shrink-0 text-slate-400 hover:text-slate-700"><Icon name="x" size={18} /></button>
         </div>
-
-        {error && <div className="mt-4 text-sm text-rose-600">{error}</div>}
-        {!ready && !error && <div className="mt-5 h-32 rounded-xl bg-slate-100 animate-pulse" />}
-
-        {ready && (
-          <div key={rule} className="animate-fade-in-up mt-4">
-            <div className="rounded-lg bg-[#F9FAFB] px-4 py-3.5 text-sm text-slate-700 leading-relaxed">{why}</div>
-            {renderContent()}
-          </div>
-        )}
-      </div>
+      ) : (
+        <div className="bg-white rounded-xl w-full max-w-[560px] max-h-[80vh] overflow-y-auto p-6"
+             style={{ boxShadow: '0 8px 32px rgba(0,0,0,0.18)' }} onClick={(e) => e.stopPropagation()}>
+          {body}
+        </div>
+      )}
     </div>
   )
 }

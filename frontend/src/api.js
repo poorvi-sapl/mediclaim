@@ -438,6 +438,9 @@ export async function getRuleEvidence(npi, rule) {
     label: d.label,
     explanation: d.explanation,
     count: d.count,
+    physicianName: d.physician_name || null,
+    practiceLat: d.practice_lat != null ? Number(d.practice_lat) : null,
+    practiceLng: d.practice_lng != null ? Number(d.practice_lng) : null,
     claims: (d.claims || []).map((c) => ({
       id: c.claim_id,
       patient: c.patient_name,
@@ -448,6 +451,11 @@ export async function getRuleEvidence(npi, rule) {
       amount: Number(c.claim_amount),
       why: c.why,
       severity: c.severity,
+      // geographic_anomaly map coords (null for rows/rules without geocodes)
+      patientLat: c.patient_lat != null ? Number(c.patient_lat) : null,
+      patientLng: c.patient_lng != null ? Number(c.patient_lng) : null,
+      practiceLat: c.practice_lat != null ? Number(c.practice_lat) : null,
+      practiceLng: c.practice_lng != null ? Number(c.practice_lng) : null,
     })),
   }
 }
