@@ -5,7 +5,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 
 export const API_BASE =
-  import.meta.env.VITE_API_URL || 'http://localhost:8000'
+  import.meta.env.VITE_API_URL || 'http://localhost:4001'
 
 // The "logged-in" physician for the physician portal (Dr. James Wilson).
 export const PHYSICIAN_NPI = '1234567890'
