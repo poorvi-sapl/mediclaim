@@ -4,7 +4,7 @@ __pycache__/
 *.pyc
 *.pyo
 # Data — excluded from git entirely (large/regenerable datasets)
-data/
+raw_data/
 *.egg-info/
 .pytest_cache/
 dist/
