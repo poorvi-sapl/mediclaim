@@ -41,7 +41,7 @@ from openai import OpenAI
 # Config
 # --------------------------------------------------------------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-ENV_PATH = r"D:\Mediclaim\.env"
+ENV_PATH = os.path.join(BASE_DIR, "..", "..", ".env")
 LOG_PATH = os.path.join(BASE_DIR, "generation.log")
 MODEL = "gpt-4o"
 GPT_CHUNK = 40
