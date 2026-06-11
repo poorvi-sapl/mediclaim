@@ -5,7 +5,8 @@ export default defineConfig({
   plugins: [react()],
   server: {
     host: true,
-    port: 3000,          // matches backend CORS_ORIGINS (http://localhost:3000)
+    port: 3000,
     allowedHosts: true,
+    open: '/welcome',
   },
 })

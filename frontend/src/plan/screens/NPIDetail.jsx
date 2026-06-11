@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 import { getNpiDetail, getNpiSummary, getSuppliers } from '../../api'
-import { Icon, fmtUSD, fmtDate, timeAgo } from '../../components/ui'
+import { Icon, StatCard, fmtUSD, fmtDate, timeAgo } from '../../components/ui'
 import FraudPatternPanel from '../components/FraudPatternPanel'
 
 // Single muted-blue category chip everywhere (no per-category colors).
-const CATEGORY_CHIP = 'inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium'
+const CATEGORY_CHIP = 'inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium whitespace-nowrap'
 const CATEGORY_CHIP_STYLE = { backgroundColor: '#EFF6FF', color: '#1E3A5F' }
 const FLAG_LABELS = {
   OIG_HIT: 'OIG Hit', CROSS_NPI: 'Cross-NPI', VOLUME_SPIKE: 'Vol. Spike',
@@ -36,12 +36,13 @@ const ACTION_META = {
   deniedOrder: { label: 'Did Not Order', dot: '#FCA5A5' },
 }
 
+
 // Claims table sort (change). All columns sortable; default order = date desc.
 const CLAIM_COLUMNS = [
   { key: 'date', label: 'Date' },
-  { key: 'patient', label: 'Patient' },
+  { key: 'patient', label: 'Patient', cls: 'hidden sm:table-cell' },
   { key: 'description', label: 'Description', cls: 'hidden md:table-cell' },
-  { key: 'category', label: 'Category' },
+  { key: 'category', label: 'Category', cls: 'hidden sm:table-cell' },
   { key: 'supplier', label: 'Supplier', cls: 'hidden lg:table-cell' },
   { key: 'amount', label: 'Amount', right: true },
   { key: 'flags', label: 'Flags' },
@@ -59,17 +60,28 @@ const CLAIM_COMPARATORS = {
 
 function ScoreRing({ score }) {
   const color = score > 80 ? '#e11d48' : score > 60 ? '#ea580c' : score > 30 ? '#d97706' : '#059669'
-  const label = score > 80 ? 'CRITICAL' : score > 60 ? 'HIGH' : score > 30 ? 'MEDIUM' : 'LOW'
-  const r = 36, circ = 2 * Math.PI * r, dash = (score / 100) * circ
+  const label = score > 80 ? 'Critical' : score > 60 ? 'High' : score > 30 ? 'Medium' : 'Low'
+  const r = 30, circ = 2 * Math.PI * r, dash = (score / 100) * circ
   return (
-    <svg width="100" height="100" viewBox="0 0 96 96">
-      <circle cx="48" cy="48" r={r} fill="none" stroke="#e2e8f0" strokeWidth="8" />
-      <circle cx="48" cy="48" r={r} fill="none" stroke={color} strokeWidth="8"
-              strokeDasharray={`${dash} ${circ}`} strokeLinecap="round" transform="rotate(-90 48 48)" />
-      <text x="48" y="45" textAnchor="middle" dominantBaseline="middle" fill="#0f172a" fontSize="20" fontWeight="700">{score}</text>
-      <text x="48" y="62" textAnchor="middle" dominantBaseline="middle" fill={color} fontSize="8" fontWeight="700" letterSpacing="0.08em">{label}</text>
-    </svg>
+    <div className="flex flex-col items-center gap-2">
+      <svg width="80" height="80" viewBox="0 0 80 80">
+        <circle cx="40" cy="40" r={r} fill="none" stroke="#f1f5f9" strokeWidth="5" />
+        <circle cx="40" cy="40" r={r} fill="none" stroke={color} strokeWidth="5"
+                strokeDasharray={`${dash} ${circ}`} strokeLinecap="round"
+                transform="rotate(-90 40 40)" opacity="0.6" />
+        <text x="40" y="44" textAnchor="middle" dominantBaseline="middle"
+              fill="#0f172a" fontSize="20" fontWeight="700">{score}</text>
+      </svg>
+      <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">{label}</span>
+    </div>
   )
+}
+
+function getSeverity(points) {
+  if (points >= 35) return { label: 'CRITICAL', dot: '#fca5a5', bg: '#f8fafc', text: '#64748b', ring: '#e2e8f0' }
+  if (points >= 25) return { label: 'HIGH',     dot: '#fdba74', bg: '#f8fafc', text: '#64748b', ring: '#e2e8f0' }
+  if (points >= 15) return { label: 'MEDIUM',   dot: '#fcd34d', bg: '#f8fafc', text: '#64748b', ring: '#e2e8f0' }
+  return               { label: 'LOW',      dot: '#6ee7b7', bg: '#f8fafc', text: '#94a3b8', ring: '#e2e8f0' }
 }
 
 function fmtDueMonth(due) {
@@ -81,13 +93,19 @@ function fmtDueMonth(due) {
   return `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`
 }
 
-function VRow({ label, tone, mark, text }) {
-  const toneColor = { ok: 'text-emerald-600', warn: 'text-amber-600', bad: 'text-rose-600', muted: 'text-slate-400' }[tone]
+function VRow({ label, tone, text }) {
+  const s = {
+    ok:    { bg: 'bg-emerald-50', txt: 'text-emerald-700', border: 'border-emerald-200/80', dot: 'bg-emerald-400' },
+    warn:  { bg: 'bg-amber-50',   txt: 'text-amber-700',   border: 'border-amber-200/80',   dot: 'bg-amber-400'  },
+    bad:   { bg: 'bg-rose-50',    txt: 'text-rose-700',    border: 'border-rose-200/80',     dot: 'bg-rose-500'   },
+    muted: { bg: 'bg-slate-50',   txt: 'text-slate-400',   border: 'border-slate-200/80',    dot: 'bg-slate-300'  },
+  }[tone] || { bg: 'bg-slate-50', txt: 'text-slate-400', border: 'border-slate-200/80', dot: 'bg-slate-300' }
   return (
-    <div className="flex items-center justify-between py-2 border-b border-slate-50 last:border-0">
-      <span className="text-sm text-slate-500">{label}</span>
-      <span className={`text-sm font-semibold flex items-center gap-1.5 ${toneColor}`}>
-        <span className="tabular-nums">{mark}</span> {text}
+    <div className="flex items-center justify-between gap-4 px-6 py-3.5 border-b border-slate-50 last:border-0 hover:bg-slate-50/50 transition-colors">
+      <span className="text-[13px] text-slate-600">{label}</span>
+      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border shrink-0 ${s.bg} ${s.txt} ${s.border}`}>
+        <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
+        {text}
       </span>
     </div>
   )
@@ -97,9 +115,17 @@ function VerificationStatus({ verification }) {
   // Pre-feature accounts (registered before CMS verification existed) have no record.
   if (!verification || Object.keys(verification).length === 0) {
     return (
-      <div className="mc-card p-5 mt-6">
-        <h2 className="text-sm font-bold text-slate-900 mb-1">Verification Status</h2>
-        <p className="text-sm text-slate-400 mt-2">Verification not run — pre-dates this feature.</p>
+      <div className="mc-card overflow-hidden mt-6">
+        <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-3">
+          <div className="w-8 h-8 rounded-xl bg-slate-50 text-slate-500 flex items-center justify-center shrink-0 ring-1 ring-slate-200">
+            <Icon name="shield" size={15} stroke={2} />
+          </div>
+          <div>
+            <h2 className="text-sm font-bold text-slate-900">Verification Status</h2>
+            <p className="text-[11px] text-slate-400">CMS &amp; registry checks run at registration</p>
+          </div>
+        </div>
+        <p className="px-5 py-4 text-sm text-slate-400">Verification not run — pre-dates this feature.</p>
       </div>
     )
   }
@@ -135,19 +161,44 @@ function VerificationStatus({ verification }) {
     ? { tone: 'muted', mark: '—', text: 'Not provided' }
     : { tone: 'warn', mark: '⚠', text: 'Self-reported, MAC verification pending' }
 
+  const rows = [
+    { label: 'NPPES',             tone: 'ok',                     text: 'Verified'                              },
+    { label: 'OIG Exclusions',    tone: 'ok',                     text: 'Clear'                                 },
+    { label: 'Order & Referring', tone: orManual ? 'warn' : 'ok', text: orManual ? 'Manual Review' : 'Eligible' },
+    { label: 'Revalidation',      tone: rvRow.tone,               text: rvRow.text                              },
+    { label: 'DEA License',       tone: dea.tone,                 text: dea.text                                },
+    { label: 'State License',     tone: lic.tone,                 text: lic.text                                },
+    { label: 'PTAN',              tone: ptanRow.tone,             text: ptanRow.text                            },
+  ]
+  const issues = rows.filter((r) => r.tone === 'bad' || r.tone === 'warn').length
+
   return (
-    <div className="mc-card p-5 mt-6">
-      <h2 className="text-sm font-bold text-slate-900 mb-1">Verification Status</h2>
-      <p className="text-[11px] text-slate-400 mb-3">CMS &amp; registry checks run at registration</p>
-      <VRow label="NPPES" tone="ok" mark="✓" text="Verified" />
-      <VRow label="OIG Exclusions" tone="ok" mark="✓" text="Clear" />
-      <VRow label="Order &amp; Referring"
-            tone={orManual ? 'warn' : 'ok'} mark={orManual ? '⚠' : '✓'}
-            text={orManual ? 'Manual Review' : 'Eligible'} />
-      <VRow label="Revalidation" tone={rvRow.tone} mark={rvRow.mark} text={rvRow.text} />
-      <VRow label="DEA License" tone={dea.tone} mark={dea.mark} text={dea.text} />
-      <VRow label="State License" tone={lic.tone} mark={lic.mark} text={lic.text} />
-      <VRow label="PTAN" tone={ptanRow.tone} mark={ptanRow.mark} text={ptanRow.text} />
+    <div className="mc-card overflow-hidden mt-6">
+      <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-xl bg-slate-50 text-slate-500 flex items-center justify-center shrink-0 ring-1 ring-slate-200">
+            <Icon name="shield" size={15} stroke={2} />
+          </div>
+          <div>
+            <h2 className="text-sm font-bold text-slate-900">Verification Status</h2>
+            <p className="text-[11px] text-slate-400">CMS &amp; registry checks run at registration</p>
+          </div>
+        </div>
+        {issues > 0 ? (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-rose-50 text-rose-700 border border-rose-200/80 shrink-0">
+            <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+            {issues} issue{issues !== 1 ? 's' : ''}
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/80 shrink-0">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+            All Clear
+          </span>
+        )}
+      </div>
+      <div>
+        {rows.map((r) => <VRow key={r.label} label={r.label} tone={r.tone} text={r.text} />)}
+      </div>
     </div>
   )
 }
@@ -162,20 +213,24 @@ const twoSentences = (text) => {
   return sentences.slice(0, 2).join(' ').split(SENT).join('.').trim()
 }
 
-export default function NPIDetail({ npi: row, onBack, backLabel, onOpenSupplier }) {
+export default function NPIDetail({ npi: row, onBack, backLabel, onOpenSupplier, initialPattern = null }) {
   const [data, setData] = useState(null)
   const [summary, setSummary] = useState(null)
   const [sumSource, setSumSource] = useState(null)
   const [sumLoading, setSumLoading] = useState(false)
   const timelineRef = useRef(null)
   const scrollToTimeline = () => timelineRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-  const [pattern, setPattern] = useState(null)      // open fraud-pattern modal { rule, label, claim? } | null
+  const scrollToClaims = () => claimsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  const [pattern, setPattern] = useState(initialPattern)  // open fraud-pattern modal { rule, label, claim? } | null
+  const prevNpiRef = useRef(undefined)                    // last NPI shown; clears the modal only on a real NPI change
   const [activeNpi, setActiveNpi] = useState(null)  // physician opened from the Cross-NPI modal (in-place nav)
+  const [timelineOpen, setTimelineOpen] = useState(true)
   const [claimSort, setClaimSort] = useState({ key: null, dir: null })   // null = default (date desc)
   const [claimFilter, setClaimFilter] = useState(null)   // UI flag code → claims table filter (e.g. OIG_HIT)
   const [claimWindow, setClaimWindow] = useState(null)   // { from, to, label } date-window filter (volume spike)
   const [claimSupplier, setClaimSupplier] = useState(null)   // supplier-name filter (new-supplier modal)
   const [highlightId, setHighlightId] = useState(null)   // claim row to scroll to / flash
+  const [claimsVisible, setClaimsVisible] = useState(15)
   const claimsRef = useRef(null)
 
   // App navigated to a different NPI → drop any in-place override.
@@ -184,7 +239,13 @@ export default function NPIDetail({ npi: row, onBack, backLabel, onOpenSupplier 
   useEffect(() => {
     const target = activeNpi || row
     let cancelled = false
-    setSummary(null); setSumSource(null); setClaimSort({ key: null, dir: null }); setClaimFilter(null); setClaimWindow(null); setClaimSupplier(null); setHighlightId(null); setPattern(null); setData(null)
+    setSummary(null); setSumSource(null); setClaimSort({ key: null, dir: null }); setClaimFilter(null); setClaimWindow(null); setClaimSupplier(null); setHighlightId(null); setData(null); setClaimsVisible(15)
+    // keep the restored modal open on mount / back-navigation; clear it only when the NPI
+    // actually changes. Ref-based check is StrictMode-safe (the double-invoked effect sees
+    // the same NPI on its second run and skips, so it won't wipe the restored modal).
+    const npiKey = target?.npi
+    if (prevNpiRef.current !== undefined && prevNpiRef.current !== npiKey) setPattern(null)
+    prevNpiRef.current = npiKey
     if (target?.npi) getNpiDetail(target.npi).then((d) => { if (!cancelled) setData(d) }).catch(() => {})
     return () => { cancelled = true }
   }, [row, activeNpi])
@@ -201,11 +262,12 @@ export default function NPIDetail({ npi: row, onBack, backLabel, onOpenSupplier 
   // Timeline supplier name → open that supplier's detail page (the action record has
   // only the name, so resolve it to the supplier row by name).
   async function openSupplier(name) {
+    const fromPattern = pattern   // remember the open modal so backing out of the Supplier Case reopens it
     try {
       const list = await getSuppliers()
       const sup = list.find((s) => s.name === name) || list.find((s) => (s.name || '').toLowerCase() === (name || '').toLowerCase())
-      onOpenSupplier?.(sup || { name })
-    } catch { onOpenSupplier?.({ name }) }
+      onOpenSupplier?.(sup || { name }, fromPattern)
+    } catch { onOpenSupplier?.({ name }, fromPattern) }
   }
   // Modal "View all/spike claims" → close modal, filter the claims table (by flag or
   // by date window), scroll to it.
@@ -215,6 +277,7 @@ export default function NPIDetail({ npi: row, onBack, backLabel, onOpenSupplier 
     setClaimFilter(flag || null)
     setClaimWindow(from ? { from, to, label } : null)
     setClaimSupplier(supplier || null)
+    setClaimsVisible(15)
     setTimeout(() => claimsRef.current?.scrollIntoView({ behavior: 'smooth' }), 60)
   }
   // Modal claim-description click → close modal, scroll to + flash that claim row.
@@ -249,25 +312,35 @@ export default function NPIDetail({ npi: row, onBack, backLabel, onOpenSupplier 
     } finally { setSumLoading(false) }
   }
 
-  if (!row) return <div className="max-w-screen-xl mx-auto px-7 py-7 text-slate-500">No NPI selected.</div>
+  if (!row) return <div className="w-full px-4 sm:px-7 py-5 sm:py-7 text-slate-500">No NPI selected.</div>
   const baseRow = activeNpi || row
   const npi = data || { ...baseRow, claims: [], actions: [], rulesFired: baseRow.rulesFired || [] }
 
   function renderPatterns() {
     const patterns = npi.rulesFired.filter((r) => !String(r.label).startsWith('Physician') && !HIDDEN_PATTERNS.includes(r.rule))
     if (patterns.length === 0) return <p className="text-xs text-slate-400">No fraud patterns detected — billing looks consistent.</p>
-    return patterns.map((r, i) => {
+    return { count: patterns.length, nodes: patterns.map((r, i) => {
       const selected = pattern?.rule === r.rule
+      const sev = getSeverity(r.points)
       return (
         <button key={i} onClick={() => onPatternClick(r)} disabled={!r.rule}
-                className={`w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-left transition-colors disabled:cursor-default border-l-[3px] ${selected ? 'bg-[#F0F4FF] border-[#1E3A5F]' : 'border-transparent hover:bg-slate-50'}`}>
-          <span className="flex-shrink-0 w-7 h-7 rounded-lg bg-rose-50 text-rose-500 ring-1 ring-inset ring-rose-100 flex items-center justify-center"><Icon name="alertTri" size={13} /></span>
-          <div className="flex-1 text-sm font-semibold text-slate-700">{r.label}</div>
-          <span className="text-[10px] font-bold text-rose-600 tabular-nums">+{r.points}</span>
-          {r.rule && <span className="text-slate-300"><Icon name="leaderboard" size={13} /></span>}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all duration-150 disabled:cursor-default group ${selected ? 'bg-[#F0F4FF] ring-1 ring-[#1E3A5F]/20 shadow-sm' : 'hover:bg-slate-50 hover:shadow-sm'}`}>
+          {/* severity dot */}
+          <div className="flex-shrink-0 w-2 h-2 rounded-full mt-px" style={{ backgroundColor: sev.dot }} />
+          {/* label */}
+          <div className="flex-1 min-w-0">
+            <div className="text-[13px] font-semibold text-slate-800 truncate leading-snug">{r.label}</div>
+          </div>
+          {/* severity badge + points + chevron */}
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-md uppercase tracking-wide border border-slate-200 bg-slate-50"
+                  style={{ color: sev.text }}>{sev.label}</span>
+            <span className="text-[11px] font-semibold tabular-nums w-7 text-right text-slate-400">+{r.points}</span>
+            {r.rule && <Icon name="chevronRight" size={12} className="text-slate-300 group-hover:text-slate-500 transition-colors" />}
+          </div>
         </button>
       )
-    })
+    })}
   }
 
   const sortedClaims = (() => {
@@ -285,106 +358,185 @@ export default function NPIDetail({ npi: row, onBack, backLabel, onOpenSupplier 
   })()
 
   return (
-    <div className="max-w-screen-xl mx-auto px-7 py-7">
-      <button onClick={onBack} className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-ink transition-colors mb-5">
-        <span aria-hidden>←</span> {backLabel || 'Back to leaderboard'}
-      </button>
-
-      <div className="mc-card p-6 mb-6 flex flex-wrap gap-6 items-center">
-        <div className="flex-1 min-w-0">
-          <span className="label-eyebrow">NPI Investigation</span>
-          <h1 className="text-display text-2xl font-bold text-slate-900 mt-1">{npi.name}</h1>
-          <p className="text-sm text-slate-500 mt-1">{npi.specialty} · NPI {npi.npi} · {npi.city}, {npi.state}</p>
+    <div className="w-full px-4 sm:px-7 py-5 sm:py-7">
+      {/* Top row: NPI header + AI Risk Summary side by side */}
+      <div className="flex flex-col lg:flex-row gap-4 mb-6">
+        {/* NPI header card */}
+        <div className="mc-card flex-1 min-w-0 overflow-hidden flex items-stretch">
+          {/* Main info */}
+          <div className="flex-1 min-w-0 px-6 py-5 flex items-center gap-4">
+            <div className="w-11 h-11 rounded-2xl bg-[#EEF2FF] text-[#1B3A5C] flex items-center justify-center shrink-0">
+              <Icon name="users" size={20} stroke={1.9} />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">NPI Investigation</p>
+              <h1 className="text-[20px] font-bold text-slate-900 tracking-tight leading-tight">{npi.name}</h1>
+              <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                <span className="text-[11px] font-semibold bg-[#EEF2FF] text-[#1B3A5C] px-2.5 py-0.5 rounded-full">{npi.specialty}</span>
+                <span className="text-slate-300 text-xs select-none">·</span>
+                <span className="text-[12px] text-slate-500">NPI <span className="font-mono">{npi.npi}</span></span>
+                <span className="text-slate-300 text-xs select-none">·</span>
+                <span className="text-[12px] text-slate-500">{npi.city}, {npi.state}</span>
+              </div>
+            </div>
+          </div>
+          {/* Score ring panel */}
+          <div className="w-28 shrink-0 flex flex-col items-center justify-center bg-slate-50 border-l border-slate-100">
+            <ScoreRing score={npi.score} />
+          </div>
         </div>
-        <ScoreRing score={npi.score} />
-      </div>
 
-      {/* AI risk summary */}
-      <div className="mc-card p-5 mb-6">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-ink/10 text-ink flex items-center justify-center"><Icon name="bolt" size={17} /></div>
-            <div>
-              <h2 className="text-sm font-bold text-slate-900">AI Risk Summary</h2>
-              <p className="text-[11px] text-slate-400">Plain-English explanation of this provider's risk</p>
+        {/* AI risk summary card */}
+        <div className="mc-card p-5 w-full lg:w-[340px] lg:shrink-0 flex flex-col justify-between">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-[#1B3A5C]/[0.08] text-[#1B3A5C] flex items-center justify-center shrink-0 ring-1 ring-[#1B3A5C]/10">
+                <Icon name="bolt" size={15} />
+              </div>
+              <div>
+                <h2 className="text-sm font-bold text-slate-900">AI Risk Summary</h2>
+                <p className="text-[11px] text-slate-400">Plain-English explanation of this provider's risk</p>
+              </div>
             </div>
           </div>
           {!summary && (
-            <button onClick={() => genSummary(npi.npi)} disabled={sumLoading} className="btn-navy disabled:opacity-60">
+            <button onClick={() => genSummary(npi.npi)} disabled={sumLoading} className="mt-3 btn-navy w-full justify-center disabled:opacity-60 text-[13px]">
               {sumLoading ? 'Generating…' : 'Generate AI Summary'}
             </button>
           )}
           {summary && !sumLoading && (
-            <button onClick={() => genSummary(npi.npi)} className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-500 hover:bg-slate-50">Regenerate</button>
+            <button onClick={() => genSummary(npi.npi)} className="mt-3 w-full px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-500 hover:bg-slate-50 transition-colors">Regenerate</button>
           )}
         </div>
-        {sumLoading && <div className="mt-4 h-12 rounded-lg bg-slate-100 animate-pulse" />}
-        {summary && !sumLoading && (
-          <div className="mt-4">
-            <p className="text-sm text-slate-700 leading-relaxed">{summary}</p>
-            <div className="mt-2 text-[11px] text-slate-400">
-              {sumSource === 'llm' ? '✦ Generated by GPT-4o, grounded in the rules that fired'
-                : sumSource === 'error' ? 'Summary unavailable'
-                : 'Rule-based summary (LLM unavailable)'}
-            </div>
-          </div>
-        )}
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
+      {/* AI summary expanded content (outside the card row, shown when summary exists) */}
+      {(sumLoading || summary) && (
+        <div className="mc-card p-5 mb-6 -mt-2">
+          {sumLoading && <div className="h-12 rounded-lg bg-slate-100 animate-pulse" />}
+          {summary && !sumLoading && (
+            <>
+              <p className="text-sm text-slate-700 leading-relaxed">{summary}</p>
+              <div className="mt-2 text-[11px] text-slate-400">
+                {sumSource === 'llm' ? '✦ Generated by GPT-4o, grounded in the rules that fired'
+                  : sumSource === 'error' ? 'Summary unavailable'
+                  : 'Rule-based summary (LLM unavailable)'}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         {[
-          { label: 'Total Claims', value: (npi.totalClaims || 0).toLocaleString() },
-          { label: 'Total Billed', value: fmtUSD(npi.totalAmount) },
-        ].map((s) => (
-          <div key={s.label} className="mc-card px-5 py-4">
-            <div className="text-display text-2xl font-bold text-slate-900 tabular-nums">{s.value}</div>
-            <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mt-1">{s.label}</div>
-          </div>
+          { icon: 'claims', label: 'Total Claims',    value: (npi.totalClaims || 0).toLocaleString(), iconBg: 'bg-slate-100', iconText: 'text-slate-500', hoverIcon: 'group-hover:bg-slate-200 group-hover:text-slate-700', chevCls: 'text-slate-400', onClick: scrollToClaims   },
+          { icon: 'doc',    label: 'Total Billed',    value: fmtUSD(npi.totalAmount),                  iconBg: 'bg-slate-100', iconText: 'text-slate-500', hoverIcon: 'group-hover:bg-slate-200 group-hover:text-slate-700', chevCls: 'text-slate-400', onClick: scrollToClaims   },
+          { icon: 'flag',   label: 'Physician Flags', value: npi.physicianFlags,                       iconBg: 'bg-slate-100', iconText: 'text-slate-500', hoverIcon: 'group-hover:bg-slate-200 group-hover:text-slate-700', chevCls: 'text-slate-400', onClick: scrollToTimeline },
+        ].map(({ icon, label, value, iconBg, iconText, hoverIcon, chevCls, onClick }) => (
+          <button key={label} onClick={onClick}
+                  className="group mc-card px-4 sm:px-7 py-4 sm:py-7 text-left flex items-center gap-5 hover:-translate-y-1 hover:shadow-[0_12px_28px_-6px_rgba(15,23,42,0.14)] hover:border-slate-300/80 transition-all duration-200 cursor-pointer w-full">
+            <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 transition-all duration-200 ring-1 ring-inset ring-black/[0.04] ${iconBg} ${iconText} ${hoverIcon}`}>
+              <Icon name={icon} size={18} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-2">{label}</p>
+              <p className="text-[22px] sm:text-[26px] font-bold text-slate-900 tabular-nums leading-none tracking-tight">{value}</p>
+            </div>
+            <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 bg-slate-100 transition-all duration-200 group-hover:bg-[#1B3A5C] group-hover:text-white ${chevCls}`}>
+              <Icon name="chevronRight" size={13} stroke={2.5} />
+            </div>
+          </button>
         ))}
-        {/* Physician Flags → jumps to the feedback timeline below */}
-        <button onClick={scrollToTimeline}
-                className="mc-card px-5 py-4 text-left w-full cursor-pointer transition hover:border-ink/30 hover:shadow-md">
-          <div className="flex items-center justify-between">
-            <div className="text-display text-2xl font-bold text-slate-900 tabular-nums">{npi.physicianFlags}</div>
-            <span className="text-slate-300"><Icon name="leaderboard" size={14} /></span>
-          </div>
-          <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mt-1">Physician Flags</div>
-        </button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-        <div className="mc-card p-5">
-          <h2 className="text-sm font-bold text-slate-900 mb-1">Fraud Patterns Detected</h2>
-          <p className="text-[11px] text-slate-400 mb-4">Rules that fired on this provider's claims</p>
-          <div className="space-y-2.5">{renderPatterns()}</div>
-        </div>
+      {/* Fraud Patterns + Timeline side by side — equal fixed height */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6 items-start">
 
-        <div ref={timelineRef} className="lg:col-span-2 mc-card p-5">
-          <h2 className="text-sm font-bold text-slate-900 mb-4">Physician Feedback Timeline</h2>
-          {npi.actions.length === 0 ? (
-            <p className="text-xs text-slate-400">No physician actions recorded.</p>
-          ) : (
-            <div className="space-y-3">
-              {npi.actions.map((a) => {
-                const meta = ACTION_META[a.action] ?? ACTION_META.confirmed
-                return (
-                  <div key={a.id} className="flex items-start gap-3">
-                    <div className="mt-1.5 w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: meta.dot }} />
-                    <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
-                      <span className="text-xs font-medium text-[#374151]">{meta.label}</span>
-                      {a.supplier && (
-                        <span className="text-xs text-slate-500">· <button type="button" onClick={() => openSupplier(a.supplier)}
-                              className="font-medium text-[#1E3A5F] hover:underline cursor-pointer">{a.supplier}</button></span>
-                      )}
-                      {a.patient && <span className="text-xs text-slate-500">· {a.patient}</span>}
-                      <span className="text-[11px] text-slate-400 ml-auto">{timeAgo(a.ts)}</span>
-                    </div>
+        {/* Fraud Patterns */}
+        {(() => {
+          const result = renderPatterns()
+          const isEmpty = !result || !result.nodes
+          return (
+            <div className="mc-card overflow-hidden flex flex-col max-h-[360px]">
+              <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-3 shrink-0">
+                <div className="flex items-center gap-2.5">
+                  <span className="w-8 h-8 rounded-xl bg-rose-50 text-rose-500 flex items-center justify-center shrink-0 ring-1 ring-rose-100">
+                    <Icon name="alertTri" size={15} />
+                  </span>
+                  <div>
+                    <h2 className="text-sm font-bold text-slate-900">Fraud Patterns Detected</h2>
+                    <p className="text-[11px] text-slate-400">Rules that fired on this provider's claims</p>
                   </div>
-                )
-              })}
+                </div>
+                {!isEmpty && (
+                  <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full tabular-nums shrink-0">
+                    {result.count}
+                  </span>
+                )}
+              </div>
+              <div className="p-4 space-y-0.5 overflow-y-auto flex-1">{isEmpty ? <div className="px-1 py-2 text-xs text-slate-400">{result}</div> : result.nodes}</div>
+            </div>
+          )
+        })()}
+
+        {/* Physician Feedback Timeline */}
+        <div ref={timelineRef} className="mc-card overflow-hidden flex flex-col max-h-[360px]">
+          <button type="button" onClick={() => setTimelineOpen((o) => !o)}
+                  className="w-full flex items-center justify-between px-5 py-4 hover:bg-slate-50 transition-colors border-b border-slate-100 shrink-0">
+            <div className="flex items-center gap-2.5">
+              <span className="w-8 h-8 rounded-xl bg-slate-100 text-slate-500 flex items-center justify-center shrink-0">
+                <Icon name="flag" size={15} />
+              </span>
+              <div className="text-left">
+                <h2 className="text-sm font-bold text-slate-900">Physician Feedback Timeline</h2>
+                <p className="text-[11px] text-slate-400">
+                  {npi.actions.length > 0 ? `${npi.actions.length} action${npi.actions.length !== 1 ? 's' : ''} recorded` : 'No actions yet'}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {npi.actions.length > 0 && (
+                <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full tabular-nums">
+                  {npi.actions.length}
+                </span>
+              )}
+              <Icon name="chevronRight" size={15}
+                    className={`text-slate-400 transition-transform duration-200 ${timelineOpen ? 'rotate-90' : ''}`} />
+            </div>
+          </button>
+          {timelineOpen && (
+            <div className="px-5 pb-4 overflow-y-auto flex-1 min-h-0">
+              {npi.actions.length === 0 ? (
+                <p className="text-xs text-slate-400 pt-4">No physician actions recorded.</p>
+              ) : (
+                <div className="divide-y divide-slate-50 mt-1">
+                  {npi.actions.map((a) => {
+                    const meta = ACTION_META[a.action] ?? ACTION_META.confirmed
+                    return (
+                      <div key={a.id} className="flex items-start gap-3 py-3">
+                        <div className="mt-1.5 w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: meta.dot }} />
+                        <div className="flex-1 min-w-0 flex items-center gap-1.5 flex-wrap">
+                          <span className="text-xs font-bold text-slate-800">{meta.label}</span>
+                          {a.supplier && (
+                            <span className="text-xs text-slate-500">·{' '}
+                              <button type="button" onClick={() => openSupplier(a.supplier)}
+                                      className="font-bold text-[#1E3A5F] rounded px-0.5 transition-colors hover:bg-[#1E3A5F]/[0.08] hover:underline cursor-pointer">
+                                {a.supplier}
+                              </button>
+                            </span>
+                          )}
+                          {a.patient && <span className="text-xs text-slate-500">· {a.patient}</span>}
+                          <span className="text-[11px] text-slate-400 ml-auto tabular-nums">{timeAgo(a.ts)}</span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           )}
         </div>
+
       </div>
 
       <div ref={claimsRef} className="mc-card overflow-hidden scroll-mt-20">
@@ -399,7 +551,7 @@ export default function NPIDetail({ npi: row, onBack, backLabel, onOpenSupplier 
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-slate-100 bg-slate-50/60">
+              <tr className="border-b-2 border-slate-200 bg-[#F0F4F8]">
                 {CLAIM_COLUMNS.map((c) => {
                   const active = claimSort.key === c.key
                   return (
@@ -409,7 +561,7 @@ export default function NPIDetail({ npi: row, onBack, backLabel, onOpenSupplier 
                         {c.label}
                         {active
                           ? <span className="text-[#1E3A5F]">{claimSort.dir === 'asc' ? '↑' : '↓'}</span>
-                          : <span className="text-[#D1D5DB] opacity-0 group-hover:opacity-100 transition-opacity">↕</span>}
+                          : <span className="text-slate-300 group-hover:text-slate-500 transition-colors">↕</span>}
                       </span>
                     </th>
                   )
@@ -417,23 +569,23 @@ export default function NPIDetail({ npi: row, onBack, backLabel, onOpenSupplier 
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {sortedClaims.map((c) => (
+              {sortedClaims.slice(0, claimsVisible).map((c) => (
                 <tr key={c.id} id={`claimrow-${c.id}`}
                     className={`transition-colors ${c.id === highlightId ? 'bg-[#EFF6FF] ring-1 ring-inset ring-[#BFDBFE]' : 'hover:bg-slate-50'}`}>
                   <td className="td text-xs tabular-nums whitespace-nowrap">{fmtDate(c.date)}</td>
-                  <td className="td text-sm font-medium text-slate-700">{c.patient}</td>
+                  <td className="td hidden sm:table-cell text-sm font-medium text-slate-700">{c.patient}</td>
                   <td className="td hidden md:table-cell text-xs">{c.description}</td>
-                  <td className="td"><span className={CATEGORY_CHIP} style={CATEGORY_CHIP_STYLE}>{c.category}</span></td>
+                  <td className="td hidden sm:table-cell"><span className={CATEGORY_CHIP} style={CATEGORY_CHIP_STYLE}>{c.category}</span></td>
                   <td className="td hidden lg:table-cell text-xs text-slate-500">{c.supplier}</td>
                   <td className="td text-right font-bold text-slate-800 tabular-nums">{fmtUSD(c.amount, 2)}</td>
                   <td className="td">
-                    <div className="flex flex-wrap gap-1">
+                    <div className="flex items-center gap-1 flex-nowrap">
                       {(() => {
                         const shown = (c.flags || []).filter((f) => !HIDDEN_FLAGS.includes(f))
                         return shown.length === 0 ? <span className="text-slate-300">—</span>
                         : shown.map((f) => (
                           <button key={f} onClick={() => onFlagClick(c, f)} title="Investigate this flag"
-                                  className="text-[10px] px-1.5 py-0.5 rounded bg-rose-50 text-rose-600 ring-1 ring-inset ring-rose-200 font-semibold hover:bg-rose-100 transition-colors">
+                                  className="text-[10px] px-1.5 py-0.5 rounded bg-rose-50 text-rose-600 ring-1 ring-inset ring-rose-200 font-semibold hover:bg-rose-100 transition-colors whitespace-nowrap">
                             {FLAG_LABELS[f] ?? f}
                           </button>
                         ))
@@ -445,6 +597,28 @@ export default function NPIDetail({ npi: row, onBack, backLabel, onOpenSupplier 
             </tbody>
           </table>
         </div>
+
+        {/* Show more footer */}
+        {sortedClaims.length > claimsVisible && (
+          <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between gap-4 bg-white">
+            <span className="text-[12px] text-slate-400">
+              Showing <span className="font-semibold text-slate-600">{claimsVisible}</span> of <span className="font-semibold text-slate-600">{sortedClaims.length}</span> claims
+            </span>
+            <button onClick={() => setClaimsVisible((v) => Math.min(v + 15, sortedClaims.length))}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold text-[#0d1f35] bg-slate-100 hover:bg-slate-200 transition-colors">
+              Show next {Math.min(15, sortedClaims.length - claimsVisible)}
+              <Icon name="chevronRight" size={14} className="rotate-90" stroke={2.2} />
+            </button>
+          </div>
+        )}
+        {sortedClaims.length > 0 && claimsVisible >= sortedClaims.length && sortedClaims.length > 15 && (
+          <div className="px-6 py-3.5 border-t border-slate-100 flex items-center justify-between bg-white">
+            <span className="text-[12px] text-slate-400">All <span className="font-semibold text-slate-600">{sortedClaims.length}</span> claims shown</span>
+            <button onClick={() => setClaimsVisible(15)} className="text-[12px] font-medium text-slate-400 hover:text-slate-600 transition-colors">
+              Collapse ↑
+            </button>
+          </div>
+        )}
       </div>
 
       {data && <VerificationStatus verification={npi.verification} />}

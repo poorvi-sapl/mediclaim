@@ -1,13 +1,16 @@
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth, DASHBOARD_PATH } from '../context/AuthContext'
 import { demoLogin } from '../api'
+import bgImage from './bg-image.png'
+import illustration from './illustration-family-life.png'
 
 const SHOW_DEMO_CREDS = import.meta.env.DEV
 
 function Spinner() {
   return (
-    <svg className="animate-spin" width="18" height="18" viewBox="0 0 24 24" fill="none">
+    <svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none">
       <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" opacity="0.25" />
       <path d="M22 12a10 10 0 0 1-10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
     </svg>
@@ -16,26 +19,25 @@ function Spinner() {
 
 export default function Login() {
   const { login, refreshUser } = useAuth()
-  const navigate = useNavigate()
-  const location = useLocation()
+  const navigate  = useNavigate()
+  const location  = useLocation()
 
-  const [email, setEmail] = useState(location.state?.email || '')   // pre-filled after registration
+  const [email,    setEmail]    = useState(location.state?.email || '')
   const [password, setPassword] = useState('')
   const [remember, setRemember] = useState(false)
-  const [showPw, setShowPw] = useState(false)
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
+  const [showPw,   setShowPw]   = useState(false)
+  const [error,    setError]    = useState('')
+  const [loading,  setLoading]  = useState(false)
   const [showDemoModal, setShowDemoModal] = useState(false)
-  const [demoLoading, setDemoLoading] = useState(null)   // 'physician' | 'payer' | null
+  const [demoLoading,   setDemoLoading]   = useState(null)
 
-  // DEMO ENDPOINT — instant one-click access (no password, no OTP).
   async function tryDemo(portal) {
     setDemoLoading(portal); setError('')
     try {
       const r = await demoLogin(portal)
-      await refreshUser()              // hydrate AuthContext so Protected lets us in
+      const u = await refreshUser()
       setShowDemoModal(false)
-      navigate(r.redirect, { replace: true })
+      navigate(r.redirect || DASHBOARD_PATH[u?.role] || '/', { replace: true })
     } catch (err) {
       setError(err.message || 'Demo unavailable. Please try again.')
       setDemoLoading(null); setShowDemoModal(false)
@@ -44,206 +46,191 @@ export default function Login() {
 
   async function handleSubmit(e) {
     e.preventDefault()
-    setError('')
-    setLoading(true)
+    setError(''); setLoading(true)
     try {
       const res = await login(email, password, remember)
       if (res.otp_required) {
-        // Hand the OTP step its short-lived tokens + masked email via sessionStorage.
         sessionStorage.setItem('otp_pending_token', res.otp_pending_token)
-        sessionStorage.setItem('otp_resend_token', res.resend_token || '')
-        sessionStorage.setItem('otp_masked_email', res.masked_email || '')
+        sessionStorage.setItem('otp_resend_token',  res.resend_token || '')
+        sessionStorage.setItem('otp_masked_email',  res.masked_email || '')
         navigate('/otp/login', { replace: true })
         return
       }
-      // Demo bypass (@claimlens.com) — straight to the dashboard.
-      navigate(res.redirect || DASHBOARD_PATH[res.role] || '/', { replace: true })
+      navigate(res.redirect || DASHBOARD_PATH[res.role] || DASHBOARD_PATH['physician'], { replace: true })
     } catch (err) {
       setError(err.status === 401
         ? 'Invalid email or password. Please try again.'
-        : (err.message || 'Something went wrong. Please try again.'))
+        : (err.message || 'Unable to reach the server. Check your connection and try again.'))
       setLoading(false)
     }
   }
 
   return (
-    <div className="min-h-screen flex bg-white">
-      {/* LEFT — navy illustration panel */}
-      <div className="hidden md:flex md:w-2/5 flex-col justify-between p-10 text-white relative overflow-hidden"
-           style={{ backgroundColor: '#1B3A5C' }}>
-        <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-lg bg-white/10 ring-1 ring-white/20 flex items-center justify-center">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /><path d="M9 12l2 2 4-4" />
-            </svg>
-          </div>
-          <span className="text-lg font-bold tracking-tight">MediClaim Analytics</span>
+    <div className="min-h-screen flex items-center justify-center p-6"
+         style={{ backgroundImage: `url(${bgImage})`, backgroundSize: 'cover', backgroundPosition: 'center' }}>
+
+      {/* Blurred overlay */}
+      <div className="absolute inset-0 bg-white/25 backdrop-blur-sm" />
+
+      {/* Centered card */}
+      <div className="relative z-10 w-full max-w-[1160px] flex rounded-2xl shadow-2xl overflow-hidden" style={{ minHeight: '620px' }}>
+        <button
+          onClick={() => navigate('/welcome')}
+          aria-label="Close"
+          className="absolute top-4 right-4 z-20 w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 transition-all text-xl leading-none">
+          ×
+        </button>
+
+        {/* ── LEFT: illustration panel ── */}
+        <div className="hidden lg:flex w-[48%] flex-shrink-0 flex-col items-center justify-center relative"
+             style={{ backgroundColor: '#1a3d7c', minHeight: '580px' }}>
+          <img src={illustration} alt="Healthcare protection"
+               className="w-[85%] object-contain"
+               style={{ maxHeight: '78%' }} />
         </div>
 
-        {/* Illustration */}
-        <div className="flex-1 flex items-center justify-center">
-          <svg width="240" height="240" viewBox="0 0 200 200" fill="none" className="opacity-90">
-            <circle cx="100" cy="100" r="78" fill="#26516f" />
-            <path d="M100 44l38 14v30c0 28-38 46-38 46s-38-18-38-46V58z" fill="#3d6e92" />
-            <path d="M82 100l12 12 24-26" stroke="white" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-            <circle cx="150" cy="60" r="10" fill="#5fb8a8" />
-            <circle cx="52" cy="140" r="7" fill="#5fb8a8" opacity="0.7" />
-          </svg>
-        </div>
+        {/* ── RIGHT: form panel ── */}
+        <div className="flex-1 bg-white flex flex-col px-9 py-8">
 
-        <div>
-          <h2 className="text-2xl font-bold leading-tight">Healthcare Fraud<br />Detection Platform</h2>
-          <p className="text-sm text-white/60 mt-3 leading-relaxed">
-            Real-time claims monitoring and supplier intelligence for Medicare & Medicaid plans.
-          </p>
-        </div>
-        <div className="absolute -bottom-16 -right-16 w-64 h-64 rounded-full bg-white/[0.04]" />
-      </div>
-
-      {/* RIGHT — login form */}
-      <div className="flex-1 flex flex-col justify-center px-6 sm:px-12 lg:px-20 py-10">
-        <div className="w-full max-w-md mx-auto">
-
-          {/* logo (mobile) + badge */}
-          <div className="md:hidden flex items-center gap-2.5 mb-8">
-            <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#1B3A5C' }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /><path d="M9 12l2 2 4-4" />
-              </svg>
+          {/* Logo + badge */}
+          <div className="mb-5">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#1a3d7c' }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/>
+                </svg>
+              </div>
+              <span className="text-[15px] font-bold text-slate-800 tracking-tight">MedClaim Analytics</span>
             </div>
-            <span className="text-lg font-bold tracking-tight" style={{ color: '#1B3A5C' }}>MediClaim Analytics</span>
+            <div className="inline-flex items-center gap-1.5 bg-slate-100 px-2.5 py-1 rounded-full">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              <span className="text-[11px] font-semibold text-slate-600 tracking-wide">Healthcare Fraud Detection Platform</span>
+            </div>
           </div>
 
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 ring-1 ring-emerald-200 mb-6">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-            <span className="text-[11px] font-semibold text-emerald-700 tracking-wide">Healthcare Fraud Detection Platform</span>
+          <div className="border-t border-slate-100 mb-5" />
+
+          {/* Heading */}
+          <div className="mb-5">
+            <h1 className="text-[1.55rem] font-extrabold tracking-tight" style={{ color: '#1a3d7c' }}>Welcome Back</h1>
+            <p className="text-[11px] text-slate-400 mt-1">Monitor claims · Detect fraud · Protect patients.</p>
           </div>
 
-          <h1 className="text-3xl font-bold" style={{ color: '#1B3A5C' }}>Welcome Back</h1>
-          <p className="text-sm text-slate-500 mt-2">Monitor claims · Detect fraud · Protect patients.</p>
-
-          <form onSubmit={handleSubmit} className="mt-8 space-y-5">
+          {/* Form */}
+          <form onSubmit={handleSubmit} className="space-y-4 flex-1">
             <div>
-              <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1.5">Email Address</label>
-              <input
-                type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
-                disabled={loading} placeholder="admin@mediclaim.com" autoComplete="username"
-                className="w-full px-4 py-3 rounded-lg border border-slate-300 text-slate-800 placeholder-slate-400 outline-none focus:border-[#1B3A5C] focus:ring-2 focus:ring-[#1B3A5C]/20 transition disabled:bg-slate-50"
-              />
+              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Email Address</label>
+              <input type="email" required value={email} onChange={e => setEmail(e.target.value)}
+                     disabled={loading} placeholder="admin@medclaim.gov" autoComplete="username"
+                     className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-slate-800 text-[13px] placeholder-slate-300 outline-none focus:border-[#1a3d7c]/40 focus:ring-2 focus:ring-[#1a3d7c]/10 transition-all bg-white disabled:opacity-60" />
             </div>
 
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider">Password</label>
-                <button type="button" className="text-xs font-medium text-[#1B3A5C] hover:underline">Forgot Password?</button>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest">Password</label>
+                <button type="button" className="text-[11px] font-semibold hover:underline" style={{ color: '#1a3d7c' }}>Forgot Password?</button>
               </div>
               <div className="relative">
-                <input
-                  type={showPw ? 'text' : 'password'} required value={password}
-                  onChange={(e) => setPassword(e.target.value)} disabled={loading}
-                  placeholder="••••••••" autoComplete="current-password"
-                  className="w-full px-4 py-3 pr-12 rounded-lg border border-slate-300 text-slate-800 placeholder-slate-400 outline-none focus:border-[#1B3A5C] focus:ring-2 focus:ring-[#1B3A5C]/20 transition disabled:bg-slate-50"
-                />
-                <button type="button" onClick={() => setShowPw((v) => !v)} tabIndex={-1}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                        aria-label={showPw ? 'Hide password' : 'Show password'}>
-                  {showPw ? (
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" /><line x1="1" y1="1" x2="23" y2="23" /></svg>
-                  ) : (
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
-                  )}
+                <input type={showPw ? 'text' : 'password'} required value={password}
+                       onChange={e => setPassword(e.target.value)} disabled={loading}
+                       placeholder="••••••••••" autoComplete="current-password"
+                       className="w-full px-3.5 py-2.5 pr-10 rounded-xl border border-slate-200 text-slate-800 text-[13px] placeholder-slate-300 outline-none focus:border-[#1a3d7c]/40 focus:ring-2 focus:ring-[#1a3d7c]/10 transition-all bg-white disabled:opacity-60" />
+                <button type="button" onClick={() => setShowPw(v => !v)} tabIndex={-1}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors">
+                  {showPw
+                    ? <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                    : <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>}
                 </button>
               </div>
             </div>
 
             <label className="flex items-center gap-2 cursor-pointer select-none">
-              <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} disabled={loading}
-                     className="w-4 h-4 rounded border-slate-300 text-[#1B3A5C] focus:ring-[#1B3A5C]/30" />
-              <span className="text-sm text-slate-600">Keep me signed in</span>
+              <input type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)} disabled={loading}
+                     className="w-4 h-4 rounded border-slate-300 focus:ring-[#1a3d7c]/30" style={{ accentColor: '#1a3d7c' }} />
+              <span className="text-[12px] text-slate-600">Keep me signed in</span>
             </label>
 
             {error && (
-              <div className="rounded-lg bg-rose-50 ring-1 ring-rose-200 px-4 py-3 text-sm text-rose-700">{error}</div>
+              <div className="flex items-start gap-2.5 rounded-xl bg-rose-50 ring-1 ring-rose-200 px-3.5 py-2.5">
+                <svg className="text-rose-500 shrink-0 mt-0.5" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                <span className="text-[12px] text-rose-700 leading-snug">{error}</span>
+              </div>
             )}
 
             <button type="submit" disabled={loading}
-                    className="w-full flex items-center justify-center gap-2 py-3 rounded-lg text-white font-semibold transition disabled:opacity-70"
-                    style={{ backgroundColor: '#1B3A5C' }}>
-              {loading ? <><Spinner /> Signing in…</> : 'Sign In'}
+                    className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-white text-[13px] font-bold transition-all hover:opacity-90 disabled:opacity-70"
+                    style={{ backgroundColor: '#1a3d7c' }}>
+              {loading ? <><Spinner />Signing in…</> : <>Sign In <span className="ml-0.5">→</span></>}
             </button>
 
-            <div className="flex items-center gap-3 py-1">
-              <div className="flex-1 h-px bg-slate-200" />
-              <span className="text-xs text-slate-400">or</span>
-              <div className="flex-1 h-px bg-slate-200" />
-            </div>
-
-            <button type="button" onClick={() => setShowDemoModal(true)}
-                    className="w-full py-3 rounded-lg font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50 transition">
-              Don't have access? Request a Demo
-            </button>
           </form>
 
+          {/* Demo credentials */}
           {SHOW_DEMO_CREDS && (
-            <div className="mt-8 rounded-lg bg-slate-50 ring-1 ring-slate-200 px-4 py-3 text-xs text-slate-500 leading-relaxed">
-              <div className="font-semibold text-slate-600 mb-1">Demo credentials</div>
-              <div>Physician: <span className="font-mono">physician@claimlens.com</span> / <span className="font-mono">demo1234</span></div>
-              <div>Payer: <span className="font-mono">plan@claimlens.com</span> / <span className="font-mono">demo1234</span></div>
-              <div className="mt-1">Or click "Request a Demo" for instant access.</div>
+            <div className="mt-4 rounded-xl bg-slate-50 ring-1 ring-slate-200 px-4 py-3">
+              <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Demo Credentials</div>
+              <div className="space-y-1.5">
+                {[
+                  { label: 'Physician', email: 'physician@mediclaim.com', password: 'demo1234' },
+                  { label: 'Payer',     email: 'payer@mediclaim.com',     password: 'demo1234' },
+                ].map(({ label, email: demoEmail, password: demoPw }) => (
+                  <button key={label} type="button"
+                          onClick={() => { setEmail(demoEmail); setPassword(demoPw); setError('') }}
+                          className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-white ring-1 ring-slate-200 hover:ring-[#1a3d7c]/30 hover:bg-[#EEF2F7] transition-all text-left group">
+                    <div className="min-w-0">
+                      <span className="text-[11px] font-bold text-slate-600 group-hover:text-[#1a3d7c] transition-colors">{label}</span>
+                      <span className="ml-2 text-[11px] font-mono text-slate-400">{demoEmail}</span>
+                    </div>
+                    <span className="text-[10px] font-semibold text-[#1a3d7c] opacity-0 group-hover:opacity-100 transition-opacity shrink-0">Use →</span>
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 
-          <p className="mt-6 text-center text-sm text-slate-500">
+          <p className="mt-4 text-center text-[12px] text-slate-500">
             Don't have an account?{' '}
             <button type="button" onClick={() => navigate('/register')}
-                    className="font-semibold text-[#1B3A5C] hover:underline">Create an account</button>
+                    className="font-semibold hover:underline" style={{ color: '#1a3d7c' }}>Create an account</button>
           </p>
         </div>
       </div>
 
-      {/* Request-a-Demo modal */}
-      {showDemoModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 px-4"
+      {/* Demo modal — rendered via portal so the page backdrop-blur cannot trap it */}
+      {showDemoModal && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm px-4"
              onClick={() => setShowDemoModal(false)}>
-          <div className="w-full max-w-lg bg-white rounded-2xl shadow-xl p-6 sm:p-8 relative"
-               onClick={(e) => e.stopPropagation()}>
+          <div className="w-full max-w-lg bg-white rounded-2xl shadow-2xl p-6 sm:p-8 relative"
+               onClick={e => e.stopPropagation()}>
             <button onClick={() => setShowDemoModal(false)} aria-label="Close"
-                    className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 text-2xl leading-none">×</button>
-            <h2 className="text-2xl font-bold" style={{ color: '#1B3A5C' }}>Try a live demo</h2>
-            <p className="text-sm text-slate-500 mt-1">Choose a portal to explore MediClaim instantly.</p>
-
-            <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="border border-slate-200 rounded-xl p-5 flex flex-col hover:shadow-md hover:border-[#1B3A5C]/40 transition">
-                <div className="text-2xl">🩺</div>
-                <div className="font-bold text-slate-800 mt-2">Physician Portal</div>
-                <p className="text-xs text-slate-500 mt-2 flex-1 leading-relaxed">
-                  See claims filed under your NPI, flag fraud, and dispute orders you didn't place.
-                </p>
-                <button onClick={() => tryDemo('physician')} disabled={!!demoLoading}
-                        className="mt-4 w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-white font-semibold text-sm transition disabled:opacity-70"
-                        style={{ backgroundColor: '#1B3A5C' }}>
-                  {demoLoading === 'physician' ? <><Spinner /> Loading…</> : 'Try Physician'}
-                </button>
-              </div>
-              <div className="border border-slate-200 rounded-xl p-5 flex flex-col hover:shadow-md hover:border-[#1B3A5C]/40 transition">
-                <div className="text-2xl">🏥</div>
-                <div className="font-bold text-slate-800 mt-2">Payer Portal</div>
-                <p className="text-xs text-slate-500 mt-2 flex-1 leading-relaxed">
-                  Investigate fraud, view NPI risk scores, and monitor live alerts.
-                </p>
-                <button onClick={() => tryDemo('payer')} disabled={!!demoLoading}
-                        className="mt-4 w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-white font-semibold text-sm transition disabled:opacity-70"
-                        style={{ backgroundColor: '#1B3A5C' }}>
-                  {demoLoading === 'payer' ? <><Spinner /> Loading…</> : 'Try Payer'}
-                </button>
-              </div>
+                    className="absolute top-4 right-4 w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors text-xl leading-none">×</button>
+            <div className="mb-6">
+              <h2 className="text-xl font-bold text-slate-900">Try a live demo</h2>
+              <p className="text-sm text-slate-500 mt-1">Choose a portal to explore MediClaim instantly — no sign-up needed.</p>
             </div>
-
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {[
+                { portal: 'physician', emoji: '🩺', title: 'Physician Portal', desc: "See claims filed under your NPI, flag fraud, and dispute orders you didn't place." },
+                { portal: 'payer',    emoji: '🏥', title: 'Payer Portal',     desc: 'Investigate fraud, view NPI risk scores, and monitor live alerts across physicians.' },
+              ].map(({ portal, emoji, title, desc }) => (
+                <div key={portal} className="border border-slate-200 rounded-xl p-5 flex flex-col hover:border-[#1a3d7c]/30 hover:shadow-md transition-all">
+                  <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-xl mb-3">{emoji}</div>
+                  <div className="font-bold text-slate-800 text-[14px]">{title}</div>
+                  <p className="text-[12px] text-slate-500 mt-1.5 flex-1 leading-relaxed">{desc}</p>
+                  <button onClick={() => tryDemo(portal)} disabled={!!demoLoading}
+                          className="mt-4 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-white text-[13px] font-semibold transition-all hover:-translate-y-0.5 disabled:opacity-60"
+                          style={{ backgroundColor: '#1a3d7c' }}>
+                    {demoLoading === portal ? <><Spinner />Loading…</> : `Try ${title.split(' ')[0]}`}
+                  </button>
+                </div>
+              ))}
+            </div>
             <p className="text-[11px] text-slate-400 mt-5 text-center leading-relaxed">
-              Demo accounts are pre-loaded with synthetic Medicare claims and fraud patterns. No real patient data.
+              Demo accounts use synthetic Medicare claims — no real patient data.
             </p>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )

@@ -10,7 +10,7 @@ import requests
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 BASE = "http://localhost:8000"
-EMAIL = "physician@claimlens.com"
+EMAIL = "physician@mediclaim.com"
 PW = "demo1234"
 WRONG = "000000"
 
@@ -114,7 +114,7 @@ subprocess.run([
     "docker", "exec", "-e", "PGPASSWORD=claimlens", "claimlens-pg",
     "psql", "-U", "postgres", "-d", "claimlens", "-c",
     "UPDATE users SET mfa_enabled=FALSE, mfa_secret=NULL, mfa_pending_secret=NULL, "
-    "mfa_backup_codes=NULL WHERE email='physician@claimlens.com';",
+    "mfa_backup_codes=NULL WHERE email='physician@mediclaim.com';",
 ], check=False)
 print("cleanup: physician demo account MFA reset to disabled")
 

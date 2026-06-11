@@ -1,6 +1,30 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { getClaimsPage, postAction, ACTION_TO_BACKEND, PHYSICIAN_NPI, API_BASE } from '../api'
-import { Icon, StatCard, fmtUSD } from './ui'
+import { Icon, fmtUSD } from './ui'
+
+function KpiTile({ icon, label, value, accent = 'slate', valueClass = '', loading }) {
+  const styles = {
+    slate:  { wrap: 'bg-slate-100',    icon: 'text-slate-500'    },
+    blue:   { wrap: 'bg-[#e8eef7]',   icon: 'text-[#1B3A5C]'   },
+    amber:  { wrap: 'bg-amber-100',   icon: 'text-amber-500'    },
+    emerald:{ wrap: 'bg-emerald-100', icon: 'text-emerald-600'  },
+    rose:   { wrap: 'bg-rose-100',    icon: 'text-rose-500'     },
+  }
+  const s = styles[accent] || styles.slate
+  return (
+    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm px-5 py-4 flex items-center gap-4 group cursor-default transition-all duration-200 hover:-translate-y-1 hover:shadow-md hover:border-slate-200">
+      <div className={`w-11 h-11 rounded-full flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-110 ${s.wrap}`}>
+        <Icon name={icon} size={18} className={s.icon} />
+      </div>
+      <div className="min-w-0">
+        {loading
+          ? <div className="h-7 w-20 rounded-lg bg-slate-100 animate-pulse" />
+          : <div className={`text-[1.45rem] font-bold tabular-nums leading-none tracking-tight text-slate-900 ${valueClass}`}>{value}</div>}
+        <div className="text-[11px] font-medium text-slate-400 mt-1 uppercase tracking-wider leading-none">{label}</div>
+      </div>
+    </div>
+  )
+}
 
 const fmtDate = (iso) => {
   if (!iso) return ''
@@ -9,7 +33,53 @@ const fmtDate = (iso) => {
 }
 
 const CATEGORIES = ['All Categories', 'Home Health', 'Hospice', 'DME', 'Drugs', 'Hospital']
-const PAGE_SIZE = 50
+
+function CustomSelect({ value, onChange, options, placeholder = 'Select…' }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+  useEffect(() => {
+    function onDoc(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [])
+  function pick(val) { onChange(val); setOpen(false) }
+  return (
+    <div ref={ref} className="relative">
+      <button onClick={() => setOpen(v => !v)}
+              className={`flex items-center justify-between gap-2 bg-white border rounded-lg px-3 py-2 text-[12px] font-medium transition-all min-w-[132px] ${open ? 'border-[#0d1f35]/40 ring-2 ring-[#0d1f35]/10' : 'border-slate-200 hover:border-slate-300'} ${value ? 'text-slate-800' : 'text-slate-500'}`}>
+        <span className="truncate">{value || placeholder}</span>
+        <Icon name="chevronDown" size={12} stroke={2.5} className={`shrink-0 text-slate-400 transition-transform duration-150 ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div className="absolute top-full left-0 mt-1.5 bg-white rounded-xl border border-slate-200 z-50 min-w-[160px] overflow-hidden"
+             style={{ boxShadow: '0 8px 24px rgba(15,23,42,0.10), 0 2px 6px rgba(15,23,42,0.06)' }}>
+          <div className="py-1">
+            <button onMouseDown={() => pick('')}
+                    className={`w-full text-left px-3.5 py-2 text-[12px] font-medium transition-colors flex items-center justify-between gap-3 ${!value ? 'text-[#0d1f35] bg-slate-50 font-semibold' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'}`}>
+              {placeholder}
+              {!value && <span className="text-[#0d1f35] text-[11px]">✓</span>}
+            </button>
+            {options.map(o => (
+              <button key={o.value} onMouseDown={() => pick(o.value)}
+                      className={`w-full text-left px-3.5 py-2 text-[12px] transition-colors flex items-center justify-between gap-3 ${value === o.value ? 'bg-slate-50 text-[#0d1f35] font-semibold' : 'font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-800'}`}>
+                <span className="truncate">{o.label}</span>
+                {value === o.value && <span className="text-[#0d1f35] shrink-0 text-[11px]">✓</span>}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+function exportCSV(filename, headers, rows) {
+  const esc = (v) => { const s = String(v ?? ''); return /[,"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s }
+  const csv = [headers, ...rows].map(r => r.map(esc).join(',')).join('\n')
+  const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(new Blob([csv], { type: 'text/csv' })), download: filename })
+  a.click(); URL.revokeObjectURL(a.href)
+}
+
+const PAGE_SIZE = 15
 
 // Single muted-blue category chip everywhere (no per-category colors).
 const CATEGORY_CHIP = 'inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium'
@@ -17,10 +87,10 @@ const CATEGORY_CHIP_STYLE = { backgroundColor: '#EFF6FF', color: '#1E3A5F' }
 
 // four row actions (icon-only). UI id -> backend action_type mapped in api.js.
 const ACTIONS = [
-  { id: 'confirmed', label: 'Confirm', icon: 'check', cls: 'bg-emerald-50 text-emerald-600 ring-emerald-200 hover:bg-emerald-100' },
-  { id: 'disputed', label: 'Dispute', icon: 'x', cls: 'bg-rose-50 text-rose-600 ring-rose-200 hover:bg-rose-100' },
-  { id: 'flagged', label: 'Flag Supplier', icon: 'flag', cls: 'bg-amber-50 text-amber-600 ring-amber-200 hover:bg-amber-100' },
-  { id: 'unknownPatient', label: 'Unknown Patient', icon: 'userx', cls: 'bg-violet-50 text-violet-600 ring-violet-200 hover:bg-violet-100' },
+  { id: 'confirmed',     label: 'Confirm',        icon: 'check', cls: 'bg-emerald-50/70 text-emerald-500 ring-emerald-100 hover:bg-emerald-100 hover:text-emerald-700 hover:ring-emerald-300 hover:shadow-emerald-100' },
+  { id: 'disputed',      label: 'Dispute',        icon: 'x',     cls: 'bg-rose-50/70 text-rose-400 ring-rose-100 hover:bg-rose-100 hover:text-rose-600 hover:ring-rose-300 hover:shadow-rose-100'                   },
+  { id: 'flagged',       label: 'Flag Supplier',  icon: 'flag',  cls: 'bg-amber-50/70 text-amber-500 ring-amber-100 hover:bg-amber-100 hover:text-amber-700 hover:ring-amber-300 hover:shadow-amber-100'             },
+  { id: 'unknownPatient',label: 'Unknown Patient',icon: 'userx', cls: 'bg-slate-50 text-slate-400 ring-slate-200 hover:bg-slate-100 hover:text-slate-600 hover:ring-slate-300'                                       },
 ]
 
 function Spinner() {
@@ -54,10 +124,10 @@ function secondsRemaining(createdAt, now) {
 }
 // Undo countdown color (change 4) — calm by default; red only at the very end. No bold.
 //   60–31s: gray-500, underline on hover  ·  30–11s: amber-600  ·  10–1s: red-600
-function undoColor(r) {
-  if (r > 30) return 'text-[#6B7280] hover:text-[#374151] hover:underline'
-  if (r > 10) return 'text-[#D97706] hover:underline'
-  return 'text-[#DC2626] hover:underline'
+function undoTimerCls(r) {
+  if (r > 30) return 'bg-slate-100 text-slate-500 ring-slate-200 hover:bg-slate-200 hover:text-slate-700'
+  if (r > 10) return 'bg-amber-50 text-amber-600 ring-amber-200 hover:bg-amber-100'
+  return 'bg-rose-50 text-rose-600 ring-rose-200 hover:bg-rose-100 animate-pulse'
 }
 
 function loadUndoStore() {
@@ -119,18 +189,20 @@ function ActionedCell({ claim, onUndo }) {
   }
 
   return (
-    <div className="flex items-center gap-2 text-xs">
+    <div className="flex items-center gap-1.5 text-xs whitespace-nowrap flex-nowrap">
       {actionedBadge}
-      {canUndo && (
-        <>
-          <span className="text-[#6B7280]">·</span>
-          {busy
-            ? <Spinner />
-            : <button onClick={handleUndo} className={undoColor(remaining)}>Undo ({remaining}s)</button>}
-        </>
+      {canUndo && (busy
+        ? <Spinner />
+        : <button onClick={handleUndo}
+                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold ring-1 ring-inset transition-all duration-150 whitespace-nowrap ${undoTimerCls(remaining)}`}>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/>
+            </svg>
+            Undo · {remaining}s
+          </button>
       )}
-      {expired && <span className="text-[11px] text-slate-400 whitespace-nowrap">Window closed</span>}
-      {err && <span className="text-[#6B7280] whitespace-nowrap">Could not undo</span>}
+      {expired && <span className="text-[11px] text-slate-400 whitespace-nowrap">Expired</span>}
+      {err && <span className="text-[11px] text-rose-400 whitespace-nowrap">Failed</span>}
     </div>
   )
 }
@@ -148,12 +220,10 @@ function statusFor(claim) {
 }
 
 // Supplier name color hierarchy (change 5): only genuine high-risk stands out.
-// Tier A (OIG/cross-NPI) = red-600 bold; Tier B (other flags) = gray-700 medium;
-// Tier C (clean) = gray-700 normal. B and C differ by weight only — intentional.
 function supplierTierCls(claim) {
-  if (claim.supplierHighRisk) return 'font-semibold text-[#DC2626]'   // Tier A
-  if (claim.hasRuleFlag) return 'font-medium text-[#374151]'          // Tier B
-  return 'font-normal text-[#374151]'                                // Tier C
+  if (claim.supplierHighRisk) return 'font-semibold text-[#DC2626]'
+  if (claim.hasRuleFlag) return 'font-medium text-[#DC2626]'
+  return 'font-normal text-[#DC2626]'
 }
 
 // claims-table cell padding (12px/16px) — local so the shared .td (px-5 py-4) used by
@@ -164,8 +234,8 @@ const CELL = 'px-4 py-3 align-middle'
 const COLS = [
   { key: 'date', label: 'Date', width: 100, sort: 'date' },
   { key: 'patient', label: 'Patient Name', width: 140, sort: 'patient' },
-  { key: 'supplier', label: 'Supplier', width: 160, sort: 'supplier' },
-  { key: 'amount', label: 'Amount', width: 100, right: true, sort: 'amount' },
+  { key: 'supplier', label: 'Supplier', width: 200, sort: 'supplier' },
+  { key: 'amount', label: 'Amount', width: 110, right: true, sort: 'amount' },
   { key: 'category', label: 'Service Category', width: 130, sort: 'category' },
   { key: 'description', label: 'Service Description', flex: true, sort: 'description' },
   { key: 'status', label: 'Status', width: 110, sort: 'status' },
@@ -197,7 +267,7 @@ const CLAIM_COMPARATORS = {
 
 const CLEARED = { category: 'All Categories', dateFrom: '', dateTo: '', supplier: '', reviewed: 'all' }
 const DEFAULT_FILTERS = { ...CLEARED, reviewed: 'unreviewed', page: 0 }
-const inputCls = 'bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-600 outline-none focus:border-ink focus:ring-2 focus:ring-ink/15 transition'
+const inputCls = 'bg-white border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-slate-600 outline-none cursor-pointer transition-colors hover:border-slate-300 focus:border-ink focus:ring-2 focus:ring-ink/15'
 
 function last30Iso() {
   const d = new Date()
@@ -299,10 +369,26 @@ export default function ClaimsTable({ npi = PHYSICIAN_NPI, onActioned, supplierF
       category: filters.category, dateFrom: filters.dateFrom, dateTo: filters.dateTo,
       reviewed: filters.reviewed, supplierSearch: supFilter || debouncedSupplier,
     })
-      .then((res) => { if (!cancelled) { setData({ ...res, items: hydrateUndo(res.items) }); setLoading(false) } })
+      .then((res) => {
+        if (!cancelled) {
+          const hydrated = hydrateUndo(res.items)
+          setData((prev) => ({
+            ...res,
+            items: filters.page === 0 ? hydrated : [...prev.items, ...hydrated],
+          }))
+          setLoading(false)
+        }
+      })
       .catch((e) => { if (!cancelled) { setError(e.message); setLoading(false) } })
     return () => { cancelled = true }
   }, [npi, filters.page, filters.category, filters.dateFrom, filters.dateTo, filters.reviewed, debouncedSupplier, supFilter])
+
+  function handleExport() {
+    exportCSV('claims.csv',
+      ['Date', 'Patient Name', 'Supplier', 'Amount', 'Category', 'Description', 'Status'],
+      sortedItems.map(c => [fmtDate(c.date), c.patient, c.supplier, c.amount, c.category, c.description, statusFor(c).label])
+    )
+  }
 
   function setFilter(key, value) { resetSort(); setUnknownOnly(false); setFilters((f) => ({ ...f, [key]: value, page: 0 })) }
   function setPage(p) { setFilters((f) => ({ ...f, page: p })) }
@@ -373,57 +459,87 @@ export default function ClaimsTable({ npi = PHYSICIAN_NPI, onActioned, supplierF
   })()
 
   return (
-    <div className="max-w-screen-xl mx-auto px-7 py-7">
+    <div className="w-full px-7 py-7">
       {/* Stat cards (item 1) */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 mb-6">
-        <StatCard icon="doc" label="Total Claims" value={(totalCount || 0).toLocaleString()} accent="blue" spark={false} loading={loading} />
-        <StatCard icon="alertTri" label="Flagged" value={(flaggedCount || 0).toLocaleString()} accent="amber" valueClass={flaggedCount > 0 ? 'text-orange-600' : ''} spark={false} loading={loading} />
-        <StatCard icon="check" label="Confirmed" value={(confirmedCount || 0).toLocaleString()} accent="emerald" valueClass={confirmedCount > 0 ? 'text-emerald-600' : ''} spark={false} loading={loading} />
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5">
+        <KpiTile icon="doc"      label="Total Claims" value={(totalCount || 0).toLocaleString()}    accent="blue"    loading={loading} />
+        <KpiTile icon="alertTri" label="Flagged"      value={(flaggedCount || 0).toLocaleString()}   accent="amber"   loading={loading} valueClass={flaggedCount > 0 ? 'text-amber-600' : ''} />
+        <KpiTile icon="check"    label="Confirmed"    value={(confirmedCount || 0).toLocaleString()} accent="emerald" loading={loading} valueClass={confirmedCount > 0 ? 'text-emerald-600' : ''} />
       </div>
 
-      <div className="mc-card overflow-hidden">
-        {/* Filter bar (item 5) */}
-        <div className="px-5 py-4 border-b border-slate-100 flex flex-wrap items-center gap-3">
-          <div className="flex items-center bg-slate-100 rounded-xl p-0.5">
+      <div className="mc-card">
+        {/* Filter bar */}
+        <div className="px-5 py-3.5 border-b border-slate-100 flex flex-wrap items-center gap-2.5">
+          {/* Review status toggle */}
+          <div className="flex items-center gap-0.5 bg-slate-100 rounded-xl p-1 shrink-0">
             {[['all', 'All'], ['unreviewed', 'Unreviewed'], ['reviewed', 'Reviewed']].map(([id, label]) => (
               <button key={id} onClick={() => setFilter('reviewed', id)}
-                      className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${filters.reviewed === id ? 'bg-white text-ink shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+                      className={`px-3.5 py-1.5 text-[12px] font-semibold rounded-lg transition-all duration-150 ${filters.reviewed === id ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-white/60'}`}>
                 {label}
               </button>
             ))}
           </div>
-          <select value={filters.category} onChange={(e) => setFilter('category', e.target.value)} className={inputCls}>
-            {CATEGORIES.map((c) => <option key={c} value={c}>{c === 'All Categories' ? 'Category: All' : c}</option>)}
-          </select>
+
+          {/* Divider */}
+          <div className="w-px h-5 bg-slate-200 mx-0.5 shrink-0" />
+
+          {/* Category custom select */}
+          <CustomSelect
+            value={filters.category}
+            onChange={v => setFilter('category', v)}
+            options={CATEGORIES.map(c => ({ value: c, label: c === 'All Categories' ? 'Category: All' : c }))}
+          />
+
+          {/* Last 30 days toggle */}
           <button onClick={toggleLast30}
-                  className={`px-3 py-2 rounded-xl text-sm font-medium border transition-colors ${last30Active ? 'border-ink text-ink bg-ink/5' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                  className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[13px] font-medium border transition-all duration-150 whitespace-nowrap ${last30Active ? 'bg-[#EEF2F7] border-[#1B3A5C]/20 text-[#1B3A5C]' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50'}`}>
+            <Icon name="clock" size={13} stroke={2} />
             Last 30 Days
           </button>
-          <div className="relative flex-1 min-w-[160px] max-w-xs">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"><Icon name="search" size={14} /></span>
+
+          {/* Search */}
+          <div className="relative min-w-[180px] max-w-xs flex-1">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"><Icon name="search" size={13} /></span>
             <input type="text" placeholder="Search supplier name…" value={filters.supplier} onChange={(e) => setFilter('supplier', e.target.value)}
-                   className={`w-full pl-9 ${inputCls}`} />
+                   className="w-full pl-8 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-[13px] font-medium text-slate-700 placeholder-slate-400 outline-none focus:border-[#1B3A5C]/40 focus:ring-2 focus:ring-[#1B3A5C]/10 transition-all hover:border-slate-300" />
           </div>
-          <div className="ml-auto flex items-center gap-3">
-            {isActive && <button onClick={clearAll} className="text-xs font-semibold text-ink hover:underline">Clear all</button>}
-            <span className="text-xs text-slate-400 tabular-nums">
+
+          {/* Right: count + clear + export */}
+          <div className="ml-auto flex items-center gap-3 shrink-0">
+            {isActive && (
+              <button onClick={clearAll}
+                      className="text-[12px] font-semibold text-slate-500 hover:text-rose-500 transition-colors flex items-center gap-1">
+                <Icon name="x" size={11} stroke={2.5} /> Clear all
+              </button>
+            )}
+            <span className="text-[12px] font-semibold text-slate-400 bg-slate-100 px-2.5 py-1 rounded-lg tabular-nums">
               {supFilter
-                ? `${total.toLocaleString()} of ${(totalCount || 0).toLocaleString()} claims`
+                ? `${total.toLocaleString()} / ${(totalCount || 0).toLocaleString()}`
                 : `${total.toLocaleString()} claim${total !== 1 ? 's' : ''}`}
             </span>
+            <button onClick={handleExport}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#1E3A5F]/20 bg-white text-[#1E3A5F] text-[12px] font-semibold hover:bg-[#EEF2F7] transition-colors">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              Export
+            </button>
           </div>
         </div>
 
         {/* Active supplier filter indicator + patient summary */}
         {supFilter && (
           <>
-            <div className="px-5 py-3 border-b border-slate-100 bg-teal-50/70 flex items-center justify-between gap-3 text-sm">
-              <span className="text-slate-700 flex items-center gap-2 min-w-0">
-                <span aria-hidden>🏢</span>
-                <span className="whitespace-nowrap">Showing claims for:</span>
+            <div className="px-5 py-3 border-b border-slate-100 bg-gradient-to-r from-[#1B3A5C]/[0.06] to-transparent flex items-center justify-between gap-3 text-sm">
+              <span className="text-slate-700 flex items-center gap-2.5 min-w-0">
+                <span className="flex items-center justify-center w-7 h-7 rounded-lg bg-[#1B3A5C]/10 text-[#1B3A5C] flex-shrink-0"><Icon name="suppliers" size={15} stroke={2.1} /></span>
+                <span className="whitespace-nowrap text-slate-500">Showing claims for</span>
                 <span className="font-bold text-[#1B3A5C] truncate">{supFilter}</span>
               </span>
-              <button onClick={clearSupplier} className="text-xs font-semibold text-[#1B3A5C] hover:underline whitespace-nowrap">× Clear filter</button>
+              <button onClick={clearSupplier}
+                      className="group flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-rose-600 whitespace-nowrap rounded-lg px-2.5 py-1.5 hover:bg-rose-50 transition-colors flex-shrink-0">
+                <Icon name="x" size={13} stroke={2.4} /> Clear filter
+              </button>
             </div>
             {supSummary && (
               <div className="px-5 py-2.5 border-b border-slate-100 bg-slate-50 text-xs text-slate-500">
@@ -435,8 +551,14 @@ export default function ClaimsTable({ npi = PHYSICIAN_NPI, onActioned, supplierF
 
         {unknownOnly && (
           <div className="px-5 py-3 border-b border-slate-100 bg-amber-50/60 flex items-center justify-between gap-3 text-sm">
-            <span className="text-slate-700">Showing unknown-patient / new-supplier claims on this page</span>
-            <button onClick={() => setUnknownOnly(false)} className="text-xs font-semibold text-amber-700 hover:underline whitespace-nowrap">× Clear filter</button>
+            <span className="text-slate-700 flex items-center gap-2.5 min-w-0">
+              <span className="flex items-center justify-center w-7 h-7 rounded-lg bg-amber-100 text-amber-600 flex-shrink-0"><Icon name="userx" size={15} stroke={2.1} /></span>
+              Showing unknown-patient / new-supplier claims on this page
+            </span>
+            <button onClick={() => setUnknownOnly(false)}
+                    className="flex items-center gap-1.5 text-xs font-semibold text-amber-700 hover:text-rose-600 whitespace-nowrap rounded-lg px-2.5 py-1.5 hover:bg-rose-50 transition-colors flex-shrink-0">
+              <Icon name="x" size={13} stroke={2.4} /> Clear filter
+            </button>
           </div>
         )}
 
@@ -454,22 +576,19 @@ export default function ClaimsTable({ npi = PHYSICIAN_NPI, onActioned, supplierF
                   <col key={c.key} style={c.flex ? { width: '100%' } : c.width ? { width: `${c.width}px` } : undefined} />
                 ))}
               </colgroup>
-              {/* dark navy header — sortable columns per change 7. (The header is navy with
-                  white text, so the active-sort affordance uses white arrows rather than the
-                  spec's #1E3A5F, which would be invisible on this background.) */}
               <thead>
-                <tr style={{ backgroundColor: '#1e3a5f' }}>
+                <tr className="border-b border-slate-100 bg-slate-50/60">
                   {COLS.map((c) => {
                     const sortable = !!c.sort
                     const active = sortable && sort.key === c.sort
                     return (
                       <th key={c.key} onClick={sortable ? () => onSort(c.sort) : undefined}
-                          className={`px-4 py-3 text-[11px] font-bold text-white uppercase tracking-wider whitespace-nowrap ${c.right ? 'text-right' : 'text-left'} ${sortable ? 'cursor-pointer select-none group' : ''}`}>
-                        <span className={`inline-flex items-center gap-1 ${sortable ? 'group-hover:text-sky-200 transition-colors' : ''}`}>
+                          className={`th whitespace-nowrap ${c.right ? 'text-right' : ''} ${sortable ? 'cursor-pointer select-none group' : ''}`}>
+                        <span className={`inline-flex items-center gap-1 font-bold ${sortable ? 'text-slate-700 group-hover:text-[#1E3A5F] transition-colors' : ''}`}>
                           {c.label}
                           {sortable && (active
-                            ? <span className="text-white">{sort.dir === 'asc' ? '↑' : '↓'}</span>
-                            : <span className="text-white/30 opacity-0 group-hover:opacity-100 transition-opacity">↕</span>)}
+                            ? <span className="text-[#1E3A5F] font-bold">{sort.dir === 'asc' ? '↑' : '↓'}</span>
+                            : <span className="text-slate-400 group-hover:text-[#1E3A5F] transition-colors">↕</span>)}
                         </span>
                       </th>
                     )
@@ -500,8 +619,9 @@ export default function ClaimsTable({ npi = PHYSICIAN_NPI, onActioned, supplierF
                       <td className={CELL}><span className={`text-sm font-normal ${claim.patient?.startsWith('Unknown') ? 'text-violet-600' : 'text-[#111827]'}`}>{claim.patient}</span></td>
                       {/* Supplier — three-tier color (change 5) */}
                       <td className={CELL}>
-                        <button onClick={() => applySupplier(claim.supplier)} title="Filter claims by this supplier"
-                                className={`text-sm text-left hover:underline ${supplierTierCls(claim)}`}>
+                        <button onClick={() => applySupplier(claim.supplier)} title={claim.supplier}
+                                className={`text-sm text-left hover:underline w-full truncate block ${supplierTierCls(claim)}`}
+                                style={{ maxWidth: '190px' }}>
                           {claim.supplier}
                         </button>
                       </td>
@@ -520,14 +640,14 @@ export default function ClaimsTable({ npi = PHYSICIAN_NPI, onActioned, supplierF
                         {reviewed ? (
                           <ActionedCell key={claim.actionId || claim.id} claim={claim} onUndo={doUndo} />
                         ) : (
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-2">
                             {ACTIONS.map((a) => {
                               const isThis = rowPending && pending.action === a.id
                               return (
                                 <button key={a.id} onClick={() => handleAction(claim.id, a.id)} disabled={rowPending}
                                         title={a.label} aria-label={a.label}
-                                        className={`w-7 h-7 rounded-lg ring-1 ring-inset transition-colors inline-flex items-center justify-center flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed ${a.cls}`}>
-                                  {isThis ? <Spinner /> : <Icon name={a.icon} size={14} stroke={2.2} />}
+                                        className={`w-7 h-7 rounded-lg ring-1 ring-inset transition-all duration-150 inline-flex items-center justify-center flex-shrink-0 hover:-translate-y-0.5 hover:shadow-md active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 ${a.cls}`}>
+                                  {isThis ? <Spinner /> : <Icon name={a.icon} size={15} stroke={2.4} />}
                                 </button>
                               )
                             })}
@@ -541,16 +661,16 @@ export default function ClaimsTable({ npi = PHYSICIAN_NPI, onActioned, supplierF
             </table>
 
             {!loading && total > 0 && (
-              <div className="flex items-center justify-between px-5 py-3 border-t border-slate-100 gap-4 flex-wrap">
-                <span className="text-xs text-slate-400 tabular-nums">
-                  Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, total)} of {total.toLocaleString()} · Page {page + 1} of {totalPages}
+              <div className="flex items-center justify-between px-5 py-3 border-t border-slate-100">
+                <span className="text-[11px] text-slate-400 tabular-nums">
+                  Showing <span className="font-semibold text-slate-500">{data.items.length.toLocaleString()}</span> of <span className="font-semibold text-slate-500">{total.toLocaleString()}</span> claims
                 </span>
-                <div className="flex items-center gap-2">
-                  <button onClick={() => setPage(page - 1)} disabled={page <= 0}
-                          className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">Previous</button>
-                  <button onClick={() => setPage(page + 1)} disabled={page >= totalPages - 1}
-                          className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">Next</button>
-                </div>
+                {page < totalPages - 1 && (
+                  <button onClick={() => setPage(page + 1)}
+                          className="text-[11px] font-semibold text-[#1B3A5C] px-3 py-1.5 rounded-lg border border-slate-200 bg-white cursor-pointer">
+                    Show More <span className="text-slate-400 font-normal">+{Math.min(PAGE_SIZE, total - data.items.length)}</span>
+                  </button>
+                )}
               </div>
             )}
           </div>

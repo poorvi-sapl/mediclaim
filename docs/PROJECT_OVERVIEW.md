@@ -165,7 +165,7 @@ future ML model.
   plan_investigator; `/health` + `/auth/*` public.
 - Frontend: `/login` page, React Router guards (deep-link → `/login`, role redirects),
   logout in nav. The old hardcoded user-switcher was removed.
-- **Demo users:** `physician@claimlens.com` / `demo1234`, `plan@claimlens.com` / `demo1234`.
+- **Demo users:** `physician@mediclaim.com` / `demo1234`, `payer@mediclaim.com` / `demo1234`.
 
 ---
 

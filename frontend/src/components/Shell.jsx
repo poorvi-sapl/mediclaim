@@ -1,31 +1,76 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, Fragment } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { getNpiRiskList, getSuppliers } from '../api'
 import { Icon } from './ui'
+import { Shield, Check } from 'lucide-react'
 
-function Sidebar({ navItems, activeId, onNavigate }) {
+function Sidebar({ navItems, activeId, onNavigate, collapsed, onToggleCollapse, onClose }) {
+  const navigate = useNavigate()
   return (
-    <aside className="w-60 flex-shrink-0 flex flex-col" style={{ backgroundColor: '#1B3A5C' }}>
-      <div className="h-16 flex items-center gap-2.5 px-5">
-        <div className="w-9 h-9 rounded-xl bg-white/10 ring-1 ring-white/20 flex items-center justify-center text-white">
-          <Icon name="shield" size={18} stroke={2.1} />
+    <aside
+      className="flex-shrink-0 flex flex-col h-screen sticky top-0 transition-all duration-300 ease-in-out overflow-hidden"
+      style={{ backgroundColor: '#0d1f35', width: collapsed ? '64px' : '240px' }}>
+
+      {/* Logo row — with optional mobile close button */}
+      <div className={`h-16 flex items-center flex-shrink-0 transition-all duration-300 ${collapsed ? 'justify-center px-0' : 'px-4'}`}>
+        <div className={`flex items-center gap-2.5 flex-1 min-w-0 cursor-pointer ${collapsed ? 'justify-center' : ''}`}
+             onClick={() => navigate('/')}>
+          <div className="bg-white p-1.5 rounded-lg shadow-sm relative flex-shrink-0">
+            <Shield size={18} className="text-[#1e3a8a]" fill="#1e3a8a" fillOpacity={0.1} />
+            <Check size={11} className="text-[#1e3a8a] absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" strokeWidth={3} />
+          </div>
+          {!collapsed && (
+            <span className="text-[15px] font-bold text-white tracking-tight whitespace-nowrap overflow-hidden">
+              MedClaim Analytics
+            </span>
+          )}
         </div>
-        <div className="leading-tight">
-          <div className="text-[15px] font-bold text-white tracking-tight">MediClaim</div>
-          <div className="text-[10px] font-semibold text-white/50 tracking-[0.18em] uppercase">Analytics</div>
-        </div>
+        {/* X close button — mobile overlay only */}
+        {onClose && !collapsed && (
+          <button onClick={onClose} aria-label="Close menu"
+                  className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg text-white/50 hover:text-white hover:bg-white/10 transition-all duration-150">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        )}
       </div>
-      <nav className="flex-1 px-3 py-4 space-y-1">
+
+      {/* Nav items */}
+      <nav className={`flex-1 py-4 space-y-1 ${collapsed ? 'px-2' : 'px-3'}`}>
         {navItems.map((n) => (
           <button key={n.id} onClick={() => onNavigate(n.id)}
-                  className={`nav-link w-full ${activeId === n.id ? 'nav-link-active' : ''}`}>
+                  title={collapsed ? n.label : undefined}
+                  className={`transition-all duration-200 w-full flex items-center rounded-lg text-[13px] font-medium
+                    ${collapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-3 py-2.5'}
+                    ${activeId === n.id
+                      ? 'bg-white/10 text-white'
+                      : 'text-white/60 hover:bg-white/5 hover:text-white'}`}>
             <Icon name={n.icon} size={18} stroke={activeId === n.id ? 2.2 : 1.9} />
-            {n.label}
+            {!collapsed && <span className="truncate">{n.label}</span>}
           </button>
         ))}
       </nav>
-      <div className="px-5 py-4 text-[10px] text-white/30 border-t border-white/10">
-        Fraud Detection Platform
-      </div>
+
+      {/* Collapse toggle — desktop only (hidden when onClose is set = mobile overlay) */}
+      {!onClose && (
+        <div className="border-t border-white/10 p-3">
+          <button
+            onClick={onToggleCollapse}
+            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            className={`w-full flex items-center rounded-lg py-2 text-white/40 hover:text-white hover:bg-white/5 transition-all duration-150
+              ${collapsed ? 'justify-center px-0' : 'gap-3 px-3'}`}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"
+                 className={`transition-transform duration-300 flex-shrink-0 ${collapsed ? 'rotate-180' : ''}`}>
+              <polyline points="11 17 6 12 11 7"/>
+              <polyline points="18 17 13 12 18 7"/>
+            </svg>
+            {!collapsed && <span className="text-[11px] font-medium whitespace-nowrap">Collapse</span>}
+          </button>
+        </div>
+      )}
     </aside>
   )
 }
@@ -46,21 +91,80 @@ function NotifBell({ count = 0, onClick, title = 'Notifications' }) {
 }
 
 function UserChip({ user, subtitle, onLogout }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+
   const initials = (user?.full_name || user?.email || '?')
     .split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase()
+
+  useEffect(() => {
+    function onDoc(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [])
+
   return (
-    <div className="flex items-center gap-3">
-      <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold" style={{ backgroundColor: '#1B3A5C' }}>
-        {initials}
-      </div>
-      <div className="hidden sm:flex flex-col leading-tight">
-        <span className="text-sm font-semibold text-slate-800">{user?.full_name || user?.email}</span>
-        <span className="text-[11px] text-slate-400">{subtitle}</span>
-      </div>
-      <button onClick={onLogout} title="Sign out"
-              className="ml-1 w-9 h-9 rounded-xl hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-700 transition-colors">
-        <Icon name="logout" size={17} />
+    <div ref={ref} className="relative flex items-center gap-2">
+      {/* Clickable profile chip */}
+      <button onClick={() => setOpen(v => !v)}
+              className="flex items-center gap-2.5 pl-1.5 sm:pr-3 pr-1.5 py-1.5 rounded-xl border border-slate-200/80 bg-white shadow-sm hover:shadow-md hover:border-slate-300 transition-all duration-150">
+        {/* Avatar + online dot */}
+        <div className="relative flex-shrink-0">
+          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center text-white text-[12px] sm:text-[13px] font-bold"
+               style={{ background: 'linear-gradient(135deg, #1a3d7c 0%, #0d1f35 100%)' }}>
+            {initials}
+          </div>
+          <span className="absolute bottom-0 right-0 w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-emerald-400 ring-2 ring-white" />
+        </div>
+        {/* Name + subtitle — hidden on small screens */}
+        <div className="hidden sm:flex flex-col leading-tight text-left">
+          <span className="text-[13px] font-bold text-slate-800 whitespace-nowrap tracking-tight">
+            {user?.full_name || user?.email}
+          </span>
+          <span className="text-[11px] font-medium text-slate-500 whitespace-nowrap">{subtitle}</span>
+        </div>
+        {/* Chevron — hidden on small screens */}
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+             strokeLinecap="round" strokeLinejoin="round"
+             className={`hidden sm:block text-slate-400 transition-transform duration-200 ml-0.5 ${open ? 'rotate-180' : ''}`}>
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
       </button>
+
+      {/* Logout button — hidden on small screens (use dropdown instead) */}
+      <button onClick={onLogout} title="Sign out"
+              className="hidden sm:flex w-8 h-8 rounded-lg border border-slate-200/80 bg-white shadow-sm hover:bg-rose-50 hover:border-rose-200 items-center justify-center text-slate-400 hover:text-rose-500 transition-all duration-150">
+        <Icon name="logout" size={14} />
+      </button>
+
+      {/* Dropdown */}
+      {open && (
+        <div className="absolute right-10 top-full mt-2 w-64 bg-white rounded-xl border border-slate-200 z-50"
+             style={{ boxShadow: '0 4px 20px rgba(15,23,42,0.10)' }}>
+
+          {/* Info rows */}
+          <div className="px-4 py-2">
+            {[
+              { label: 'NPI',       value: user?.npi || '—' },
+              { label: 'Specialty', value: subtitle?.split(' · ')[0] || '—' },
+              { label: 'Location',  value: subtitle?.split(' · ')[1] || '—' },
+            ].map(row => (
+              <div key={row.label} className="flex items-center justify-between py-2 border-b border-slate-50 last:border-0">
+                <span className="text-[11px] text-slate-400">{row.label}</span>
+                <span className="text-[12px] font-semibold text-slate-700">{row.value}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Sign out */}
+          <div className="px-3 pb-3 border-t border-slate-100">
+            <button onClick={onLogout}
+                    className="mt-2 w-full flex items-center gap-2 px-3 py-2 rounded-lg text-[12px] font-medium text-rose-500 hover:bg-rose-50 transition-colors">
+              <Icon name="logout" size={13} /> Sign out
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -113,10 +217,10 @@ function SearchBox({ value = '', onChange, onOpenNpi, onOpenSupplier }) {
 
   return (
     <div ref={ref} className="relative hidden lg:block w-72">
-      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"><Icon name="search" size={15} /></span>
+      <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"><Icon name="search" size={14} /></span>
       <input value={value} onChange={(e) => onChange?.(e.target.value)} onKeyDown={onKeyDown} onFocus={() => setOpen(active)}
              placeholder="Search NPIs, suppliers…"
-             className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-sm text-slate-700 placeholder-slate-400 outline-none focus:border-ink focus:ring-2 focus:ring-ink/15 transition" />
+             className="w-full bg-slate-50 border border-slate-200/80 rounded-full pl-9 pr-4 py-2 text-sm text-slate-700 placeholder-slate-400 outline-none focus:bg-white focus:border-[#1E3A5F]/40 focus:ring-2 focus:ring-[#1E3A5F]/10 transition" />
       {open && (
         <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg z-50 overflow-hidden py-1.5" style={{ boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}>
           {none ? (
@@ -180,7 +284,7 @@ function ProfileMenu({ user, onLogout }) {
   }, [])
 
   const name = user?.full_name || 'Payer Investigator'
-  const email = user?.email || 'plan@claimlens.com'
+  const email = user?.email || 'payer@mediclaim.com'
   const org = 'Meridian Health Plan'
   const uei = 'ABC123DEF456'
   const signatory = 'Dr. James Thornton'
@@ -188,48 +292,48 @@ function ProfileMenu({ user, onLogout }) {
 
   return (
     <div ref={ref} className="relative flex items-center gap-3">
-      <button onClick={() => setOpen((v) => !v)} className="flex items-center gap-3">
-        <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold" style={{ backgroundColor: '#1E3A5F' }}>PI</div>
+      <button onClick={() => setOpen((v) => !v)} className="flex items-center gap-2.5 px-2 py-1.5 rounded-xl hover:bg-slate-50 transition-colors">
+        <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[11px] font-bold ring-2 ring-[#1E3A5F]/20 shadow-sm" style={{ backgroundColor: '#1E3A5F' }}>PI</div>
         <div className="hidden sm:flex flex-col leading-tight text-left">
-          <span className="text-sm font-semibold text-slate-800">{name}</span>
+          <span className="text-[13px] font-semibold text-slate-800">{name}</span>
           <span className="text-[11px] text-slate-400">Payer</span>
         </div>
       </button>
       <button onClick={onLogout} title="Sign out"
-              className="ml-1 w-9 h-9 rounded-xl hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-700 transition-colors">
-        <Icon name="logout" size={17} />
+              className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-700 transition-colors">
+        <Icon name="logout" size={15} />
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-2 w-[280px] bg-white rounded-lg z-50 overflow-hidden" style={{ boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}>
-          <div className="px-4 py-3.5 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0" style={{ backgroundColor: '#1E3A5F' }}>PI</div>
-            <div className="min-w-0">
-              <div className="text-sm font-semibold text-[#111827]">{name}</div>
-              <div className="text-xs text-[#6B7280] truncate">Payer · {email}</div>
-            </div>
+        <div className="absolute right-0 top-full mt-2 w-[288px] bg-white rounded-xl z-50 overflow-hidden border border-slate-200" style={{ boxShadow: '0 8px 24px rgba(15,23,42,0.10), 0 2px 6px rgba(15,23,42,0.06)' }}>
+
+          {/* Info rows */}
+          <div className="px-4 py-2">
+            {[
+              { label: 'Organization',  value: org },
+              { label: 'UEI',           value: uei },
+              { label: 'Signatory',     value: signatory, sub: signatoryTitle },
+              { label: 'SAM.gov',       value: '✓ Verified', green: true },
+              { label: 'Member Since',  value: 'June 2026' },
+            ].map(row => (
+              <div key={row.label} className="flex items-start justify-between gap-6 py-2.5 border-b border-slate-50 last:border-0">
+                <span className="text-[11px] font-medium text-slate-400 shrink-0 mt-px">{row.label}</span>
+                <div className="text-right">
+                  <span className={`text-[12px] font-semibold ${row.green ? 'text-emerald-600' : 'text-slate-700'}`}>{row.value}</span>
+                  {row.sub && <div className="text-[11px] text-slate-400 mt-0.5">{row.sub}</div>}
+                </div>
+              </div>
+            ))}
           </div>
-          <div className="h-px bg-[#F3F4F6]" />
-          <div className="px-4 py-3 space-y-3">
-            <Section label="Organization" value={org} />
-            <Section label="UEI" value={uei} />
-            <div>
-              <SectionLabel>Authorized Signatory</SectionLabel>
-              <div className="text-[13px] font-medium text-[#111827]">{signatory}</div>
-              <div className="text-[13px] text-[#6B7280]">{signatoryTitle}</div>
-            </div>
-            <div>
-              <SectionLabel>Account Status</SectionLabel>
-              <div className="text-[13px] font-medium text-slate-700 flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{ backgroundColor: '#10B981' }} /> Active</div>
-            </div>
-            <div>
-              <SectionLabel>SAM.gov</SectionLabel>
-              <div className="text-[13px] font-medium" style={{ color: '#10B981' }}>✓ Verified</div>
-            </div>
-            <Section label="Member Since" value="June 2026" />
+
+          {/* Sign out */}
+          <div className="px-3 pb-3 pt-1 border-t border-slate-100">
+            <button onClick={onLogout}
+                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-[13px] font-medium text-rose-600 hover:bg-rose-50 transition-colors">
+              <Icon name="logout" size={13} stroke={2} />
+              Sign out
+            </button>
           </div>
-          <div className="h-px bg-[#F3F4F6]" />
-          <button onClick={onLogout} className="w-full text-left px-4 py-3 text-[13px] text-[#DC2626] hover:bg-[#FEF2F2] transition-colors">Sign out</button>
         </div>
       )}
     </div>
@@ -238,17 +342,66 @@ function ProfileMenu({ user, onLogout }) {
 
 export default function Shell({ navItems, activeId, onNavigate, title, user, subtitle,
                                 showSearch = false, searchValue = '', onSearchChange,
-                                onOpenNpi, onOpenSupplier,
+                                onOpenNpi, onOpenSupplier, canGoBack = false, onBack,
+                                breadcrumbs,
                                 notifCount = 0, bellTitle, onBellClick, onLogout, children }) {
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [collapsed, setCollapsed] = useState(() => {
+    try { return localStorage.getItem('sidebar-collapsed') === 'true' } catch { return false }
+  })
+  const showCrumbs = breadcrumbs && breadcrumbs.length > 1
+
+  function toggleCollapse() {
+    setCollapsed(v => {
+      const next = !v
+      try { localStorage.setItem('sidebar-collapsed', String(next)) } catch {}
+      return next
+    })
+  }
+
   return (
-    <div className="h-full flex bg-slate-100">
-      <Sidebar navItems={navItems} activeId={activeId} onNavigate={onNavigate} />
+    <div className="h-full flex bg-slate-100 overflow-hidden">
+
+      {/* Mobile sidebar overlay */}
+      {sidebarOpen && (
+        <div className="fixed inset-0 z-50 md:hidden flex">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setSidebarOpen(false)} />
+          <div className="relative flex-shrink-0 animate-slide-in-left">
+            <Sidebar navItems={navItems} activeId={activeId}
+                     onNavigate={(id) => { onNavigate(id); setSidebarOpen(false) }}
+                     collapsed={false} onToggleCollapse={() => {}}
+                     onClose={() => setSidebarOpen(false)} />
+          </div>
+        </div>
+      )}
+
+      {/* Desktop sidebar — always visible md+ */}
+      <div className="hidden md:flex">
+        <Sidebar navItems={navItems} activeId={activeId} onNavigate={onNavigate}
+                 collapsed={collapsed} onToggleCollapse={toggleCollapse} />
+      </div>
+
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="h-16 bg-white border-b border-slate-200 flex items-center gap-4 px-7 flex-shrink-0">
-          <h1 className="text-lg font-bold text-slate-900">{title}</h1>
-          <div className="ml-auto flex items-center gap-3">
+        <header className="h-[60px] bg-white border-b border-slate-200/70 shadow-[0_1px_6px_rgba(15,23,42,0.06)] flex items-center gap-2 sm:gap-3 px-3 sm:px-7 flex-shrink-0">
+          {/* Hamburger — mobile only */}
+          <button onClick={() => setSidebarOpen(true)} aria-label="Open menu"
+                  className="md:hidden flex-shrink-0 flex items-center justify-center w-9 h-9 rounded-lg text-slate-600 hover:bg-slate-100 transition-colors">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="3" y1="6" x2="21" y2="6"/>
+              <line x1="3" y1="12" x2="21" y2="12"/>
+              <line x1="3" y1="18" x2="21" y2="18"/>
+            </svg>
+          </button>
+          {canGoBack && (
+            <button onClick={onBack} aria-label="Go back" title="Go back"
+                    className="group flex items-center justify-center w-8 h-8 flex-shrink-0 rounded-full border border-slate-200 text-slate-500 transition-all duration-200 hover:bg-slate-100 hover:text-ink hover:border-slate-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/20">
+              <Icon name="chevronRight" size={16} className="rotate-180 transition-transform duration-200 group-hover:-translate-x-0.5" stroke={2.3} />
+            </button>
+          )}
+          <h1 className="text-[15px] sm:text-[17px] font-bold text-slate-900 tracking-tight truncate min-w-0 flex-1">{title}</h1>
+          <div className="flex-shrink-0 flex items-center gap-2">
             {showSearch ? (
-              // Payer top nav: search + profile menu, no notification bell.
               <>
                 <SearchBox value={searchValue} onChange={onSearchChange} onOpenNpi={onOpenNpi} onOpenSupplier={onOpenSupplier} />
                 <ProfileMenu user={user} onLogout={onLogout} />
@@ -261,6 +414,53 @@ export default function Shell({ navItems, activeId, onNavigate, title, user, sub
             )}
           </div>
         </header>
+
+        {/* Breadcrumb trail — only shown when more than one level deep */}
+        {showCrumbs && (
+          <nav className="px-4 sm:px-7 py-2 bg-white border-b border-slate-100/80 flex items-center gap-0.5 flex-shrink-0 min-w-0 overflow-x-auto">
+            {breadcrumbs.map((crumb, i) => {
+              const isRoot = i === 0
+              const isLast = i === breadcrumbs.length - 1
+              return (
+                <Fragment key={i}>
+                  {i > 0 && (
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"
+                         strokeLinecap="round" strokeLinejoin="round" className="text-slate-200 shrink-0 mx-0.5">
+                      <polyline points="9 18 15 12 9 6" />
+                    </svg>
+                  )}
+                  {isLast ? (
+                    <span className="text-[12px] font-semibold text-slate-800 truncate max-w-[200px] px-1 whitespace-nowrap">
+                      {crumb.label}
+                    </span>
+                  ) : crumb.onClick ? (
+                    <button onClick={crumb.onClick}
+                            className={`text-[12px] font-medium px-1 py-0.5 rounded transition-colors whitespace-nowrap hover:text-[#0d1f35] hover:bg-slate-50 ${isRoot ? 'text-slate-400' : 'text-slate-500'}`}>
+                      {isRoot ? (
+                        <span className="flex items-center gap-1 whitespace-nowrap">
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+                            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
+                          </svg>
+                          {crumb.label}
+                        </span>
+                      ) : crumb.label}
+                    </button>
+                  ) : (
+                    <span className="text-[12px] font-medium text-slate-400 px-1 flex items-center gap-1 whitespace-nowrap">
+                      {isRoot && (
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+                          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
+                        </svg>
+                      )}
+                      {crumb.label}
+                    </span>
+                  )}
+                </Fragment>
+              )
+            })}
+          </nav>
+        )}
+
         <main className="flex-1 overflow-y-auto">{children}</main>
       </div>
     </div>

@@ -6,7 +6,7 @@ const AuthContext = createContext(null)
 // Where each role lands after login / on a bare visit.
 export const DASHBOARD_PATH = {
   physician: '/physician/dashboard',
-  plan_investigator: '/plan/dashboard',
+  plan_investigator: '/payer/dashboard',
 }
 
 export function AuthProvider({ children }) {

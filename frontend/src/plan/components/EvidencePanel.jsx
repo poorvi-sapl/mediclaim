@@ -1,4 +1,4 @@
-import { fmtUSD, fmtDate } from '../../components/ui'
+import { Icon, fmtUSD, fmtDate } from '../../components/ui'
 
 // Pairs of same-patient claims within 30 days (client-side).
 function duplicatePairs(claims) {
@@ -78,20 +78,40 @@ export default function EvidencePanel({ variant, evidence = [], practice, physic
         </div>
       )}
 
-      <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Evidence — {label}</div>
+      {/* Section header */}
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Evidence</span>
+        {total > 0 && (
+          <span className="text-[11px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md tabular-nums">
+            {label}
+          </span>
+        )}
+      </div>
 
       {total === 0 ? (
         <div className="text-sm text-slate-400 py-2">No specific records.</div>
       ) : isCross ? (
-        <div className="divide-y divide-[#F3F4F6]">
-          {physicians.slice(0, cap).map((p) => (
+        <div className="space-y-1.5">
+          {physicians.slice(0, cap).map((p, idx) => (
             <button key={p.npi} type="button" onClick={() => onOpenNpi?.(p)}
-                    className="group w-full text-left -mx-2 px-2 py-2.5 rounded flex items-center justify-between gap-3 cursor-pointer hover:bg-[#F9FAFB] transition-colors">
-              <div className="min-w-0">
-                <div className="text-sm font-semibold text-slate-800 truncate group-hover:underline">{p.name}</div>
-                <div className="text-[11px] text-slate-400 tabular-nums">NPI {p.npi}</div>
+                    className="group/phys w-full text-left flex items-center gap-3 px-3.5 py-3 rounded-xl bg-slate-50 border border-slate-100 hover:bg-slate-100 hover:border-slate-200 hover:-translate-y-px hover:shadow-sm transition-all duration-150 cursor-pointer">
+              {/* Rank */}
+              <div className="w-6 h-6 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-400 shrink-0">
+                {idx + 1}
               </div>
-              <div className="text-[13px] text-slate-500 tabular-nums flex-shrink-0">{p.claimCount} claims</div>
+              {/* Name + NPI */}
+              <div className="flex-1 min-w-0">
+                <div className="text-[13px] font-semibold text-slate-800 truncate group-hover/phys:text-slate-900">{p.name}</div>
+                <div className="text-[11px] text-slate-400 font-mono mt-0.5">NPI {p.npi}</div>
+              </div>
+              {/* Claim count + chevron */}
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-[11px] font-semibold text-slate-500 bg-white border border-slate-200 px-2 py-0.5 rounded-md tabular-nums">
+                  {p.claimCount} claims
+                </span>
+                <Icon name="chevronRight" size={13} stroke={2.2}
+                      className="text-slate-300 group-hover/phys:text-slate-500 group-hover/phys:translate-x-0.5 transition-all duration-150" />
+              </div>
             </button>
           ))}
         </div>

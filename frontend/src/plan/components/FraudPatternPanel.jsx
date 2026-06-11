@@ -16,24 +16,37 @@ function GeoMap({ center, physicianLabel, patients, onMapLoad, focusedName }) {
     id: 'google-map-script',
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
   })
+  const localMap = useRef(null)
+  const [mapType, setMapType] = useState('satellite')
   if (!isLoaded) {
-    return <div className="h-full w-full bg-slate-100 animate-pulse" style={{ minHeight: '420px' }} />
+    return <div className="h-full w-full bg-slate-100 animate-pulse" />
   }
+  const switchType = (id) => { setMapType(id); localMap.current?.setMapTypeId(id) }
   return (
-    <GoogleMap mapContainerStyle={{ height: '100%', minHeight: '420px', width: '100%' }}
-               center={{ lat: Number(center.lat), lng: Number(center.lng) }} zoom={4}
-               onLoad={onMapLoad}>
-      {/* MarkerF/PolylineF (function components) are React-18 StrictMode safe; the legacy
-          Marker/Polyline silently fail to attach their overlays under StrictMode. */}
-      <MarkerF position={{ lat: Number(center.lat), lng: Number(center.lng) }} title={physicianLabel} icon={RED_PIN} />
-      {patients.map((p, i) => (
-        <Fragment key={i}>
-          <MarkerF position={{ lat: Number(p.lat), lng: Number(p.lng) }} title={`${p.name}${p.miles >= 0 ? ` · ${p.miles.toLocaleString()} miles` : ''}`} icon={focusedName === p.name ? YELLOW_PIN : BLUE_PIN} />
-          <PolylineF path={[{ lat: Number(center.lat), lng: Number(center.lng) }, { lat: Number(p.lat), lng: Number(p.lng) }]}
-                     options={{ strokeColor: '#EF4444', strokeWeight: 1.5, strokeOpacity: 0.6 }} />
-        </Fragment>
-      ))}
-    </GoogleMap>
+    <div className="relative w-full h-full">
+      <div className="absolute top-3 left-3 z-10 flex items-center gap-0.5 bg-white rounded-xl shadow-md ring-1 ring-black/5 p-1">
+        {[['roadmap', 'Map'], ['satellite', 'Satellite']].map(([id, lbl]) => (
+          <button key={id} type="button" onClick={() => switchType(id)}
+                  className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-colors ${mapType === id ? 'bg-[#1E3A5F] text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'}`}>
+            {lbl}
+          </button>
+        ))}
+      </div>
+      <GoogleMap mapContainerStyle={{ height: '100%', width: '100%' }}
+                 center={{ lat: Number(center.lat), lng: Number(center.lng) }} zoom={4}
+                 mapTypeId="satellite"
+                 options={{ mapTypeControl: false }}
+                 onLoad={(map) => { localMap.current = map; onMapLoad?.(map) }}>
+        <MarkerF position={{ lat: Number(center.lat), lng: Number(center.lng) }} title={physicianLabel} icon={RED_PIN} />
+        {patients.map((p, i) => (
+          <Fragment key={i}>
+            <MarkerF position={{ lat: Number(p.lat), lng: Number(p.lng) }} title={`${p.name}${p.miles >= 0 ? ` · ${p.miles.toLocaleString()} miles` : ''}`} icon={focusedName === p.name ? YELLOW_PIN : BLUE_PIN} />
+            <PolylineF path={[{ lat: Number(center.lat), lng: Number(center.lng) }, { lat: Number(p.lat), lng: Number(p.lng) }]}
+                       options={{ strokeColor: '#F87171', strokeWeight: 2, strokeOpacity: 0.75, geodesic: true }} />
+          </Fragment>
+        ))}
+      </GoogleMap>
+    </div>
   )
 }
 
@@ -111,8 +124,8 @@ function duplicatePairs(claims) {
 
 // Shared clickable-name styles.
 const LINK = 'font-semibold text-[#1E3A5F] hover:underline cursor-pointer'
-const SUMMARY = 'text-[13px] text-slate-500 text-center mt-3'
-const VIEWALL = 'text-[13px] text-[#1E3A5F] underline'
+const SUMMARY = 'text-[12px] text-slate-400 text-center mt-4 leading-relaxed'
+const VIEWALL = 'inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-[13px] font-semibold text-slate-700 shadow-sm transition-all duration-150 hover:border-[#1E3A5F]/25 hover:bg-[#EEF2FF] hover:text-[#1E3A5F]'
 const RED_CARD = { background: '#FEF2F2', border: '1px solid #FECACA' }
 
 function SupplierLink({ name, onOpenSupplier }) {
@@ -185,13 +198,26 @@ export default function FraudPatternPanel({ npi, label, rule, focusClaim, practi
       const groups = groupBySupplier(claims)
       return (
         <div className="mt-4">
-          <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">OIG Excluded Suppliers</div>
-          {groups.map((g) => (
-            <div key={g.supplier} className="rounded-lg px-4 py-3 mb-2" style={RED_CARD}>
-              <button type="button" onClick={() => onOpenSupplier?.(g.supplier)} className={`block text-left text-[14px] ${LINK}`}>{g.supplier}</button>
-              <div className="text-[13px] text-[#6B7280] mt-0.5">{g.count} claim{g.count !== 1 ? 's' : ''} · {fmtUSD(g.total)} total</div>
-            </div>
-          ))}
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">OIG Excluded Suppliers</span>
+            <span className="text-[11px] font-semibold text-rose-600 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md tabular-nums">
+              {groups.length} supplier{groups.length !== 1 ? 's' : ''}
+            </span>
+          </div>
+          <div className="space-y-2">
+            {groups.map((g) => (
+              <button key={g.supplier} type="button" onClick={() => onOpenSupplier?.(g.supplier)}
+                      className="group w-full text-left flex items-center gap-3 px-4 py-3.5 rounded-xl bg-slate-50 border border-slate-100 hover:bg-rose-50/40 hover:border-rose-200/70 hover:-translate-y-px hover:shadow-sm transition-all duration-150">
+                <div className="w-2 h-2 rounded-full bg-rose-400 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <div className="text-[13px] font-semibold text-slate-800 truncate group-hover:text-[#1E3A5F]">{g.supplier}</div>
+                  <div className="text-[11px] text-slate-500 mt-0.5 tabular-nums">{g.count} claim{g.count !== 1 ? 's' : ''} · {fmtUSD(g.total)} total</div>
+                </div>
+                <Icon name="chevronRight" size={13} stroke={2.2}
+                      className="text-slate-300 group-hover:text-[#1E3A5F] group-hover:translate-x-0.5 transition-all duration-150 shrink-0" />
+              </button>
+            ))}
+          </div>
           <div className={SUMMARY}>{claims.length} claims across {groups.length} excluded supplier{groups.length !== 1 ? 's' : ''} · {fmtUSD(sumAmt(claims))} total exposure</div>
           <div className="text-center mt-3"><button type="button" onClick={() => onViewClaims?.({ flag: 'OIG_HIT', label: 'OIG' })} className={VIEWALL}>View all affected claims →</button></div>
         </div>
@@ -215,29 +241,61 @@ export default function FraudPatternPanel({ npi, label, rule, focusClaim, practi
       )
     }
 
-    // UNBUNDLING — grouped cards (max 3)
+    // UNBUNDLING — grouped cards (max 3) + view-all button
     if (rule === 'unbundling') {
       const groups = groupUnbundling(claims)
       return (
         <div className="mt-4">
-          <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Unbundled Claim Groups</div>
-          {groups.slice(0, 3).map((g) => (
-            <div key={g.key} className="rounded-lg px-4 py-3 mb-2" style={RED_CARD}>
-              <div className="text-sm font-semibold text-slate-800">{g.patient} — {fmtDate(g.date)}</div>
-              <div className="text-[13px] text-slate-500 mt-0.5">Supplier: <SupplierLink name={g.supplier} onOpenSupplier={onOpenSupplier} /></div>
-              <div className="mt-2 space-y-1">
-                {g.claims.map((c) => (
-                  <button key={c.id} type="button" onClick={() => onHighlightClaim?.(c.id)} className="w-full flex items-center justify-between gap-3 text-left group">
-                    <span className="text-[13px] text-slate-600 group-hover:text-[#1E3A5F] group-hover:underline truncate">• {c.description || c.category}</span>
-                    <span className="text-[13px] font-semibold text-slate-800 tabular-nums flex-shrink-0">{fmtUSD(c.amount, 2)}</span>
-                  </button>
+          {groups.length > 0 && (
+            <>
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Unbundled Claim Groups</span>
+                <span className="text-[11px] font-semibold text-orange-600 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-md tabular-nums">
+                  {groups.length} instance{groups.length !== 1 ? 's' : ''}
+                </span>
+              </div>
+              <div className="space-y-2">
+                {groups.slice(0, 3).map((g) => (
+                  <div key={g.key} className="rounded-xl border border-slate-100 bg-slate-50 overflow-hidden">
+                    <div className="px-4 py-3 border-b border-slate-100 flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-[13px] font-semibold text-slate-800 truncate">{g.patient}</div>
+                        <div className="text-[11px] text-slate-400 mt-0.5">{fmtDate(g.date)}</div>
+                      </div>
+                      <button type="button" onClick={() => onOpenSupplier?.(g.supplier)}
+                              className="text-[11px] font-semibold text-slate-600 bg-white border border-slate-200 px-2.5 py-1 rounded-lg hover:bg-slate-100 truncate max-w-[148px] shrink-0 transition-colors">
+                        {g.supplier}
+                      </button>
+                    </div>
+                    <div className="px-4 py-2.5 space-y-1.5">
+                      {g.claims.map((c) => (
+                        <button key={c.id} type="button" onClick={() => onHighlightClaim?.(c.id)}
+                                className="group w-full flex items-center justify-between gap-3 text-left">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="w-1.5 h-1.5 rounded-full bg-orange-300 shrink-0" />
+                            <span className="text-[12px] text-slate-600 group-hover:text-slate-900 truncate">{c.description || c.category}</span>
+                          </div>
+                          <span className="text-[12px] font-semibold text-slate-700 tabular-nums shrink-0">{fmtUSD(c.amount, 2)}</span>
+                        </button>
+                      ))}
+                    </div>
+                    <div className="px-4 py-2.5 border-t border-slate-100 flex items-center justify-between">
+                      <span className="text-[11px] font-medium text-slate-400">Total billed</span>
+                      <span className="text-[13px] font-bold text-slate-800 tabular-nums">{fmtUSD(sumAmt(g.claims), 2)}</span>
+                    </div>
+                  </div>
                 ))}
               </div>
-              <div className="text-[13px] font-semibold text-slate-700 mt-2">Total billed: {fmtUSD(sumAmt(g.claims), 2)}</div>
-            </div>
-          ))}
-          <div className={SUMMARY}>{groups.length} unbundling instance{groups.length !== 1 ? 's' : ''} · {fmtUSD(sumAmt(claims))} total</div>
-          <div className="text-center mt-3"><button type="button" onClick={() => onViewClaims?.({ flag: 'UNBUNDLING', label: 'Unbundling' })} className={VIEWALL}>View all unbundled claims →</button></div>
+              {groups.length > 3 && (
+                <div className="text-[11px] text-slate-400 text-center mt-2">+ {groups.length - 3} more groups</div>
+              )}
+            </>
+          )}
+          <div className="text-center mt-4">
+            <button type="button" onClick={() => onViewClaims?.({ flag: 'UNBUNDLING', label: 'Unbundling' })} className={VIEWALL}>
+              View all unbundled claims →
+            </button>
+          </div>
         </div>
       )
     }
@@ -248,35 +306,53 @@ export default function FraudPatternPanel({ npi, label, rule, focusClaim, practi
       const furthest = milesOf(sorted[0]?.why)
       return (
         <div className="mt-4">
-          <div className="rounded-lg bg-[#F9FAFB] border border-slate-200 px-4 py-2.5 text-sm text-slate-600 mb-3">
-            Practice: <span className="font-semibold text-slate-800">{practice?.city || '—'}, {practice?.state || '—'}</span>
+          <div className="flex items-center gap-2.5 rounded-xl bg-slate-50 border border-slate-200 px-4 py-3 mb-3">
+            <span className="w-7 h-7 rounded-lg bg-rose-50 text-rose-500 flex items-center justify-center flex-shrink-0"><Icon name="shield" size={15} /></span>
+            <div className="min-w-0">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Practice Location</div>
+              <div className="text-sm font-semibold text-slate-800 truncate">{practice?.city || '—'}, {practice?.state || '—'}</div>
+            </div>
           </div>
-          <div className="text-[13px] text-slate-500 mb-2">{claims.length} patients located far from practice{furthest >= 0 ? ` · furthest: ${furthest.toLocaleString()} miles` : ''}</div>
-          <div className="divide-y divide-[#F3F4F6]">
+          <div className="flex items-center justify-between gap-2 mb-1.5">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Distant Patients</span>
+            {furthest >= 0 && <span className="text-[11px] font-semibold text-amber-600 tabular-nums">furthest {furthest.toLocaleString()} mi</span>}
+          </div>
+          <div className="space-y-2">
             {sorted.slice(0, 4).map((c) => (
-              <div key={c.id} className="py-2.5">
+              <div key={c.id} className="rounded-xl border border-slate-200 bg-white px-3.5 py-3 transition-all duration-150 hover:border-[#1E3A5F]/30 hover:bg-slate-50/70 hover:shadow-sm">
                 <div className="flex items-center justify-between gap-3">
-                  <span className="text-sm truncate">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setFocusedPatient(c.patient)
-                        if (mapRef.current && c.patientLat != null && c.patientLng != null) {
-                          mapRef.current.panTo({ lat: Number(c.patientLat), lng: Number(c.patientLng) })
-                          mapRef.current.setZoom(7)
-                        }
-                      }}
-                      className="font-medium text-gray-900 hover:text-blue-600 transition-colors cursor-pointer"
-                    >{c.patient}</button>
-                    {milesOf(c.why) >= 0 && <span className="text-amber-600 font-normal"> · {milesOf(c.why).toLocaleString()} miles</span>}
-                  </span>
-                  <span className="text-sm font-bold text-slate-800 tabular-nums flex-shrink-0">{fmtUSD(c.amount, 2)}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFocusedPatient(c.patient)
+                      if (mapRef.current && c.patientLat != null && c.patientLng != null) {
+                        mapRef.current.panTo({ lat: Number(c.patientLat), lng: Number(c.patientLng) })
+                        mapRef.current.setZoom(7)
+                      }
+                    }}
+                    className="text-sm font-semibold text-slate-800 truncate hover:text-[#1E3A5F] hover:underline transition-colors cursor-pointer"
+                  >{c.patient}</button>
+                  <span className="text-sm font-bold text-slate-900 tabular-nums flex-shrink-0">{fmtUSD(c.amount, 2)}</span>
                 </div>
-                <div className="text-xs text-gray-400 mt-0.5">{fmtDate(c.date)} · <SupplierLink name={c.supplier} onOpenSupplier={onOpenSupplier} /></div>
+                {milesOf(c.why) >= 0 && (
+                  <div className="mt-1.5">
+                    <span className="inline-flex items-center text-[11px] font-semibold text-blue-700 tabular-nums">{milesOf(c.why).toLocaleString()} mi from practice</span>
+                  </div>
+                )}
+                <div className="relative group/sup mt-1 max-w-full">
+                  <button type="button" onClick={() => onOpenSupplier?.(c.supplier)}
+                          className="block max-w-full truncate text-xs font-semibold text-[#1E3A5F] hover:underline cursor-pointer">{c.supplier}</button>
+                  {/* hover popup — shows the full (untruncated) supplier name + a click hint */}
+                  <div className="pointer-events-none absolute left-0 bottom-full mb-2 z-30 w-max max-w-[260px] rounded-lg bg-slate-900 px-3 py-2 text-[11px] leading-snug text-white shadow-xl opacity-0 translate-y-1 transition-all duration-150 group-hover/sup:opacity-100 group-hover/sup:translate-y-0">
+                    <div className="font-semibold">{c.supplier}</div>
+                    <div className="mt-0.5 text-slate-300">Billing supplier · click to open the supplier case →</div>
+                    <span className="absolute left-4 top-full h-0 w-0 border-x-4 border-t-4 border-x-transparent border-t-slate-900" aria-hidden />
+                  </div>
+                </div>
               </div>
             ))}
           </div>
-          <div className="text-center mt-3"><button type="button" onClick={() => onViewClaims?.({ flag: 'GEO_ANOMALY', label: 'Geographic anomaly' })} className={VIEWALL}>View all distant patients →</button></div>
+          <div className="text-center mt-4"><button type="button" onClick={() => onViewClaims?.({ flag: 'GEO_ANOMALY', label: 'Geographic anomaly' })} className={VIEWALL}>View all distant patients →</button></div>
         </div>
       )
     }
@@ -355,19 +431,43 @@ export default function FraudPatternPanel({ npi, label, rule, focusClaim, practi
     if (rule === 'impossible_day') {
       const byDay = {}; claims.forEach((c) => { byDay[c.date] = (byDay[c.date] || 0) + 1 })
       const days = Object.entries(byDay).sort((a, b) => b[1] - a[1])
+      const maxN = days[0]?.[1] || 1
+      const NORMAL = 12
       return (
         <div className="mt-4">
-          <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Impossible days</div>
-          <div className="space-y-2">
-            {days.slice(0, 5).map(([d, n]) => (
-              <div key={d} className="rounded-lg px-4 py-2.5" style={RED_CARD}>
-                <div className="flex items-center justify-between"><span className="text-sm font-semibold text-slate-800">{fmtDate(d)}</span><span className="text-[13px] font-bold text-slate-800 tabular-nums">{n} claims</span></div>
-                <div className="text-[11px] text-slate-500 mt-1 font-mono">{'█'.repeat(Math.min(22, Math.round(n / 3)))} <span className="text-slate-400">vs normal ~12/day</span></div>
-              </div>
-            ))}
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Impossible Days</span>
+            <span className="text-[11px] font-semibold text-rose-600 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md tabular-nums">
+              {days.length} day{days.length !== 1 ? 's' : ''} detected
+            </span>
           </div>
-          <div className={SUMMARY}>{days.length} impossible day{days.length !== 1 ? 's' : ''} detected</div>
-          <div className="text-center mt-3"><button type="button" onClick={() => onViewClaims?.({ flag: 'IMPOSSIBLE_DAY', label: 'Impossible day' })} className={VIEWALL}>View all flagged claims →</button></div>
+          <div className="space-y-2">
+            {days.slice(0, 5).map(([d, n]) => {
+              const pct = Math.round((n / maxN) * 100)
+              return (
+                <div key={d} className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
+                  <div className="flex items-center justify-between gap-3 mb-2">
+                    <span className="text-[13px] font-semibold text-slate-800">{fmtDate(d)}</span>
+                    <span className="text-[11px] font-bold text-rose-600 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md tabular-nums">
+                      {n} claims
+                    </span>
+                  </div>
+                  <div className="h-1.5 w-full bg-slate-200 rounded-full overflow-hidden">
+                    <div className="h-full rounded-full bg-rose-400 transition-all duration-300" style={{ width: `${pct}%` }} />
+                  </div>
+                  <div className="flex items-center justify-between mt-1.5">
+                    <span className="text-[10px] text-slate-400">normal ~{NORMAL}/day</span>
+                    <span className="text-[10px] font-semibold text-rose-500">{Math.round(n / NORMAL)}× above normal</span>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+          <div className="text-center mt-4">
+            <button type="button" onClick={() => onViewClaims?.({ flag: 'IMPOSSIBLE_DAY', label: 'Impossible day' })} className={VIEWALL}>
+              View all flagged claims →
+            </button>
+          </div>
         </div>
       )
     }
@@ -396,19 +496,41 @@ export default function FraudPatternPanel({ npi, label, rule, focusClaim, practi
     if (rule === 'rapid_cycling') {
       const byDay = {}; claims.forEach((c) => { const e = byDay[c.date] = byDay[c.date] || { n: 0, pts: new Set() }; e.n++; e.pts.add(c.patient) })
       const days = Object.entries(byDay).sort((a, b) => b[1].pts.size - a[1].pts.size)
+      const maxPts = days[0]?.[1].pts.size || 1
       return (
         <div className="mt-4">
-          <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">High-turnover days</div>
-          <div className="divide-y divide-[#F3F4F6]">
-            {days.slice(0, 5).map(([d, e]) => (
-              <div key={d} className="py-2.5 flex items-center justify-between gap-3">
-                <span className="text-sm font-semibold text-slate-800">{fmtDate(d)}</span>
-                <span className="text-[13px] text-slate-500">{e.pts.size} distinct patients · {e.n} claims</span>
-              </div>
-            ))}
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">High-Turnover Days</span>
+            <span className="text-[11px] font-semibold text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md tabular-nums">
+              {days.length} day{days.length !== 1 ? 's' : ''} flagged
+            </span>
           </div>
-          <div className={SUMMARY}>{days.length} day{days.length !== 1 ? 's' : ''} flagged</div>
-          <div className="text-center mt-3"><button type="button" onClick={() => onViewClaims?.({ flag: 'RAPID_CYCLING', label: 'Rapid cycling' })} className={VIEWALL}>View all flagged claims →</button></div>
+          <div className="space-y-2">
+            {days.slice(0, 5).map(([d, e]) => {
+              const pct = Math.round((e.pts.size / maxPts) * 100)
+              return (
+                <div key={d} className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
+                  <div className="flex items-center justify-between gap-3 mb-2">
+                    <span className="text-[13px] font-semibold text-slate-800">{fmtDate(d)}</span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-[11px] text-slate-400 tabular-nums">{e.n} claims</span>
+                      <span className="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md tabular-nums">
+                        {e.pts.size} patients
+                      </span>
+                    </div>
+                  </div>
+                  <div className="h-1.5 w-full bg-slate-200 rounded-full overflow-hidden">
+                    <div className="h-full rounded-full bg-amber-400 transition-all duration-300" style={{ width: `${pct}%` }} />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+          <div className="text-center mt-4">
+            <button type="button" onClick={() => onViewClaims?.({ flag: 'RAPID_CYCLING', label: 'Rapid cycling' })} className={VIEWALL}>
+              View all flagged claims →
+            </button>
+          </div>
         </div>
       )
     }
@@ -490,27 +612,31 @@ export default function FraudPatternPanel({ npi, label, rule, focusClaim, practi
     )
   }
 
-  // Existing modal content (unchanged) — header + why box + per-rule content.
   const body = (
     <>
-      {/* header */}
-      <div className="flex items-start justify-between gap-3">
+      {/* Header */}
+      <div className="flex items-center justify-between gap-3 pb-4 border-b border-slate-100">
         <div className="flex items-center gap-3 min-w-0">
-          <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-500 flex items-center justify-center flex-shrink-0"><Icon name="alertTri" size={18} /></div>
+          <div className="w-9 h-9 rounded-xl bg-rose-50 text-rose-500 ring-1 ring-rose-100 flex items-center justify-center shrink-0">
+            <Icon name="alertTri" size={16} />
+          </div>
           <div className="min-w-0">
-            <h3 className="text-[18px] font-bold text-slate-900 leading-tight">{label}</h3>
-            <p className="text-xs text-slate-400 mt-0.5">Why this fired · NPI {npi}</p>
+            <h3 className="text-[15px] font-bold text-slate-900 leading-tight">{label}</h3>
+            <p className="text-[11px] text-slate-400 mt-0.5">Why this fired · NPI {npi}</p>
           </div>
         </div>
-        <button onClick={onClose} aria-label="Close" className="flex-shrink-0 text-slate-400 hover:text-slate-700"><Icon name="x" size={18} /></button>
+        <button onClick={onClose} aria-label="Close"
+                className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-800 transition-all duration-150">
+          <Icon name="x" size={14} stroke={2.5} />
+        </button>
       </div>
 
       {error && <div className="mt-4 text-sm text-rose-600">{error}</div>}
-      {!ready && !error && <div className="mt-5 h-32 rounded-xl bg-slate-100 animate-pulse" />}
+      {!ready && !error && <div className="mt-4 h-24 rounded-xl bg-slate-100 animate-pulse" />}
 
       {ready && (
         <div key={rule} className="animate-fade-in-up mt-4">
-          <div className="rounded-lg bg-[#F9FAFB] px-4 py-3.5 text-sm text-slate-700 leading-relaxed">{why}</div>
+          <p className="text-[13px] text-slate-600 leading-relaxed bg-slate-50 rounded-lg px-3.5 py-3 border border-slate-100">{why}</p>
           {renderContent()}
         </div>
       )}
@@ -518,13 +644,15 @@ export default function FraudPatternPanel({ npi, label, rule, focusClaim, practi
   )
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.45)' }} onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-6"
+         style={{ background: 'rgba(15,23,42,0.45)', backdropFilter: 'blur(2px)' }}
+         onClick={onClose}>
       {showMap ? (
-        // geographic_anomaly: two-column — existing content (left) + Google Map (right).
-        <div className="bg-white rounded-xl w-full max-w-6xl max-h-[90vh] overflow-y-auto flex"
-             style={{ boxShadow: '0 8px 32px rgba(0,0,0,0.18)' }} onClick={(e) => e.stopPropagation()}>
-          <div className="p-6 w-[420px] flex-shrink-0">{body}</div>
-          <div className="flex-1 min-w-[420px] border-l border-slate-100">
+        <div className="bg-white rounded-2xl w-full max-w-[1360px] overflow-hidden flex"
+             style={{ height: '86vh', boxShadow: '0 32px 80px -12px rgba(15,23,42,0.30), 0 0 0 1px rgba(15,23,42,0.06)' }}
+             onClick={(e) => e.stopPropagation()}>
+          <div className="w-[320px] shrink-0 overflow-y-auto p-5 border-r border-slate-100">{body}</div>
+          <div className="flex-1 h-full overflow-hidden">
             <GeoMap
               center={practiceCoords}
               physicianLabel={`${evidence?.physicianName || 'Physician'}${practice?.city ? ` · ${practice.city}` : ''}`}
@@ -535,8 +663,9 @@ export default function FraudPatternPanel({ npi, label, rule, focusClaim, practi
           </div>
         </div>
       ) : (
-        <div className="bg-white rounded-xl w-full max-w-[560px] max-h-[80vh] overflow-y-auto p-6"
-             style={{ boxShadow: '0 8px 32px rgba(0,0,0,0.18)' }} onClick={(e) => e.stopPropagation()}>
+        <div className="bg-white rounded-2xl w-full max-w-[480px] max-h-[80vh] overflow-y-auto p-5"
+             style={{ boxShadow: '0 24px 64px -12px rgba(15,23,42,0.22)' }}
+             onClick={(e) => e.stopPropagation()}>
           {body}
         </div>
       )}

@@ -1,4 +1,11 @@
 import { useState, useEffect } from 'react'
+
+function exportCSV(filename, headers, rows) {
+  const esc = (v) => { const s = String(v ?? ''); return /[,"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s }
+  const csv = [headers, ...rows].map(r => r.map(esc).join(',')).join('\n')
+  const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(new Blob([csv], { type: 'text/csv' })), download: filename })
+  a.click(); URL.revokeObjectURL(a.href)
+}
 import { getSuppliers, getSupplierPhysicians, getAlertsHistory } from '../../api'
 import { Icon, fmtUSD, fmtDate, timeAgo } from '../../components/ui'
 
@@ -109,7 +116,20 @@ export default function SupplierPanel({ supplierName, evidence = [], variant, on
 
       {/* physicians billing this supplier */}
       <div className="mt-5 mc-card overflow-hidden">
-        <div className="px-4 py-3 border-b border-slate-100"><h4 className="text-sm font-bold text-slate-900">Physicians Billing This Supplier ({physicians.length})</h4></div>
+        <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+          <h4 className="text-sm font-bold text-slate-900">Physicians Billing This Supplier ({physicians.length})</h4>
+          {physicians.length > 0 && (
+            <button onClick={() => exportCSV('supplier-physicians.csv',
+                ['Physician', 'NPI', 'City', 'State', 'Claims', 'Billed', 'Flags'],
+                sorted.map(p => [p.name, p.npi, p.city, p.state, p.claimCount, p.totalAmount, p.flagsOnThisSupplier || 0]))}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#1E3A5F]/20 bg-white text-[#1E3A5F] text-[12px] font-semibold hover:bg-[#EEF2F7] transition-colors">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              Export
+            </button>
+          )}
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead><tr className="border-b border-slate-100 bg-slate-50/60">
@@ -122,7 +142,7 @@ export default function SupplierPanel({ supplierName, evidence = [], variant, on
                       {c.label}
                       {active
                         ? <span className="text-[#1E3A5F]">{sort.dir === 'asc' ? '↑' : '↓'}</span>
-                        : <span className="text-[#D1D5DB] opacity-0 group-hover:opacity-100 transition-opacity">↕</span>}
+                        : <span className="text-slate-300 group-hover:text-slate-500 transition-colors">↕</span>}
                     </span>
                   </th>
                 )

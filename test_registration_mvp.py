@@ -98,8 +98,8 @@ chk("8. attestation false -> 400", r.status_code==400 and r.json().get("detail",
 
 # 9 + 10: admin sees pending payer, activates, payer can then access
 cur.execute("SELECT id FROM users WHERE email='reg.payer@example.com'"); payer_id = cur.fetchone()[0]
-adm = requests.Session(); adm.post(f"{B}/auth/login", json={"email":"plan@claimlens.com","password":"demo1234"})
-ap = requests.post(f"{B}/auth/login", json={"email":"plan@claimlens.com","password":"demo1234"}).json()
+adm = requests.Session(); adm.post(f"{B}/auth/login", json={"email":"payer@mediclaim.com","password":"demo1234"})
+ap = requests.post(f"{B}/auth/login", json={"email":"payer@mediclaim.com","password":"demo1234"}).json()
 adm.post(f"{B}/auth/otp/verify", json={"code":"123456","otp_pending_token":ap["otp_pending_token"]})
 pending = adm.get(f"{B}/admin/users/pending").json()
 in_pending = any(u["id"]==str(payer_id) for u in pending)
@@ -115,7 +115,7 @@ chk("11. NPI detail verification has dea/state_license/ptan", all(k in det for k
 
 # 13: demo logins unaffected
 ok13 = True
-for em in ["physician@claimlens.com","plan@claimlens.com"]:
+for em in ["physician@mediclaim.com","payer@mediclaim.com"]:
     ss=requests.Session(); b=ss.post(f"{B}/auth/login", json={"email":em,"password":"demo1234"}).json()
     vv=ss.post(f"{B}/auth/otp/verify", json={"code":"123456","otp_pending_token":b["otp_pending_token"]})
     ok13 = ok13 and vv.status_code==200

@@ -19,8 +19,8 @@ phys = json.load(open("scripts/tiered_npis.json"))["physicians"]
 t3_npi = next(p["npi"] for p in phys if p["index"] == 90)
 
 # payer + physician demo sessions (demo bypass -> instant cookie)
-sp = requests.Session(); sp.post(f"{BASE}/auth/login", json={"email": "plan@claimlens.com", "password": "demo1234"})
-sd = requests.Session(); rd = sd.post(f"{BASE}/auth/login", json={"email": "physician@claimlens.com", "password": "demo1234"})
+sp = requests.Session(); sp.post(f"{BASE}/auth/login", json={"email": "payer@mediclaim.com", "password": "demo1234"})
+sd = requests.Session(); rd = sd.post(f"{BASE}/auth/login", json={"email": "physician@mediclaim.com", "password": "demo1234"})
 demo_npi = sd.get(f"{BASE}/auth/me").json().get("npi")
 
 # 1. ~18,000 claims

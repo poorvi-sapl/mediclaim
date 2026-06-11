@@ -70,7 +70,7 @@ check("2. NPI not in Order&Referring -> 400 blocked, no account",
 r = reg("cms.flagged@example.com", npi_flagged_monitored); b = r.json()
 mr, vr = db_user("cms.flagged@example.com")
 s = requests.Session()
-_pb = s.post(f"{BASE}/auth/login", json={"email": "plan@claimlens.com", "password": "demo1234"}).json()
+_pb = s.post(f"{BASE}/auth/login", json={"email": "payer@mediclaim.com", "password": "demo1234"}).json()
 s.post(f"{BASE}/auth/otp/verify", json={"code": "123456", "otp_pending_token": _pb["otp_pending_token"]})
 lb = s.get(f"{BASE}/plan/npi-risk-list?page_size=100").json()["items"]
 lb_flagged = next((x.get("needs_manual_review") for x in lb if x["npi"] == npi_flagged_monitored), None)
@@ -101,7 +101,7 @@ check("6. unregistered NPI detail -> verification is null (pre-feature)",
 
 # === 7: existing demo logins + MFA unaffected ===
 ok7 = True
-for demo in ["physician@claimlens.com", "plan@claimlens.com"]:
+for demo in ["physician@mediclaim.com", "payer@mediclaim.com"]:
     ss = requests.Session()
     bb = ss.post(f"{BASE}/auth/login", json={"email": demo, "password": "demo1234"}).json()
     vv = ss.post(f"{BASE}/auth/otp/verify", json={"code": "123456", "otp_pending_token": bb["otp_pending_token"]})

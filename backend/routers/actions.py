@@ -210,7 +210,7 @@ def reset_actions(request: Request, db: Session = Depends(get_db)):
     """Clear ALL of the requesting physician's actions and re-score — one-call demo reset."""
     settings = get_settings()
     claims = _claims(request)
-    if not (claims.get("email") or "").lower().endswith("@claimlens.com"):
+    if not (claims.get("email") or "").lower().endswith("@mediclaim.com"):
         raise HTTPException(status_code=403, detail={
             "error": "Demo reset not available", "code": "NOT_DEMO_ACCOUNT"})
     npi = claims.get("npi")

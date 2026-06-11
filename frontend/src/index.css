@@ -52,7 +52,8 @@
   }
 
   .th {
-    @apply text-left px-5 py-3 text-[11px] font-bold text-slate-400 uppercase tracking-[0.06em];
+    @apply text-left px-5 py-3 text-[12px] font-bold uppercase tracking-[0.07em];
+    color: rgba(30, 58, 95, 0.72);
   }
   .td { @apply px-5 py-4 text-sm text-slate-600; }
 
@@ -97,4 +98,10 @@
     to   { opacity: 1; transform: translateY(0); }
   }
   .animate-fade-in-up { animation: fade-in-up 0.3s ease-out; }
+
+  @keyframes slide-in-left {
+    from { transform: translateX(-100%); }
+    to   { transform: translateX(0); }
+  }
+  .animate-slide-in-left { animation: slide-in-left 0.22s cubic-bezier(0.25, 0.46, 0.45, 0.94); }
 }

@@ -21,6 +21,7 @@ const ICONS = {
   doc: <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/></>,
   bolt: <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>,
   chevronRight: <polyline points="9 18 15 12 9 6"/>,
+  chevronDown:  <polyline points="6 9 12 15 18 9"/>,
 }
 
 export function Icon({ name, size = 18, stroke = 1.9, ...props }) {
@@ -59,11 +60,11 @@ export function timeAgo(d) {
 }
 
 const ACCENTS = {
-  navy:   { chip: 'bg-slate-100 text-ink',          line: '#1B3A5C' },
-  rose:   { chip: 'bg-rose-50 text-rose-500',       line: '#f43f5e' },
-  amber:  { chip: 'bg-amber-50 text-amber-500',     line: '#f59e0b' },
-  blue:   { chip: 'bg-blue-50 text-blue-500',       line: '#3b82f6' },
-  emerald:{ chip: 'bg-emerald-50 text-emerald-500', line: '#10b981' },
+  navy:   { chip: 'bg-slate-100 text-ink',          line: '#1B3A5C', ring: 'group-hover:ring-slate-300',   bar: 'bg-slate-600',   chevDot: 'bg-slate-100 text-slate-500 ring-1 ring-slate-200 group-hover:bg-[#1B3A5C] group-hover:text-white group-hover:ring-[#1B3A5C]' },
+  rose:   { chip: 'bg-rose-50 text-rose-500',       line: '#f43f5e', ring: 'group-hover:ring-rose-300',    bar: 'bg-rose-400',    chevDot: 'bg-rose-50 text-rose-400 ring-1 ring-rose-200 group-hover:bg-rose-500 group-hover:text-white group-hover:ring-rose-500' },
+  amber:  { chip: 'bg-amber-50 text-amber-500',     line: '#f59e0b', ring: 'group-hover:ring-amber-300',   bar: 'bg-amber-400',   chevDot: 'bg-amber-50 text-amber-400 ring-1 ring-amber-200 group-hover:bg-amber-500 group-hover:text-white group-hover:ring-amber-500' },
+  blue:   { chip: 'bg-blue-50 text-blue-500',       line: '#3b82f6', ring: 'group-hover:ring-blue-300',    bar: 'bg-blue-400',    chevDot: 'bg-blue-50 text-blue-400 ring-1 ring-blue-200 group-hover:bg-blue-500 group-hover:text-white group-hover:ring-blue-500' },
+  emerald:{ chip: 'bg-emerald-50 text-emerald-500', line: '#10b981', ring: 'group-hover:ring-emerald-300', bar: 'bg-emerald-400', chevDot: 'bg-emerald-50 text-emerald-500 ring-1 ring-emerald-200 group-hover:bg-emerald-600 group-hover:text-white group-hover:ring-emerald-600' },
 }
 
 // tiny deterministic sparkline (no randomness)
@@ -76,36 +77,38 @@ function Spark({ color }) {
   )
 }
 
-export function StatCard({ icon, label, value, accent = 'navy', valueClass = '', spark = true, loading, onClick }) {
+export function StatCard({ icon, label, value, accent = 'navy', valueClass = '', spark = true, loading, onClick, accentBar = true }) {
   const a = ACCENTS[accent] || ACCENTS.navy
+  const isClickable = !!onClick
   const inner = (
     <>
-      <div className="flex items-start justify-between">
-        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${a.chip}`}>
-          <Icon name={icon} size={18} />
+      <div className="flex items-center justify-between mb-2 sm:mb-3">
+        <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center flex-shrink-0 transition-transform duration-200 group-hover:scale-110 ${a.chip}`}>
+          <Icon name={icon} size={15} />
         </div>
+        {isClickable && (
+          <span className={`flex items-center justify-center w-6 h-6 rounded-full transition-all duration-200 group-hover:translate-x-0.5 ${a.chevDot}`}>
+            <Icon name="chevronRight" size={12} stroke={2.5} />
+          </span>
+        )}
       </div>
-      <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mt-4">{label}</div>
+      <div className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none truncate">{label}</div>
       {loading
-        ? <div className="h-8 w-20 rounded bg-slate-100 animate-pulse mt-1" />
-        : <div className={`text-display text-3xl font-bold tabular-nums mt-0.5 text-slate-900 ${valueClass}`}>{value}</div>}
+        ? <div className="h-6 sm:h-7 w-16 rounded bg-slate-100 animate-pulse mt-1.5" />
+        : <div className={`text-display text-[1.15rem] sm:text-2xl font-bold tabular-nums mt-1 text-slate-900 min-w-0 break-words leading-tight ${valueClass}`}>{value}</div>}
       {spark && <Spark color={a.line} />}
     </>
   )
   if (onClick) {
-    // change 5: clickable card — shadow lift on hover (no border change) + a chevron
-    // in the bottom-right that fades in on hover to signal clickability.
     return (
       <button onClick={onClick}
-              className="group relative mc-card p-5 text-left w-full cursor-pointer transition-shadow duration-150 hover:shadow-[0_4px_12px_rgba(0,0,0,0.08)]">
+              className={`group relative mc-card p-3 sm:p-4 text-left w-full cursor-pointer overflow-hidden transition-all duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[0_10px_20px_-6px_rgba(15,23,42,0.15)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400/40`}>
+        {accentBar && <span className={`absolute inset-y-0 left-0 w-[3px] ${a.bar}`} aria-hidden />}
         {inner}
-        <span className="absolute bottom-3 right-3 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity">
-          <Icon name="chevronRight" size={14} />
-        </span>
       </button>
     )
   }
-  return <div className="mc-card p-5">{inner}</div>
+  return <div className="group mc-card p-3 sm:p-4 overflow-hidden transition-all duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[0_10px_20px_-6px_rgba(15,23,42,0.12)]">{inner}</div>
 }
 
 const RISK_PILL = {

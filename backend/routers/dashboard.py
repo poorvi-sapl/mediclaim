@@ -285,7 +285,10 @@ def get_npi_detail(npi: str, db: Session = Depends(get_db)):
                 if score.last_calculated else None,
         }
 
-    claims_page = build_claims_page(db, npi, page=0, page_size=50)
+    # Load the NPI's FULL claim set (max ~761 claims/NPI). The detail page filters
+    # claims client-side by flag ("View all distant patients", etc.); a 50-row cap
+    # dropped the geo/older flagged claims out of the window, so those filters showed 0.
+    claims_page = build_claims_page(db, npi, page=0, page_size=1000)
 
     actions = (
         db.query(Action).filter(Action.npi == npi)

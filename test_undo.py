@@ -16,10 +16,10 @@ def demo_session(email):
     return s
 
 # physician demo session + its NPI
-s_phys = demo_session("physician@claimlens.com")
+s_phys = demo_session("physician@mediclaim.com")
 N = s_phys.get(f"{B}/auth/me").json().get("npi")
 # payer session for SSE
-s_pay = demo_session("plan@claimlens.com")
+s_pay = demo_session("payer@mediclaim.com")
 
 def unreviewed_claim():
     cu.execute("SELECT id FROM claims WHERE npi=%s AND reviewed=false LIMIT 1", (N,))

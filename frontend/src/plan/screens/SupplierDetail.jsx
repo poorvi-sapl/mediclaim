@@ -1,6 +1,31 @@
 import { useState, useEffect, useRef } from 'react'
 import { getSupplierPhysicians, getAlertsHistory } from '../../api'
-import { Icon, StatCard, RiskPill, fmtUSD, timeAgo } from '../../components/ui'
+import { Icon, RiskPill, fmtUSD, timeAgo } from '../../components/ui'
+
+function KpiCard({ icon, label, value, accent = 'slate', onClick }) {
+  const styles = {
+    slate:  { icon: 'bg-slate-100 text-slate-500'    },
+    rose:   { icon: 'bg-rose-50 text-rose-500'       },
+    blue:   { icon: 'bg-blue-50 text-blue-500'       },
+    amber:  { icon: 'bg-amber-50 text-amber-500'     },
+    emerald:{ icon: 'bg-emerald-50 text-emerald-600' },
+  }
+  const s = styles[accent] || styles.slate
+  const cls = `mc-card px-5 py-4 flex flex-col gap-3 hover:-translate-y-0.5 hover:shadow-[0_8px_24px_-6px_rgba(15,23,42,0.10)] hover:border-slate-200 transition-all duration-200 ${onClick ? 'cursor-pointer' : ''}`
+  const inner = (
+    <>
+      <div className="flex items-start justify-between gap-3">
+        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none pt-0.5">{label}</span>
+        <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${s.icon}`}>
+          <Icon name={icon} size={15} />
+        </div>
+      </div>
+      <div className="text-[1.6rem] font-bold tabular-nums leading-none tracking-tight text-slate-900">{value}</div>
+    </>
+  )
+  if (onClick) return <button onClick={onClick} className={cls + ' text-left w-full'}>{inner}</button>
+  return <div className={cls}>{inner}</div>
+}
 
 const ALERT_META = {
   flagged: { icon: 'flag', chip: 'bg-amber-50 text-amber-500', label: 'Flag Supplier' },
@@ -12,7 +37,7 @@ const ALERT_META = {
 const PHYS_COLUMNS = [
   { key: 'name', label: 'Physician' },
   { key: 'claims', label: 'Claims', right: true },
-  { key: 'billed', label: 'Billed', right: true },
+  { key: 'billed', label: 'Billed', right: true, cls: 'hidden sm:table-cell' },
   { key: 'flags', label: 'Flags', right: true },
 ]
 const PHYS_COMPARATORS = {
@@ -45,7 +70,7 @@ export default function SupplierDetail({ supplier, onBack, onSelectPhysician }) 
     setPhysSort((p) => p.key !== key ? { key, dir: 'asc' } : p.dir === 'asc' ? { key, dir: 'desc' } : { key: null, dir: null })
   }
 
-  if (!supplier) return <div className="max-w-screen-xl mx-auto px-7 py-7 text-slate-500">No supplier selected.</div>
+  if (!supplier) return <div className="w-full px-4 sm:px-7 py-5 sm:py-7 text-slate-500">No supplier selected.</div>
 
   const physicians = data?.physicians || []
   const sortedPhysicians = (() => {
@@ -60,30 +85,29 @@ export default function SupplierDetail({ supplier, onBack, onSelectPhysician }) 
   })()
 
   return (
-    <div className="max-w-screen-xl mx-auto px-7 py-7">
-      <button onClick={onBack} className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-ink mb-5">
-        <Icon name="leaderboard" size={13} /> Back to watchlist
-      </button>
+    <div className="w-full px-4 sm:px-7 py-5 sm:py-7">
 
       {/* Header */}
-      <div className="mc-card p-6 mb-6 flex flex-wrap items-center gap-4">
-        <div className="w-12 h-12 rounded-xl bg-rose-50 text-rose-500 ring-1 ring-rose-100 flex items-center justify-center flex-shrink-0"><Icon name="suppliers" size={22} /></div>
-        <div className="min-w-0">
-          <span className="label-eyebrow">Supplier Case</span>
-          <h1 className="text-display text-2xl font-bold text-slate-900 mt-1">{supplier.name}</h1>
-          <div className="flex items-center gap-2 mt-1.5">
-            <RiskPill band={supplier.risk} />
-            {supplier.oig && <span className="pill pill-critical"><Icon name="alertTri" size={11} stroke={2.5} />OIG FLAGGED</span>}
-          </div>
+      <div className="mc-card px-6 py-4 mb-6 flex items-center gap-4">
+        <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-500 ring-1 ring-rose-100 flex items-center justify-center shrink-0">
+          <Icon name="suppliers" size={18} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Supplier Case</span>
+          <h1 className="text-display text-[17px] font-bold text-slate-900 leading-tight truncate">{supplier.name}</h1>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <RiskPill band={supplier.risk} />
+          {supplier.oig && <span className="pill pill-critical whitespace-nowrap"><Icon name="alertTri" size={11} stroke={2.5} />OIG FLAGGED</span>}
         </div>
       </div>
 
       {/* Signals */}
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-5 mb-6">
-        <StatCard icon="users" label="Distinct NPIs" value={supplier.distinctNPIs} accent="navy" spark={false} onClick={() => scrollTo(physiciansRef)} />
-        <StatCard icon="flag" label="Physician Flags" value={supplier.physicianFlags} accent="rose" valueClass={supplier.physicianFlags > 0 ? 'text-rose-600' : ''} spark={false} onClick={() => scrollTo(flagsRef)} />
-        <StatCard icon="bolt" label="Total Billed" value={fmtUSD(supplier.totalAmount)} accent="blue" spark={false} />
-        <StatCard icon="ban" label="Denials" value={data?.totalDenials ?? 0} accent="amber" spark={false} />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <KpiCard icon="users" label="Distinct NPIs"    value={supplier.distinctNPIs}       accent="slate"   onClick={() => scrollTo(physiciansRef)} />
+        <KpiCard icon="flag"  label="Physician Flags"  value={supplier.physicianFlags}      accent="rose"    onClick={() => scrollTo(flagsRef)} />
+        <KpiCard icon="bolt"  label="Total Billed"     value={fmtUSD(supplier.totalAmount)} accent="blue" />
+        <KpiCard icon="ban"   label="Denials"          value={data?.totalDenials ?? 0}      accent="amber" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -97,12 +121,12 @@ export default function SupplierDetail({ supplier, onBack, onSelectPhysician }) 
                   const active = physSort.key === c.key
                   return (
                     <th key={c.key} onClick={() => onPhysSort(c.key)}
-                        className={`th cursor-pointer select-none group ${c.right ? 'text-right' : ''}`}>
+                        className={`th cursor-pointer select-none group ${c.right ? 'text-right' : ''} ${c.cls || ''}`}>
                       <span className="inline-flex items-center gap-1 group-hover:text-[#1E3A5F] transition-colors">
                         {c.label}
                         {active
                           ? <span className="text-[#1E3A5F]">{physSort.dir === 'asc' ? '↑' : '↓'}</span>
-                          : <span className="text-[#D1D5DB] opacity-0 group-hover:opacity-100 transition-opacity">↕</span>}
+                          : <span className="text-slate-300 group-hover:text-slate-500 transition-colors">↕</span>}
                       </span>
                     </th>
                   )
@@ -112,15 +136,15 @@ export default function SupplierDetail({ supplier, onBack, onSelectPhysician }) 
                 {error && <tr><td colSpan={4} className="td text-rose-600 text-sm">{error}</td></tr>}
                 {!error && physicians.length === 0 && <tr><td colSpan={4} className="td text-slate-400 text-sm">Loading…</td></tr>}
                 {sortedPhysicians.map((p) => (
-                  <tr key={p.npi} onClick={() => onSelectPhysician?.(p.npi)}
+                  <tr key={p.npi} onClick={() => onSelectPhysician?.({ npi: p.npi, name: p.name })}
                       title={`Open NPI detail for ${p.name}`}
                       className="group cursor-pointer transition-colors hover:bg-[#F9FAFB]">
                     <td className="td">
                       <div className="font-semibold text-slate-800 text-sm">{p.name}</div>
-                      <div className="text-[11px] text-slate-400 tabular-nums">{p.npi} · {p.city}, {p.state}</div>
+                      <div className="text-[11px] text-slate-400 tabular-nums">{p.npi} · {p.city}{p.state ? `, ${p.state}` : ''}</div>
                     </td>
                     <td className="td text-right tabular-nums">{p.claimCount}</td>
-                    <td className="td text-right tabular-nums font-semibold text-slate-800">{fmtUSD(p.totalAmount)}</td>
+                    <td className="td text-right tabular-nums font-semibold text-slate-800 hidden sm:table-cell">{fmtUSD(p.totalAmount)}</td>
                     <td className="td text-right tabular-nums">
                       <span className="inline-flex items-center justify-end gap-2">
                         <span>

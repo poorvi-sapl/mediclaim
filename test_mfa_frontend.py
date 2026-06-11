@@ -51,7 +51,7 @@ def login(email):
 
 # === SCENARIO 10: demo accounts unaffected (no mfa_required, normal cookie) ===
 ok10 = True
-for demo in ["physician@claimlens.com", "plan@claimlens.com"]:
+for demo in ["physician@mediclaim.com", "payer@mediclaim.com"]:
     s = requests.Session()
     b = s.post(f"{BASE}/auth/login", json={"email": demo, "password": "demo1234"}).json()
     ok10 = ok10 and b.get("mfa_required") is None and "claimlens_token" in s.cookies and b.get("mfa_enabled") is False

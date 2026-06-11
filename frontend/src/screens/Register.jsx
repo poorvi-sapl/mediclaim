@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Stethoscope, Building2, Zap } from 'lucide-react'
 import AuthLayout, { Spinner } from '../components/AuthLayout'
 import { registerPhysician, registerPayer, verifyNpi, verifyUei, uploadDocument } from '../api'
 
@@ -26,8 +27,8 @@ function FillAllButton({ onClick }) {
   return (
     <div className="flex justify-end mb-1">
       <button type="button" onClick={onClick}
-              className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-teal-500 text-teal-600 hover:bg-teal-50 transition">
-        ⚡ Fill demo values
+              className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-[#1B3A5C]/30 text-[#1B3A5C] hover:bg-[#1B3A5C]/5 transition inline-flex items-center gap-1.5">
+        <Zap size={13} /> Fill demo values
       </button>
     </div>
   )
@@ -86,16 +87,20 @@ export default function Register() {
           <p className="text-sm text-slate-500 mt-2">Choose how you'll use MediClaim.</p>
           <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="border border-slate-200 rounded-xl p-5 flex flex-col">
-              <div className="text-2xl">🩺</div>
-              <div className="font-bold text-slate-800 mt-2">Physician</div>
+              <div className="w-10 h-10 rounded-xl bg-[#1B3A5C]/10 flex items-center justify-center">
+                <Stethoscope size={20} className="text-[#1B3A5C]" />
+              </div>
+              <div className="font-bold text-slate-800 mt-3">Physician</div>
               <p className="text-xs text-slate-500 mt-2 flex-1 leading-relaxed">Register as a licensed physician to monitor claims filed under your NPI.</p>
-              <button onClick={() => setStep('physician')} className="mt-4 w-full py-2.5 rounded-lg text-white font-semibold text-sm" style={{ backgroundColor: '#1B3A5C' }}>Register</button>
+              <button onClick={() => navigate('/physician/signup')} className="mt-4 w-full py-2.5 rounded-lg text-white font-semibold text-sm" style={{ backgroundColor: '#1B3A5C' }}>Register</button>
             </div>
             <div className="border border-slate-200 rounded-xl p-5 flex flex-col">
-              <div className="text-2xl">🏥</div>
-              <div className="font-bold text-slate-800 mt-2">Payer Organization</div>
+              <div className="w-10 h-10 rounded-xl bg-[#1B3A5C]/10 flex items-center justify-center">
+                <Building2 size={20} className="text-[#1B3A5C]" />
+              </div>
+              <div className="font-bold text-slate-800 mt-3">Payer Organization</div>
               <p className="text-xs text-slate-500 mt-2 flex-1 leading-relaxed">Register your health plan or payer organization.</p>
-              <button onClick={() => setStep('payer')} className="mt-4 w-full py-2.5 rounded-lg text-white font-semibold text-sm" style={{ backgroundColor: '#1B3A5C' }}>Register</button>
+              <button onClick={() => navigate('/payer/signup')} className="mt-4 w-full py-2.5 rounded-lg text-white font-semibold text-sm" style={{ backgroundColor: '#1B3A5C' }}>Register</button>
             </div>
           </div>
           <div className="mt-8 text-center"><button onClick={() => navigate('/login')} className="text-xs text-slate-400 hover:text-slate-600">← Back to login</button></div>
@@ -111,7 +116,7 @@ function PhysicianForm({ navigate, onBack }) {
   // Stub values match the existing demo physician account so the presenter can log in
   // immediately with the same credentials they just "registered" with.
   const STUBS = {
-    email: 'physician@claimlens.com', password: 'demo1234', confirm: 'demo1234',
+    email: 'physician@mediclaim.com', password: 'demo1234', confirm: 'demo1234',
     first_name: 'Sarah', last_name: 'Mitchell', npi: '1003000126',
     dea_number: 'BM1234563', state_license_number: 'A123456',
     state_license_state: 'CA', ptan: '1A2B3C',
@@ -206,7 +211,7 @@ function PhysicianForm({ navigate, onBack }) {
     } catch (e2) { err = e2 }
     // The demo account already exists — treat "email taken" as a returning user rather
     // than an error, so the demo flows straight into the success screen.
-    const demoExists = err && err.code === 'EMAIL_EXISTS' && f.email.trim().toLowerCase() === 'physician@claimlens.com'
+    const demoExists = err && err.code === 'EMAIL_EXISTS' && f.email.trim().toLowerCase() === 'physician@mediclaim.com'
     if (err && err.code === 'EMAIL_EXISTS' && !demoExists) { setPhase('form'); setError('An account with this email already exists.'); return }
     const planRes = demoExists
       ? { verification: { nppes: { name: `${f.first_name} ${f.last_name}`.trim() }, cms_order_referring: { eligible: true },
@@ -270,7 +275,7 @@ function PhysicianForm({ navigate, onBack }) {
       <div className={sectionCls}>Account</div>
       <div className="space-y-4">
         <Field label="Email address">
-          <input type="email" required className={inputCls} placeholder="physician@claimlens.com" value={f.email} onChange={set('email')} />
+          <input type="email" required className={inputCls} placeholder="physician@mediclaim.com" value={f.email} onChange={set('email')} />
         </Field>
         <Field label="Password" hint="Minimum 8 characters">
           <input type="password" required className={inputCls} placeholder="demo1234" value={f.password} onChange={set('password')} />

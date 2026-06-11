@@ -1,6 +1,6 @@
 """Admin endpoints for activating pending (payer) accounts. API-only for the MVP.
 
-Auth: a logged-in plan_investigator whose email ends in @claimlens.com (demo admin).
+Auth: a logged-in plan_investigator whose email ends in @mediclaim.com (demo admin).
 """
 
 from fastapi import APIRouter, Depends, Request, HTTPException
@@ -23,7 +23,7 @@ def _admin_user(request: Request, db: Session) -> User:
     except JWTError:
         raise HTTPException(status_code=401, detail={"error": "Invalid or expired token", "code": "INVALID_TOKEN"})
     email = (claims.get("email") or "").lower()
-    if claims.get("role") != "plan_investigator" or not email.endswith("@claimlens.com"):
+    if claims.get("role") != "plan_investigator" or not email.endswith("@mediclaim.com"):
         raise HTTPException(status_code=403, detail={"error": "Admin access required", "code": "NOT_ADMIN"})
     user = db.query(User).filter(User.email == email).first()
     if not user:

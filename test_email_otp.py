@@ -115,7 +115,7 @@ else:
 
 # === 8: demo accounts use the stub OTP (123456) -> dashboard ===
 ok8 = True
-for demo, redir in [("physician@claimlens.com", "/physician/dashboard"), ("plan@claimlens.com", "/plan/dashboard")]:
+for demo, redir in [("physician@mediclaim.com", "/physician/dashboard"), ("payer@mediclaim.com", "/plan/dashboard")]:
     ss = requests.Session(); bb = ss.post(f"{BASE}/auth/login", json={"email": demo, "password": "demo1234"}).json()
     vv = ss.post(f"{BASE}/auth/otp/verify", json={"code": "123456", "otp_pending_token": bb["otp_pending_token"]})
     ok8 = ok8 and bb.get("otp_required") is True and vv.status_code == 200 and vv.json().get("redirect") == redir and "claimlens_token" in ss.cookies
@@ -123,7 +123,7 @@ check("8. demo accounts use stub OTP 123456 -> dashboard", ok8)
 
 # === 10: existing features unaffected (demo session via stub OTP) ===
 sd = requests.Session()
-_sb = sd.post(f"{BASE}/auth/login", json={"email": "plan@claimlens.com", "password": "demo1234"}).json()
+_sb = sd.post(f"{BASE}/auth/login", json={"email": "payer@mediclaim.com", "password": "demo1234"}).json()
 sd.post(f"{BASE}/auth/otp/verify", json={"code": "123456", "otp_pending_token": _sb["otp_pending_token"]})
 codes = {
     "npi-risk-list": sd.get(f"{BASE}/plan/npi-risk-list?page_size=5").status_code,

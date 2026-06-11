@@ -108,10 +108,9 @@ class MeResponse(BaseModel):
 
 @router.post("/login")
 async def login(payload: LoginRequest, response: Response, db: Session = Depends(get_db)):
-    """Step 1 of login. Validates the password for EVERY account, then routes through
-    Email OTP. Demo accounts (STUB_OTP_EMAILS, // DEMO STUB) validate their password
-    normally but receive the fixed stub code 123456 instead of a random emailed code
-    (handled inside initiate_otp). The legacy TOTP flow is kept but no longer reached."""
+    """Step 1 of login. Validates credentials and, in dev/demo mode (all_otp_stub=True),
+    issues the session cookie directly without OTP. In production (real SMTP configured),
+    routes through Email OTP as the second factor."""
     email = payload.email.lower().strip()
 
     user = authenticate_user(db, email, payload.password)
@@ -122,6 +121,23 @@ async def login(payload: LoginRequest, response: Response, db: Session = Depends
     if mfa_limiter.check_locked(str(user.id)):
         raise HTTPException(status_code=429, detail={
             "error": "Too many attempts. Try again in 15 minutes.", "code": "OTP_LOCKED"})
+
+    # Dev/demo mode: skip OTP entirely and issue a full session cookie directly.
+    if settings.all_otp_stub:
+        expires_hours = REMEMBER_HOURS if payload.remember else settings.jwt_expiry_hours
+        token = create_access_token(
+            email=user.email, role=user.role, npi=user.npi,
+            full_name=user.full_name, expires_hours=expires_hours, is_active=user.is_active,
+        )
+        user.last_login = datetime.utcnow()
+        db.commit()
+        response.set_cookie(
+            key=COOKIE_NAME, value=token, httponly=True, samesite="lax",
+            secure=False, max_age=expires_hours * 3600, path="/",
+        )
+        redirect = _REDIRECTS.get(user.role, "/")
+        return {"otp_required": False, "redirect": redirect, "role": user.role}
+
     return await initiate_otp(user)
 
 
@@ -137,8 +153,8 @@ def demo_login(payload: DemoLoginRequest, response: Response, request: Request,
     directly for the seeded demo account of the chosen portal."""
     _rate_limit(request, limit=20)
     mapping = {
-        "physician": ("physician@claimlens.com", "/physician/dashboard"),
-        "payer": ("plan@claimlens.com", "/plan/dashboard"),
+        "physician": ("physician@mediclaim.com", "/physician/dashboard"),
+        "payer": ("payer@mediclaim.com", "/plan/dashboard"),
     }
     if payload.portal not in mapping:
         raise HTTPException(status_code=400, detail={
