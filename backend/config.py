@@ -5,8 +5,8 @@ class Settings(BaseSettings):
     database_url: str
     openai_api_key: str
     secret_key: str
-    cors_origins: list[str] = ["http://localhost:3000", "http://localhost:3001", "http://localhost:3002", "http://localhost:5173"]
-    port: int = 8000
+    cors_origins: list[str] = ["http://localhost:4000"]
+    port: int = 4001
     environment: str = "development"
     jwt_secret_key: str = "claimlens-secret-key-change-in-production"
     jwt_algorithm: str = "HS256"
