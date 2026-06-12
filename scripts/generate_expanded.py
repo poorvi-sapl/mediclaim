@@ -33,7 +33,7 @@ import pgeocode
 from datetime import timedelta
 
 BASE = os.path.dirname(os.path.abspath(__file__))
-ENV_PATH = r"D:\Mediclaim\.env"
+ENV_PATH = os.path.join(os.path.dirname(BASE), '.env')
 RANDOM_STATE = 42
 random.seed(RANDOM_STATE)
 
