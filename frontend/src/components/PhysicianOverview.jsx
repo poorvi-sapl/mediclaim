@@ -7,7 +7,34 @@ import {
 } from 'recharts'
 import { API_BASE } from '../api'
 
-const PIE_COLORS = ['#1B3A5C', '#f59e0b', '#3b82f6']
+const PIE_COLORS = ['#1B3A5C', '#ef4444', '#3b82f6']
+
+const SUPPLIER_COLORS = {
+  '1941 BELSAY ROAD OPERATING COMPANY, LLC': { fill: '#f97316', text: '#f97316' },
+  'ACCURATE HEALTHCARE SERVICES, INC.':      { fill: '#f97316', text: '#f97316' },
+  'ACCURATE HOSPICE':                        { fill: '#f97316', text: '#f97316' },
+  'PlantDup-A 094':                          { fill: '#f97316', text: '#111827' },
+  'PlantDup-B 094':                          { fill: '#a855f7', text: '#111827' },
+}
+const supplierFill = (name, idx) => SUPPLIER_COLORS[name]?.fill ?? PIE_COLORS[idx % PIE_COLORS.length]
+
+function SupplierLegend({ payload }) {
+  return (
+    <ul style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 12px', justifyContent: 'center', padding: 0, margin: 0, listStyle: 'none' }}>
+      {(payload || []).map((entry, i) => {
+        const custom = SUPPLIER_COLORS[entry.value]
+        return (
+          <li key={i} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: entry.color, display: 'inline-block', flexShrink: 0 }} />
+            <span style={{ fontSize: 11, color: custom?.text ?? '#374151', fontWeight: custom ? 600 : 400 }}>
+              {entry.value}
+            </span>
+          </li>
+        )
+      })}
+    </ul>
+  )
+}
 
 function VennChart({ data }) {
   if (!data || data.length === 0) {
@@ -28,13 +55,13 @@ function VennChart({ data }) {
     { cx: -OFF, cy: 0    },
   ]
   const lbls = [
-    { x: 0,    y: -133, anchor: 'middle' },
+    { x: 0,    y: -150, anchor: 'middle' },
     { x: 130,  y: 0,    anchor: 'start'  },
-    { x: 0,    y: 128,  anchor: 'middle' },
+    { x: 0,    y: 144,  anchor: 'middle' },
     { x: -130, y: 0,    anchor: 'end'    },
   ]
   return (
-    <svg width="100%" height="260" viewBox="-200 -145 400 295" style={{ display: 'block' }}>
+    <svg width="100%" height="290" viewBox="-200 -172 400 348" style={{ display: 'block' }}>
       {items.map((item, i) => (
         <circle key={item.category} cx={circles[i].cx} cy={circles[i].cy} r={R}
           fill={COLORS[i]} fillOpacity={0.75} style={{ mixBlendMode: 'multiply' }} />
@@ -44,13 +71,13 @@ function VennChart({ data }) {
         const { x, y, anchor } = lbls[i]
         return (
           <g key={`l${i}`}>
-            <text x={x} y={y - 8}  textAnchor={anchor} fontSize={7}  fontWeight={800} letterSpacing="0.08em" fill="#374151">
+            <text x={x} y={y - 8}  textAnchor={anchor} fontSize={9}  fontWeight={800} letterSpacing="0.08em" fill="#374151">
               {item.label.toUpperCase()}
             </text>
-            <text x={x} y={y + 7}  textAnchor={anchor} fontSize={13} fontWeight={700} fill="#111827">
+            <text x={x} y={y + 7}  textAnchor={anchor} fontSize={15} fontWeight={700} fill="#111827">
               {item.count.toLocaleString()}
             </text>
-            <text x={x} y={y + 21} textAnchor={anchor} fontSize={9}  fill="#9ca3af">
+            <text x={x} y={y + 22} textAnchor={anchor} fontSize={11} fill="#9ca3af">
               {pct}% of total
             </text>
           </g>
@@ -172,7 +199,7 @@ export default function PhysicianOverview({ npi }) {
                 dataKey="value"
                 paddingAngle={2}
               >
-                {pieData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+                {pieData.map((entry, i) => <Cell key={i} fill={supplierFill(entry.name, i)} />)}
               </Pie>
               <Tooltip
                 formatter={(value, name, props) => [
@@ -181,7 +208,7 @@ export default function PhysicianOverview({ npi }) {
                 ]}
                 contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e5e7eb' }}
               />
-              <Legend iconSize={8} iconType="circle" wrapperStyle={{ fontSize: 11, paddingTop: 4 }} />
+              <Legend iconSize={8} iconType="circle" wrapperStyle={{ paddingTop: 4 }} content={<SupplierLegend />} />
             </PieChart>
           </ResponsiveContainer>
         </ChartCard>

@@ -158,9 +158,9 @@ def undo_action(action_id: str, request: Request, db: Session = Depends(get_db))
         raise HTTPException(status_code=403, detail={
             "error": "You can only undo your own actions", "code": "NOT_OWNER"})
 
-    # 60-second undo window — the backend is the source of truth. After it closes the
-    # action is permanent. (action.created_at is naive UTC, same basis as utcnow().)
-    if (datetime.utcnow() - action.created_at).total_seconds() > 60:
+    # Undo window: 24 hours for dispute, 60 seconds for all other actions.
+    undo_window = 86400 if action.action_type == "dispute" else 60
+    if (datetime.utcnow() - action.created_at).total_seconds() > undo_window:
         raise HTTPException(status_code=403, detail={
             "error": "undo_expired",
             "message": "Undo window has closed. This action is now permanent.",

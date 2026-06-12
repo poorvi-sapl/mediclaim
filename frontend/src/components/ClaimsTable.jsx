@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { getClaimsPage, postAction, ACTION_TO_BACKEND, PHYSICIAN_NPI, API_BASE } from '../api'
 import { Icon, fmtUSD } from './ui'
 
@@ -87,11 +88,76 @@ const CATEGORY_CHIP_STYLE = { backgroundColor: '#EFF6FF', color: '#1E3A5F' }
 
 // four row actions (icon-only). UI id -> backend action_type mapped in api.js.
 const ACTIONS = [
-  { id: 'confirmed',     label: 'Confirm',        icon: 'check', cls: 'bg-emerald-50/70 text-emerald-500 ring-emerald-100 hover:bg-emerald-100 hover:text-emerald-700 hover:ring-emerald-300 hover:shadow-emerald-100' },
-  { id: 'disputed',      label: 'Dispute',        icon: 'x',     cls: 'bg-rose-50/70 text-rose-400 ring-rose-100 hover:bg-rose-100 hover:text-rose-600 hover:ring-rose-300 hover:shadow-rose-100'                   },
-  { id: 'flagged',       label: 'Flag Supplier',  icon: 'flag',  cls: 'bg-amber-50/70 text-amber-500 ring-amber-100 hover:bg-amber-100 hover:text-amber-700 hover:ring-amber-300 hover:shadow-amber-100'             },
-  { id: 'unknownPatient',label: 'Unknown Patient',icon: 'userx', cls: 'bg-slate-50 text-slate-400 ring-slate-200 hover:bg-slate-100 hover:text-slate-600 hover:ring-slate-300'                                       },
+  { id: 'confirmed',     label: 'Confirm',         desc: 'Claim is legitimate — you recognize the supplier',   accent: '#10b981', icon: 'check', cls: 'bg-emerald-50/70 text-emerald-500 ring-emerald-100 hover:bg-emerald-100 hover:text-emerald-700 hover:ring-emerald-300 hover:shadow-emerald-100' },
+  { id: 'disputed',      label: 'Dispute',          desc: 'Amount or service details look incorrect to you',    accent: '#ef4444', icon: 'x',     cls: 'bg-rose-50/70 text-rose-400 ring-rose-100 hover:bg-rose-100 hover:text-rose-600 hover:ring-rose-300 hover:shadow-rose-100'                   },
+  { id: 'flagged',       label: 'Flag Supplier',    desc: 'Supplier is unknown or suspicious — raise a flag',   accent: '#f59e0b', icon: 'flag',  cls: 'bg-amber-50/70 text-amber-500 ring-amber-100 hover:bg-amber-100 hover:text-amber-700 hover:ring-amber-300 hover:shadow-amber-100'             },
+  { id: 'unknownPatient',label: 'Unknown Patient',  desc: "You don't recognize the patient on this claim",   accent: '#94a3b8', icon: 'userx', cls: 'bg-slate-50 text-slate-400 ring-slate-200 hover:bg-slate-100 hover:text-slate-600 hover:ring-slate-300'                                       },
 ]
+
+function ActionTooltip({ action, children }) {
+  const [pos, setPos] = useState(null)
+  const timer = useRef(null)
+  const btnRef = useRef(null)
+
+  const TOOLTIP_W = 196
+  function show() {
+    clearTimeout(timer.current)
+    timer.current = setTimeout(() => {
+      if (!btnRef.current) return
+      const r = btnRef.current.getBoundingClientRect()
+      const ideal = r.left + r.width / 2
+      const clamped = Math.min(
+        Math.max(ideal, TOOLTIP_W / 2 + 8),
+        window.innerWidth - TOOLTIP_W / 2 - 8
+      )
+      setPos({
+        bottom: window.innerHeight - r.top + 10,
+        left: clamped,
+        arrowLeft: ideal - clamped + TOOLTIP_W / 2,
+      })
+    }, 200)
+  }
+  function hide() { clearTimeout(timer.current); setPos(null) }
+
+  return (
+    <>
+      <div ref={btnRef} className="inline-flex" onMouseEnter={show} onMouseLeave={hide}>
+        {children}
+      </div>
+
+      {pos && createPortal(
+        <div
+          className="pointer-events-none"
+          style={{
+            position: 'fixed',
+            bottom: pos.bottom,
+            left: pos.left,
+            transform: 'translateX(-50%)',
+            zIndex: 99999,
+            animation: 'tooltip-up 0.15s cubic-bezier(0.16,1,0.3,1) forwards',
+          }}
+        >
+          <div className="bg-white rounded-xl border border-slate-200 shadow-[0_8px_28px_rgba(15,23,42,0.14)]" style={{ width: '196px' }}>
+            <div className="px-4 py-3">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0"
+                     style={{ backgroundColor: `${action.accent}20` }}>
+                  <Icon name={action.icon} size={12} stroke={2.5} style={{ color: action.accent }} />
+                </div>
+                <span className="text-[12px] font-bold text-slate-800 leading-tight">{action.label}</span>
+              </div>
+              <p className="text-[11px] text-slate-500 leading-snug">{action.desc}</p>
+            </div>
+          </div>
+          {/* Arrow — tracks actual button center even when card is clamped */}
+          <div style={{ position: 'absolute', bottom: -6, left: pos.arrowLeft, transform: 'translateX(-50%)', width: 0, height: 0, borderLeft: '6px solid transparent', borderRight: '6px solid transparent', borderTop: '6px solid #e2e8f0' }} />
+          <div style={{ position: 'absolute', bottom: -5, left: pos.arrowLeft, transform: 'translateX(-50%)', width: 0, height: 0, borderLeft: '5px solid transparent', borderRight: '5px solid transparent', borderTop: '5px solid white' }} />
+        </div>,
+        document.body
+      )}
+    </>
+  )
+}
 
 function Spinner() {
   return (
@@ -107,8 +173,13 @@ function Spinner() {
 // this is the honest client-side countdown. created_at comes from the server, so
 // the timer resumes correctly after a refresh (we stash it in localStorage since
 // the claims-list response doesn't carry the action timestamp).
-const UNDO_WINDOW = 60
 const UNDO_KEY = 'claimlens_undo_v1'
+const UNDO_WINDOW_DEFAULT = 60
+const UNDO_WINDOW_DISPUTE = 86400   // 24 hours
+
+function undoWindowFor(actionType) {
+  return actionType === 'dispute' ? UNDO_WINDOW_DISPUTE : UNDO_WINDOW_DEFAULT
+}
 
 // Server timestamps are naive UTC (datetime.utcnow); treat a tz-less string as UTC
 // so the countdown isn't skewed by the browser's local offset.
@@ -117,14 +188,26 @@ function parseServerTime(s) {
   const hasTz = /[zZ]$|[+-]\d{2}:?\d{2}$/.test(s)
   return new Date(hasTz ? s : s + 'Z').getTime()
 }
-function secondsRemaining(createdAt, now) {
+function secondsRemaining(createdAt, now, actionType) {
   const t = parseServerTime(createdAt)
   if (!t) return 0
-  return Math.max(0, UNDO_WINDOW - Math.floor((now - t) / 1000))
+  return Math.max(0, undoWindowFor(actionType) - Math.floor((now - t) / 1000))
 }
-// Undo countdown color (change 4) — calm by default; red only at the very end. No bold.
-//   60–31s: gray-500, underline on hover  ·  30–11s: amber-600  ·  10–1s: red-600
-function undoTimerCls(r) {
+function fmtRemaining(r) {
+  if (r >= 3600) {
+    const h = Math.floor(r / 3600)
+    const m = Math.floor((r % 3600) / 60)
+    return m > 0 ? `${h}h ${m}m` : `${h}h`
+  }
+  if (r >= 60) return `${Math.floor(r / 60)}m`
+  return `${r}s`
+}
+function undoTimerCls(r, actionType) {
+  if (actionType === 'dispute') {
+    if (r > 3600)  return 'bg-slate-100 text-slate-500 ring-slate-200 hover:bg-slate-200 hover:text-slate-700'
+    if (r > 1800)  return 'bg-amber-50 text-amber-600 ring-amber-200 hover:bg-amber-100'
+    return 'bg-rose-50 text-rose-600 ring-rose-200 hover:bg-rose-100 animate-pulse'
+  }
   if (r > 30) return 'bg-slate-100 text-slate-500 ring-slate-200 hover:bg-slate-200 hover:text-slate-700'
   if (r > 10) return 'bg-amber-50 text-amber-600 ring-amber-200 hover:bg-amber-100'
   return 'bg-rose-50 text-rose-600 ring-rose-200 hover:bg-rose-100 animate-pulse'
@@ -133,8 +216,8 @@ function undoTimerCls(r) {
 function loadUndoStore() {
   try { return JSON.parse(localStorage.getItem(UNDO_KEY) || '{}') } catch { return {} }
 }
-function saveUndoEntry(claimId, actionId, createdAt) {
-  try { const s = loadUndoStore(); s[claimId] = { actionId, createdAt }; localStorage.setItem(UNDO_KEY, JSON.stringify(s)) } catch { /* ignore */ }
+function saveUndoEntry(claimId, actionId, createdAt, actionType) {
+  try { const s = loadUndoStore(); s[claimId] = { actionId, createdAt, actionType }; localStorage.setItem(UNDO_KEY, JSON.stringify(s)) } catch { /* ignore */ }
 }
 function removeUndoEntry(claimId) {
   try { const s = loadUndoStore(); delete s[claimId]; localStorage.setItem(UNDO_KEY, JSON.stringify(s)) } catch { /* ignore */ }
@@ -146,8 +229,8 @@ function hydrateUndo(items) {
   const s = loadUndoStore(); const now = Date.now()
   return items.map((c) => {
     const e = c.latestAction && s[c.id]
-    if (e && secondsRemaining(e.createdAt, now) > 0) {
-      return { ...c, actionId: e.actionId, actionCreatedAt: e.createdAt }
+    if (e && secondsRemaining(e.createdAt, now, e.actionType) > 0) {
+      return { ...c, actionId: e.actionId, actionCreatedAt: e.createdAt, actionType: e.actionType }
     }
     return c
   })
@@ -170,7 +253,7 @@ function ActionedCell({ claim, onUndo }) {
   const [err, setErr] = useState(false)
   const [expired, setExpired] = useState(false)
 
-  const remaining = claim.actionCreatedAt ? secondsRemaining(claim.actionCreatedAt, now) : 0
+  const remaining = claim.actionCreatedAt ? secondsRemaining(claim.actionCreatedAt, now, claim.actionType) : 0
   const canUndo = !!claim.actionId && !!claim.actionCreatedAt && remaining > 0 && !expired
 
   useEffect(() => {
@@ -194,11 +277,11 @@ function ActionedCell({ claim, onUndo }) {
       {canUndo && (busy
         ? <Spinner />
         : <button onClick={handleUndo}
-                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold ring-1 ring-inset transition-all duration-150 whitespace-nowrap ${undoTimerCls(remaining)}`}>
+                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold ring-1 ring-inset transition-all duration-150 whitespace-nowrap ${undoTimerCls(remaining, claim.actionType)}`}>
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/>
             </svg>
-            Undo · {remaining}s
+            Undo · {fmtRemaining(remaining)}
           </button>
       )}
       {expired && <span className="text-[11px] text-slate-400 whitespace-nowrap">Expired</span>}
@@ -411,8 +494,9 @@ export default function ClaimsTable({ npi = PHYSICIAN_NPI, onActioned, supplierF
       const backend = ACTION_TO_BACKEND[action] || action
       // store action_id + server created_at so this row can be undone (and the
       // countdown survives a refresh via localStorage)
-      saveUndoEntry(claimId, res?.id, res?.created_at)
-      setData((d) => ({ ...d, items: d.items.map((c) => (c.id === claimId ? { ...c, reviewed: true, latestAction: backend, actionId: res?.id, actionCreatedAt: res?.created_at } : c)) }))
+      const backendType = ACTION_TO_BACKEND[action] || action
+      saveUndoEntry(claimId, res?.id, res?.created_at, backendType)
+      setData((d) => ({ ...d, items: d.items.map((c) => (c.id === claimId ? { ...c, reviewed: true, latestAction: backend, actionId: res?.id, actionCreatedAt: res?.created_at, actionType: backendType } : c)) }))
       if (onActioned) onActioned()
     } catch (e) {
       showToast(e.message || 'Could not record action. Please try again.')
@@ -440,7 +524,7 @@ export default function ClaimsTable({ npi = PHYSICIAN_NPI, onActioned, supplierF
     }
   }
 
-  const { items, total, page, totalPages, totalCount, flaggedCount, confirmedCount } = data
+  const { items, total, page, totalPages, totalCount, flaggedCount, confirmedCount, disputedCount, unknownCount } = data
   // "Unknown Suppliers Detected" card: client-side narrow to unknown-patient / new-supplier
   // claims on the current page (no backend filter exists for this; honest best-effort).
   const displayItems = unknownOnly
@@ -460,11 +544,13 @@ export default function ClaimsTable({ npi = PHYSICIAN_NPI, onActioned, supplierF
 
   return (
     <div className="w-full px-7 py-7">
-      {/* Stat cards (item 1) */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5">
-        <KpiTile icon="doc"      label="Total Claims" value={(totalCount || 0).toLocaleString()}    accent="blue"    loading={loading} />
-        <KpiTile icon="alertTri" label="Flagged"      value={(flaggedCount || 0).toLocaleString()}   accent="amber"   loading={loading} valueClass={flaggedCount > 0 ? 'text-amber-600' : ''} />
-        <KpiTile icon="check"    label="Confirmed"    value={(confirmedCount || 0).toLocaleString()} accent="emerald" loading={loading} valueClass={confirmedCount > 0 ? 'text-emerald-600' : ''} />
+      {/* Stat cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-5">
+        <KpiTile icon="doc"      label="Total Claims"     value={(totalCount    || 0).toLocaleString()} accent="blue"    loading={loading} />
+        <KpiTile icon="check"    label="Confirmed"        value={(confirmedCount || 0).toLocaleString()} accent="emerald" loading={loading} valueClass={confirmedCount > 0 ? 'text-emerald-600' : ''} />
+        <KpiTile icon="x"        label="Disputed"         value={(disputedCount  || 0).toLocaleString()} accent="rose"    loading={loading} valueClass={disputedCount  > 0 ? 'text-rose-500'    : ''} />
+        <KpiTile icon="flag"     label="Flagged Supplier" value={(flaggedCount   || 0).toLocaleString()} accent="amber"   loading={loading} valueClass={flaggedCount   > 0 ? 'text-amber-600'  : ''} />
+        <KpiTile icon="userx"    label="Unknown Patient"  value={(unknownCount   || 0).toLocaleString()} accent="slate"   loading={loading} valueClass={unknownCount   > 0 ? 'text-slate-600'  : ''} />
       </div>
 
       <div className="mc-card">
@@ -644,11 +730,13 @@ export default function ClaimsTable({ npi = PHYSICIAN_NPI, onActioned, supplierF
                             {ACTIONS.map((a) => {
                               const isThis = rowPending && pending.action === a.id
                               return (
-                                <button key={a.id} onClick={() => handleAction(claim.id, a.id)} disabled={rowPending}
-                                        title={a.label} aria-label={a.label}
-                                        className={`w-7 h-7 rounded-lg ring-1 ring-inset transition-all duration-150 inline-flex items-center justify-center flex-shrink-0 hover:-translate-y-0.5 hover:shadow-md active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 ${a.cls}`}>
-                                  {isThis ? <Spinner /> : <Icon name={a.icon} size={15} stroke={2.4} />}
-                                </button>
+                                <ActionTooltip key={a.id} action={a}>
+                                  <button onClick={() => handleAction(claim.id, a.id)} disabled={rowPending}
+                                          aria-label={a.label}
+                                          className={`w-7 h-7 rounded-lg ring-1 ring-inset transition-all duration-150 inline-flex items-center justify-center flex-shrink-0 hover:-translate-y-0.5 hover:shadow-md active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 ${a.cls}`}>
+                                    {isThis ? <Spinner /> : <Icon name={a.icon} size={15} stroke={2.4} />}
+                                  </button>
+                                </ActionTooltip>
                               )
                             })}
                           </div>

@@ -336,6 +336,8 @@ export async function getClaimsPage(npi = PHYSICIAN_NPI, f = {}) {
     totalCount: data.total_count ?? data.total,
     flaggedCount: data.flagged_count ?? 0,
     confirmedCount: data.confirmed_count ?? 0,
+    disputedCount: data.disputed_count ?? 0,
+    unknownCount: data.unknown_count ?? 0,
   }
 }
 

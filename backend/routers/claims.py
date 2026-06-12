@@ -211,12 +211,21 @@ def build_claims_page(
         db.query(func.count(func.distinct(Action.claim_id)))
         .filter(Action.npi == npi, Action.action_type == "confirm").scalar()
     ) or 0
+    disputed_count = (
+        db.query(func.count(func.distinct(Action.claim_id)))
+        .filter(Action.npi == npi, Action.action_type == "dispute").scalar()
+    ) or 0
+    unknown_count = (
+        db.query(func.count(func.distinct(Action.claim_id)))
+        .filter(Action.npi == npi, Action.action_type == "unknown_patient").scalar()
+    ) or 0
 
     return ClaimsPageResponse(
         items=items, total=total, page=page,
         page_size=page_size, total_pages=total_pages,
         total_count=total_count, flagged_count=flagged_count,
-        confirmed_count=confirmed_count,
+        confirmed_count=confirmed_count, disputed_count=disputed_count,
+        unknown_count=unknown_count,
     )
 
 

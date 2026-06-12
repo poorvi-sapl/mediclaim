@@ -46,9 +46,15 @@ def main():
         if claim_count > 0:
             log.info(f"Claims table already has {claim_count} rows — skipping generation.")
         else:
-            log.info("SEED_SYNTHETIC=true and table is empty — generating synthetic data.")
-            from .generate_synthetic import main as generate_synthetic
-            generate_synthetic()
+            log.info("SEED_SYNTHETIC=true and table is empty — generating expanded synthetic data.")
+            import subprocess
+            ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            result = subprocess.run(
+                [sys.executable, os.path.join(ROOT, "scripts", "generate_expanded.py")],
+                cwd=ROOT,
+            )
+            if result.returncode != 0:
+                raise RuntimeError("generate_expanded.py failed")
     else:
         log.info("SEED_SYNTHETIC not set — skipping synthetic data generation (production mode).")
 

@@ -47,7 +47,10 @@ function PhysicianPortal() {
   const navigate = useNavigate()
   const npi = user?.npi || PHYSICIAN_NPI
 
-  const [screen, setScreen] = useState('summary')
+  const [screen, setScreen] = useState(() => {
+    const p = new URLSearchParams(window.location.search)
+    return (p.get('preview') === '1' && p.get('screen')) || 'summary'
+  })
   const [physician, setPhysician] = useState(null)
   const [summary, setSummary] = useState(null)
   const [flaggedSuppliers, setFlaggedSuppliers] = useState([])
@@ -155,10 +158,16 @@ function PhysicianPortal() {
 function PlanPortalInner() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
-  const [screen, setScreen] = useState('home')
+  const [screen, setScreen] = useState(() => {
+    const p = new URLSearchParams(window.location.search)
+    return (p.get('preview') === '1' && p.get('screen')) || 'home'
+  })
   const [selectedNPI, setSelectedNPI] = useState(null)
   const [selectedSupplier, setSelectedSupplier] = useState(null)
-  const [lbBand, setLbBand] = useState('all')
+  const [lbBand, setLbBand] = useState(() => {
+    const p = new URLSearchParams(window.location.search)
+    return (p.get('preview') === '1' && p.get('band')) || 'all'
+  })
   const [notif, setNotif] = useState(0)
   const [search, setSearch] = useState('')      // top-nav search → filters the supplier watchlist
   const [npiBack, setNpiBack] = useState(null)   // NPI-detail return target; null = leaderboard

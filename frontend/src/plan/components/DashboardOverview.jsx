@@ -181,7 +181,7 @@ export default function DashboardOverview() {
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         {/* Chart 3 — Claims Trend (dual line) */}
-        <ChartCard title="Claims Trend — Last 6 Months" subtitle="Total vs flagged claims">
+        <ChartCard title="Claims Trend — Last 6 Months" subtitle="Total vs Fraud Rules Hit">
           <ResponsiveContainer width="100%" height={260}>
             <LineChart data={trendData} margin={{ top: 5, right: 16, left: 0, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
@@ -191,7 +191,7 @@ export default function DashboardOverview() {
               <Legend iconSize={10} wrapperStyle={{ fontSize: 11, paddingTop: 6 }} />
               <Line type="monotone" dataKey="total" name="Total Claims" stroke="#0d1f35" strokeWidth={2}
                 dot={{ r: 3, fill: '#0d1f35', strokeWidth: 0 }} activeDot={{ r: 5 }} />
-              <Line type="monotone" dataKey="flagged" name="Flagged Claims" stroke="#ef4444" strokeWidth={2}
+              <Line type="monotone" dataKey="flagged" name="Fraud Rules Hit" stroke="#ef4444" strokeWidth={2}
                 strokeDasharray="5 4" dot={{ r: 3, fill: '#ef4444', strokeWidth: 0 }} activeDot={{ r: 5 }} />
             </LineChart>
           </ResponsiveContainer>

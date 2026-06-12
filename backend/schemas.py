@@ -46,6 +46,8 @@ class ClaimsPageResponse(BaseModel):
     total_count: int = 0
     flagged_count: int = 0
     confirmed_count: int = 0
+    disputed_count: int = 0
+    unknown_count: int = 0
 
 
 class PhysicianSummaryResponse(BaseModel):

@@ -5,6 +5,77 @@ import { Icon, StatCard, fmtUSD, timeAgo } from '../../components/ui'
 import AnalyticsPanel from '../../components/AnalyticsPanel'
 import DashboardOverview from '../components/DashboardOverview'
 
+/* ─── KPI Card Hover Preview (iframe thumbnail) ──────────────────── */
+const IS_PREVIEW = typeof window !== 'undefined' && window.location.search.includes('preview=1')
+const PREVIEW_SCALE = 360 / 1440
+const THUMB_W = 360
+const THUMB_H = Math.round(900 * PREVIEW_SCALE)  // 225
+
+function HoverPreview({ children, url }) {
+  const [visible, setVisible]       = useState(false)
+  const [shouldLoad, setShouldLoad] = useState(false)
+  const [loaded, setLoaded]         = useState(false)
+  const enterTimer = useRef(null)
+  const leaveTimer = useRef(null)
+
+  const show = () => {
+    clearTimeout(leaveTimer.current)
+    enterTimer.current = setTimeout(() => { setShouldLoad(true); setVisible(true) }, 320)
+  }
+  const hide = () => {
+    clearTimeout(enterTimer.current)
+    leaveTimer.current = setTimeout(() => setVisible(false), 160)
+  }
+
+  return (
+    <div className="relative" onMouseEnter={show} onMouseLeave={hide}>
+      {children}
+      {shouldLoad && (
+        <div
+          onMouseEnter={show} onMouseLeave={hide}
+          style={{
+            position: 'absolute', top: 'calc(100% + 12px)', left: '50%',
+            transform: 'translateX(-50%)', zIndex: 50,
+            opacity: visible ? 1 : 0, visibility: visible ? 'visible' : 'hidden',
+            pointerEvents: visible ? 'auto' : 'none',
+            transition: 'opacity 0.18s cubic-bezier(0.16,1,0.3,1), visibility 0.18s',
+            filter: 'drop-shadow(0 16px 48px rgba(15,23,42,0.22))',
+          }}
+        >
+          {/* Arrow */}
+          <div style={{ position: 'absolute', top: -6, left: '50%', transform: 'translateX(-50%)', width: 0, height: 0, borderLeft: '7px solid transparent', borderRight: '7px solid transparent', borderBottom: '7px solid #1e1e2e' }} />
+          {/* Browser chrome */}
+          <div style={{ width: THUMB_W, background: '#1e1e2e', borderRadius: '10px 10px 0 0', padding: '7px 10px', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 5 }}>
+              {['#ff5f57', '#febc2e', '#28c840'].map(col => (
+                <span key={col} style={{ width: 9, height: 9, borderRadius: '50%', background: col, display: 'block' }} />
+              ))}
+            </div>
+            <div style={{ flex: 1, background: '#2d2d3f', borderRadius: 5, padding: '2px 8px', fontSize: 9, color: '#9ca3af', textAlign: 'center', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+              {window.location.host}/dashboard
+            </div>
+          </div>
+          {/* Scaled iframe */}
+          <div style={{ width: THUMB_W, height: THUMB_H, overflow: 'hidden', borderRadius: '0 0 10px 10px', border: '1px solid #1e1e2e', borderTop: 'none', position: 'relative', background: '#f8fafc' }}>
+            <iframe
+              src={url}
+              title="dashboard-preview"
+              tabIndex={-1}
+              style={{ width: 1440, height: 900, transform: `scale(${PREVIEW_SCALE})`, transformOrigin: '0 0', border: 'none', pointerEvents: 'none' }}
+              onLoad={() => setLoaded(true)}
+            />
+            {!loaded && (
+              <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc' }}>
+                <div className="preview-spinner" />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 const EMPTY = { totalNPIs: 0, highRiskNPIs: 0, activeAlertsToday: 0, totalClaims: 0 }
 
 const FEED_META = {
@@ -24,7 +95,6 @@ const FILTERS = [
   { key: 'disputed',      label: 'Disputed' },
   { key: 'flagged',       label: 'Flagged' },
   { key: 'unknownPatient',label: 'Unknown' },
-  { key: 'deniedOrder',   label: 'Denied' },
 ]
 
 const SORTS = [
@@ -42,6 +112,7 @@ export default function PlanHome({ setActiveScreen, onOpenNpi, onOpenSupplier })
   const [filterAction, setFilterAction] = useState('all')
   const [sortBy, setSortBy] = useState('newest')
   const [sortOpen, setSortOpen] = useState(false)
+  const [visibleCount, setVisibleCount] = useState(15)
   const historyLoaded = useRef(false)
 
   useEffect(() => {
@@ -60,11 +131,14 @@ export default function PlanHome({ setActiveScreen, onOpenNpi, onOpenSupplier })
     getAlertsHistory(50).then(({ items }) => { [...items].reverse().forEach(addAlert) }).catch(() => {})
   }, [addAlert])
 
+  useEffect(() => { setVisibleCount(15) }, [filterAction, sortBy])
+
+  const _base = `${window.location.origin}${window.location.pathname}?preview=1`
   const cards = [
-    { label: 'Total NPIs Monitored', value: summary.totalNPIs, icon: 'users', accent: 'navy', accentBar: false, onClick: () => setActiveScreen('leaderboard') },
-    { label: 'High-Risk NPIs', value: summary.highRiskNPIs, icon: 'alertTri', accent: 'rose', accentBar: false, valueClass: summary.highRiskNPIs > 0 ? 'text-rose-600' : '', onClick: () => setActiveScreen('leaderboard', 'high') },
-    { label: 'Active Alerts Today', value: summary.activeAlertsToday, icon: 'alerts', accent: 'amber', accentBar: false, valueClass: summary.activeAlertsToday > 0 ? 'text-amber-600' : '', onClick: () => document.getElementById('live-feed')?.scrollIntoView({ behavior: 'smooth' }) },
-    { label: 'Total Claims in System', value: (summary.totalClaims || 0).toLocaleString(), icon: 'file', accent: 'blue', accentBar: false, onClick: () => setActiveScreen('leaderboard') },
+    { label: 'Total NPIs Monitored',   value: summary.totalNPIs,                          icon: 'users',    accent: 'navy',  accentBar: false, onClick: () => setActiveScreen('leaderboard'),        previewUrl: `${_base}&screen=leaderboard` },
+    { label: 'High-Risk NPIs',         value: summary.highRiskNPIs,                       icon: 'alertTri', accent: 'rose',  accentBar: false, valueClass: summary.highRiskNPIs > 0 ? 'text-rose-600' : '', onClick: () => setActiveScreen('leaderboard', 'high'), previewUrl: `${_base}&screen=leaderboard&band=high` },
+    { label: 'Active Alerts Today',    value: summary.activeAlertsToday,                  icon: 'alerts',   accent: 'amber', accentBar: false, valueClass: summary.activeAlertsToday > 0 ? 'text-amber-600' : '', onClick: () => document.getElementById('live-feed')?.scrollIntoView({ behavior: 'smooth' }), previewUrl: `${_base}#live-feed` },
+    { label: 'Total Claims in System', value: (summary.totalClaims || 0).toLocaleString(), icon: 'file',    accent: 'blue',  accentBar: false, onClick: () => setActiveScreen('leaderboard'),        previewUrl: `${_base}&screen=leaderboard` },
   ]
 
   const displayed = [...alerts]
@@ -75,11 +149,19 @@ export default function PlanHome({ setActiveScreen, onOpenNpi, onOpenSupplier })
       if (sortBy === 'amt_desc') return (b.amount || 0) - (a.amount || 0)
       return (a.amount || 0) - (b.amount || 0)
     })
+  const visibleItems = displayed.slice(0, visibleCount)
+  const hasMore = displayed.length > visibleCount
 
   return (
     <div className="w-full px-7 py-7">
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
-        {cards.map((c) => <StatCard key={c.label} {...c} spark={false} loading={loading} />)}
+        {cards.map((c) => IS_PREVIEW ? (
+          <StatCard key={c.label} {...c} spark={false} loading={loading} />
+        ) : (
+          <HoverPreview key={c.label} url={c.previewUrl}>
+            <StatCard {...c} spark={false} loading={loading} />
+          </HoverPreview>
+        ))}
       </div>
 
       <DashboardOverview />
@@ -178,7 +260,7 @@ export default function PlanHome({ setActiveScreen, onOpenNpi, onOpenSupplier })
               </span>
               <p className="text-sm text-slate-400 italic">No activity yet. Alerts will appear as physicians review claims.</p>
             </div>
-          ) : displayed.map((a) => {
+          ) : visibleItems.map((a) => {
             const m = FEED_META[a.action] || FEED_META.flagged
             const supId = a.supplierNpi || a.supplierId
             return (
@@ -218,6 +300,21 @@ export default function PlanHome({ setActiveScreen, onOpenNpi, onOpenSupplier })
             )
           })}
         </div>
+
+        {hasMore && (
+          <div className="flex justify-end px-5 py-3 border-t border-slate-100">
+            <button
+              onClick={() => setVisibleCount(c => c + 15)}
+              className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 hover:text-[#0d1f35] bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-full transition-all duration-150"
+            >
+              Show more
+              <span className="text-[10px] font-bold text-slate-400 tabular-nums">
+                +{displayed.length - visibleCount}
+              </span>
+              <Icon name="chevronDown" size={11} stroke={2.5} />
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )
