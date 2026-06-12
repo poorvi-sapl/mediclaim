@@ -55,7 +55,7 @@ def _ref_date(db: Session):
 def rule_volume_spike(db: Session, settings) -> list[RuleFlagResult]:
     ref = _ref_date(db)
     recent_start = ref - timedelta(days=30)
-    base_start = ref - timedelta(days=90)
+    base_start = ref - timedelta(days=365)
     base_end = ref - timedelta(days=31)
     mult = settings.volume_spike_multiplier
 

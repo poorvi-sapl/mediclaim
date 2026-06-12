@@ -18,6 +18,7 @@ from .routers import auth as auth_router
 from .routers import mfa as mfa_router
 from .routers import documents as documents_router
 from .routers import admin as admin_router
+from .routers import analytics as analytics_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -124,6 +125,7 @@ app.include_router(claims_router.router)
 app.include_router(actions_router.router)
 app.include_router(dashboard_router.router)
 app.include_router(alerts_router.router)
+app.include_router(analytics_router.router, prefix="/analytics", tags=["analytics"])
 
 @app.get("/health")
 def health_check(db: Session = Depends(get_db)):

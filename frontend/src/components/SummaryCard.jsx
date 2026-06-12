@@ -6,6 +6,7 @@ function KpiTile({ icon, label, value, accent = 'slate', valueClass = '', loadin
     navy:   { icon: 'bg-[#EEF2F7] text-[#1B3A5C]',   chevDot: 'bg-[#EEF2F7] text-[#1B3A5C]' },
     amber:  { icon: 'bg-amber-50 text-amber-500',     chevDot: 'bg-amber-50 text-amber-400' },
     emerald:{ icon: 'bg-emerald-50 text-emerald-600', chevDot: 'bg-emerald-50 text-emerald-500' },
+    rose:   { icon: 'bg-red-100 text-red-400',         chevDot: 'bg-red-100 text-red-400' },
   }
   const s = styles[accent] || styles.slate
   const cls = `group mc-card p-4 flex flex-col transition-all duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[0_10px_20px_-6px_rgba(15,23,42,0.15)] w-full text-left ${onClick ? 'cursor-pointer' : ''}`
@@ -46,12 +47,47 @@ function isoLocal(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
-export default function SummaryCard({ setActiveScreen, pendingCount = 0, unknownCount = 0,
-                                      physician = DEFAULT_PHYSICIAN, summary = DEFAULT_SUMMARY }) {
+export function PhysicianHeader({ physician = DEFAULT_PHYSICIAN }) {
   const initials = (physician.name || 'Dr')
     .replace('Dr. ', '').split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase()
+  return (
+    <div className="mc-card px-5 py-3.5 relative overflow-hidden">
+      <div className="flex items-center gap-3">
+        <div className="w-9 h-9 rounded-xl bg-[#1B3A5C] flex items-center justify-center text-sm font-bold text-white flex-shrink-0">{initials}</div>
+        <div className="flex items-center gap-2.5 flex-wrap min-w-0">
+          <h1 className="text-[15px] font-bold text-slate-900 whitespace-nowrap">{physician.name || '—'}</h1>
+          <span className="text-slate-300 hidden sm:inline text-xs">·</span>
+          <p className="text-xs text-slate-500 whitespace-nowrap hidden sm:block">
+            {physician.specialty || 'Physician'} · {[physician.city, physician.state].filter(Boolean).join(', ') || '—'}
+          </p>
+          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-[#EEF2F7] text-[#1B3A5C] ring-1 ring-[#1B3A5C]/10 tabular-nums whitespace-nowrap">NPI {physician.npi}</span>
+        </div>
+        <div className="ml-auto hidden sm:block text-slate-200"><Icon name="shield" size={32} stroke={1.4} /></div>
+      </div>
+    </div>
+  )
+}
 
-  // Stash a filter intent, then switch to My Claims (ClaimsTable reads it on mount).
+export function ReviewBanner({ pendingCount = 0, unknownCount = 0, setActiveScreen }) {
+  return (
+    <div className="mc-card px-6 py-4 flex items-center gap-4">
+      <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-500 flex items-center justify-center flex-shrink-0"><Icon name="alertTri" size={18} /></div>
+      <div className="min-w-0">
+        <div className="text-sm font-semibold text-slate-800">
+          {pendingCount > 0 ? `You have ${pendingCount} claims that need a quick review.` : "You're all caught up — no claims pending review."}
+        </div>
+        {unknownCount > 0 && <div className="text-xs text-slate-500 mt-0.5">{unknownCount} came from suppliers flagged on your account.</div>}
+      </div>
+      <button onClick={() => setActiveScreen('claims')}
+              className="ml-auto flex-shrink-0 inline-flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-semibold text-[#1B3A5C] bg-[#EEF2F7] hover:bg-[#dde6f0] border border-[#1B3A5C]/10 hover:border-[#1B3A5C]/20 transition-all duration-200 hover:-translate-y-px">
+        Review Pending Claims
+        <Icon name="chevronRight" size={13} stroke={2.5} />
+      </button>
+    </div>
+  )
+}
+
+export function StatCardGrid({ summary = DEFAULT_SUMMARY, pendingCount = 0, setActiveScreen }) {
   function goClaims(intent) {
     try { sessionStorage.setItem('physician_claims_intent', JSON.stringify(intent)) } catch { /* ignore */ }
     setActiveScreen('claims')
@@ -59,51 +95,45 @@ export default function SummaryCard({ setActiveScreen, pendingCount = 0, unknown
   const now = new Date()
   const monthStart = isoLocal(new Date(now.getFullYear(), now.getMonth(), 1))
   const today = isoLocal(now)
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <KpiTile icon="claims" label="Claims This Month"       value={(summary.totalClaimsMonth || 0).toLocaleString()} accent="navy"
+               onClick={() => goClaims({ reviewed: 'all' })} />
+      <KpiTile icon="clock"  label="Pending Your Review"     value={pendingCount} accent="amber"
+               valueClass={pendingCount > 0 ? 'text-amber-600' : ''}
+               onClick={() => goClaims({ reviewed: 'unreviewed' })} />
+      <KpiTile icon="bolt"   label="Total Billed This Month" value={fmtUSD(summary.totalAmountBilled)} accent="rose"
+               onClick={() => goClaims({ reviewed: 'all', dateFrom: monthStart, dateTo: today })} />
+    </div>
+  )
+}
+
+export default function SummaryCard({ setActiveScreen, pendingCount = 0, unknownCount = 0,
+                                      physician = DEFAULT_PHYSICIAN, summary = DEFAULT_SUMMARY,
+                                      hideStatCards = false, hideHeader = false, hideReviewBanner = false }) {
+  function goClaims(intent) {
+    try { sessionStorage.setItem('physician_claims_intent', JSON.stringify(intent)) } catch { /* ignore */ }
+    setActiveScreen('claims')
+  }
 
   return (
     <div className="w-full px-7 py-7">
-      {/* Header card */}
-      <div className="mc-card px-5 py-3.5 mb-6 relative overflow-hidden">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-[#1B3A5C] flex items-center justify-center text-sm font-bold text-white flex-shrink-0">{initials}</div>
-          <div className="flex items-center gap-2.5 flex-wrap min-w-0">
-            <h1 className="text-[15px] font-bold text-slate-900 whitespace-nowrap">{physician.name || '—'}</h1>
-            <span className="text-slate-300 hidden sm:inline text-xs">·</span>
-            <p className="text-xs text-slate-500 whitespace-nowrap hidden sm:block">
-              {physician.specialty || 'Physician'} · {[physician.city, physician.state].filter(Boolean).join(', ') || '—'}
-            </p>
-            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-[#EEF2F7] text-[#1B3A5C] ring-1 ring-[#1B3A5C]/10 tabular-nums whitespace-nowrap">NPI {physician.npi}</span>
-          </div>
-          <div className="ml-auto hidden sm:block text-slate-200"><Icon name="shield" size={32} stroke={1.4} /></div>
-        </div>
-      </div>
+      {/* Header card — hidden when rendered separately at the top */}
+      {!hideHeader && <div className="mb-6"><PhysicianHeader physician={physician} /></div>}
 
-      {/* Stat cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-        <KpiTile icon="claims" label="Claims This Month"     value={(summary.totalClaimsMonth || 0).toLocaleString()} accent="navy"
-                 onClick={() => goClaims({ reviewed: 'all' })} />
-        <KpiTile icon="clock"  label="Pending Your Review"   value={pendingCount} accent="amber"
-                 valueClass={pendingCount > 0 ? 'text-amber-600' : ''}
-                 onClick={() => goClaims({ reviewed: 'unreviewed' })} />
-        <KpiTile icon="bolt"   label="Total Billed This Month" value={fmtUSD(summary.totalAmountBilled)} accent="emerald"
-                 onClick={() => goClaims({ reviewed: 'all', dateFrom: monthStart, dateTo: today })} />
-      </div>
-
-      {/* Review banner */}
-      <div className="mc-card px-6 py-4 mb-6 flex items-center gap-4">
-        <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-500 flex items-center justify-center flex-shrink-0"><Icon name="alertTri" size={18} /></div>
-        <div className="min-w-0">
-          <div className="text-sm font-semibold text-slate-800">
-            {pendingCount > 0 ? `You have ${pendingCount} claims that need a quick review.` : "You're all caught up — no claims pending review."}
-          </div>
-          {unknownCount > 0 && <div className="text-xs text-slate-500 mt-0.5">{unknownCount} came from suppliers flagged on your account.</div>}
+      {/* Stat cards — hidden when rendered separately at the top */}
+      {!hideStatCards && (
+        <div className="mb-6">
+          <StatCardGrid summary={summary} pendingCount={pendingCount} setActiveScreen={setActiveScreen} />
         </div>
-        <button onClick={() => setActiveScreen('claims')}
-                className="ml-auto flex-shrink-0 inline-flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-semibold text-[#1B3A5C] bg-[#EEF2F7] hover:bg-[#dde6f0] border border-[#1B3A5C]/10 hover:border-[#1B3A5C]/20 transition-all duration-200 hover:-translate-y-px">
-          Review Pending Claims
-          <Icon name="chevronRight" size={13} stroke={2.5} />
-        </button>
-      </div>
+      )}
+
+      {/* Review banner — hidden when rendered separately */}
+      {!hideReviewBanner && (
+        <div className="mb-6">
+          <ReviewBanner pendingCount={pendingCount} unknownCount={unknownCount} setActiveScreen={setActiveScreen} />
+        </div>
+      )}
 
       {/* How it works */}
       <div className="mc-card overflow-hidden">

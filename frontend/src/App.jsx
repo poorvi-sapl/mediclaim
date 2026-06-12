@@ -22,6 +22,9 @@ import SupplierWatchlist from './plan/screens/SupplierWatchlist'
 import SupplierDetail from './plan/screens/SupplierDetail'
 import SummaryCardSkeleton from './components/SummaryCardSkeleton'
 import TableSkeleton from './components/TableSkeleton'
+import AnalyticsPanel from './components/AnalyticsPanel'
+import PhysicianOverview from './components/PhysicianOverview'
+import { StatCardGrid, PhysicianHeader, ReviewBanner } from './components/SummaryCard'
 import { PHYSICIAN_NPI, getPhysician, getFlaggedSuppliers, getNotificationsCount, markNotificationsSeen } from './api'
 
 const PHYS_NAV = [
@@ -131,9 +134,16 @@ function PhysicianPortal() {
         </div>
       ) : screen === 'summary' ? (
         loading ? <SummaryCardSkeleton />
-          : <SummaryCard setActiveScreen={(s) => navTo(s)} pendingCount={pendingCount}
-                         unknownCount={summary?.unknownCount ?? flaggedSuppliers.length}
-                         physician={physician} summary={summary} />
+          : <>
+              <div className="w-full px-7 pt-7 pb-0 flex flex-col gap-4">
+                <PhysicianHeader physician={physician} />
+                <StatCardGrid summary={summary} pendingCount={pendingCount}
+                              setActiveScreen={(s) => navTo(s)} />
+              </div>
+              <div className="w-full px-7 pt-6">
+                <PhysicianOverview npi={npi} />
+              </div>
+            </>
       ) : (
         loading ? <TableSkeleton /> : <FlaggedSuppliers suppliers={flaggedSuppliers} onSelectSupplier={selectSupplier} />
       )}

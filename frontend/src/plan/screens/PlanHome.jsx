@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 import { getPlanSummary, getAlertsHistory } from '../../api'
 import { useAlerts } from '../../context/AlertsContext'
 import { Icon, StatCard, fmtUSD, timeAgo } from '../../components/ui'
+import AnalyticsPanel from '../../components/AnalyticsPanel'
+import DashboardOverview from '../components/DashboardOverview'
 
 const EMPTY = { totalNPIs: 0, highRiskNPIs: 0, activeAlertsToday: 0, totalClaims: 0 }
 
@@ -76,15 +78,17 @@ export default function PlanHome({ setActiveScreen, onOpenNpi, onOpenSupplier })
 
   return (
     <div className="w-full px-7 py-7">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
+        {cards.map((c) => <StatCard key={c.label} {...c} spark={false} loading={loading} />)}
+      </div>
+
+      <DashboardOverview />
+
       {error && (
         <div className="mc-card border-rose-200 bg-rose-50/50 px-6 py-4 mb-6 text-sm">
           <span className="font-semibold text-rose-600">Couldn't load dashboard:</span> <span className="text-slate-500">{error}</span>
         </div>
       )}
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
-        {cards.map((c) => <StatCard key={c.label} {...c} spark={false} loading={loading} />)}
-      </div>
 
       {/* Live Activity Feed */}
       <div id="live-feed" className="mc-card overflow-hidden scroll-mt-20">
