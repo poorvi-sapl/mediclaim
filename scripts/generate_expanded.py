@@ -1,7 +1,7 @@
 """Generate ~18,000 synthetic claims across the 100 tiered physicians / 100 suppliers.
 
-Mirrors backend/data/generate_synthetic.py (same claims schema, GPT-with-fallback
-descriptions, deterministic structure) but scaled up and driven by tiered_npis.json.
+Uses the same claims schema and GPT-with-fallback descriptions as the original
+synthetic generator, scaled up and driven by tiered_npis.json.
 
 Fraud is planted so the rules engine fires ONLY for the intended tiers:
   * cross_npi_supplier — Tier 2/3 suppliers are shared across >=4 physicians; Tier 1
@@ -295,8 +295,10 @@ def main():
             sup_list = [T2[(q - k) % 30] for k in range(4)]          # each T2 used by 4 phys
         else:
             q = i - 90
-            sup_list = ([T3[(q - k) % 10] for k in range(4)] +       # OIG + cross
-                        [T2[(q * 3 + k) % 30] for k in range(2)])    # extra cross
+            # 1 T3 supplier (OIG + cross-NPI across all 10 T3 phys) + 5 T1 clean.
+            # Reduces OLH/CNS blast radius by ~75% vs the original 4-T3 layout while
+            # keeping each T3 physician high-risk (OIG + cross-NPI still fires).
+            sup_list = [T3[q % 10]] + [T1[(q * 7 + k) % 60] for k in range(5)]
 
         # supplier_concentration plant: funnel 6 Tier-3 physicians (NOT the demo NPI at
         # index 90) through a single supplier → ~100% concentration. They are already
@@ -304,7 +306,19 @@ def main():
         if 91 <= i <= 96:
             sup_list = [sup_list[0]]
 
-        geo = "geo_anomaly" in pats
+        # Extra rare-rule physicians (by index, not from JSON fraud_patterns).
+        # These spread underrepresented rules across T1/T2 without touching risk bands.
+        EXTRA_GEO   = set(range(5, 55, 5))   # 10 T1 phys: geo anomaly patients
+        EXTRA_IMP   = set(range(62, 70))      # 8 T2 phys: impossible day
+        EXTRA_RAP   = set(range(62, 70))      # 8 T2 phys: rapid cycling
+        EXTRA_MOD   = set(range(70, 78))      # 8 T2 phys: modifier abuse
+        EXTRA_DEC   = set(range(70, 78))      # 8 T2 phys: deceased patient
+        EXTRA_UB    = set(range(78, 86))      # 8 T2 phys: unbundling
+        EXTRA_UC    = set(range(62, 72))      # 10 T2 phys: upcoding (extends 60-61)
+        EXTRA_DB    = set(range(10, 30, 2))   # 10 T1 phys: duplicate billing
+        EXTRA_NHVS  = set(range(80, 88))      # 8 T2 phys: new high value supplier
+
+        geo = "geo_anomaly" in pats or i in EXTRA_GEO
         geo_pool = geo_zips_for(npi) if geo else []   # distant zips for this physician's geo patients
         phys_state = p.get("state") or prow.get(npi, ("", None))[1] or "CA"
 
@@ -368,71 +382,118 @@ def main():
         # ---- planted patterns for the new fraud rules (deterministic) ----
         sup0 = sup_list[0]
         o3 = sup0["tier"] == 3
+        # For T2 extra-rule plants use a per-physician synthetic supplier so the claims
+        # are never shared across NPIs — cross_npi_supplier stays at 1 NPI per plant
+        # supplier (well below the threshold). This prevents accidentally inflating CNS.
+        # The rare rules (impossible_day, modifier_abuse, etc.) fire on claim patterns,
+        # not on supplier tier, so they are unaffected by which supplier is used here.
+        sup_plant = sup0 if tier == 3 else {
+            "name": f"CliniPlant Logistics {i:03d}",
+            "supplier_id": f"sup-plant-{i:04d}",
+            "tier": 1,
+            "zip": home_zip,
+            "state": phys_state,
+        }
+        o_plant = sup_plant["tier"] == 3 if isinstance(sup_plant, dict) else o3
 
-        # UPCODING: all Tier-3 + a few Tier-2 (i 60-63) — present across both tiers without
-        # pushing the whole mid cohort over the high threshold.
-        if tier == 3 or (60 <= i <= 61):
-            for u in range(4):
-                emit(npi, sup0, "home_health", ref - timedelta(days=12 + u),
-                     f"pat-{i:03d}-UP{u}", home_zip, o3, phys_state,
+        # UPCODING: all Tier-3 + extended T2 set (EXTRA_UC covers 62-71, 60-61 already here).
+        if tier == 3 or i in EXTRA_UC or (60 <= i <= 61):
+            n_up = 4 if tier == 3 else 8   # more upcoded claims for T2 extra set
+            for u in range(n_up):
+                emit(npi, sup_plant, "home_health", ref - timedelta(days=12 + u),
+                     f"pat-{i:03d}-UP{u}", home_zip, o_plant, phys_state,
                      cpt=random.choice(CODE_POOLS["home_health"]["cpt"]),
                      amount=round(7200 + u * 350, 2))
 
-        if tier == 3:
-            # IMPOSSIBLE DAY: 45 claims on ONE date across only ~6 patients (impossible_day
-            # fires at >=40 claims/day; distinct patients stay <25 so it doesn't also trip
-            # rapid_cycling on this date).
-            iday = ref - timedelta(days=7)
+        # ---- IMPOSSIBLE DAY ----
+        # T3: 45 claims on one date (~6 patients). Extra T2: same pattern, clean supplier.
+        if tier == 3 or i in EXTRA_IMP:
+            iday = ref - timedelta(days=7 + (i % 5))  # stagger dates per physician
             for k in range(45):
-                emit(npi, sup0, "dme", iday, f"pat-{i:03d}-IMP{k % 6}", home_zip, o3, phys_state,
+                emit(npi, sup_plant, "dme", iday, f"pat-{i:03d}-IMP{k % 6}", home_zip, o_plant, phys_state,
                      hcpcs=random.choice(CODE_POOLS["dme"]["hcpcs"]), amount=round(random.uniform(300, 1200), 2))
 
-            # RAPID CYCLING: 30 DISTINCT patients on a different date (>=25 distinct; <40
-            # total so it doesn't trip impossible_day).
-            rday = ref - timedelta(days=17)
+        # ---- RAPID CYCLING ----
+        # T3: 30 distinct patients on one date. Extra T2: same pattern, different date offset.
+        if tier == 3 or i in EXTRA_RAP:
+            rday = ref - timedelta(days=17 + (i % 7))
             for k in range(30):
-                emit(npi, sup0, "dme", rday, f"pat-{i:03d}-RAP{k}", home_zip, o3, phys_state,
+                emit(npi, sup_plant, "dme", rday, f"pat-{i:03d}-RAP{k}", home_zip, o_plant, phys_state,
                      hcpcs=random.choice(CODE_POOLS["dme"]["hcpcs"]), amount=round(random.uniform(300, 1200), 2))
 
-            # MODIFIER ABUSE: 8 same-patient/date pairs, similar-but-different descriptions.
+        # ---- MODIFIER ABUSE ----
+        # T3 + extra T2: same-patient/date pairs with nearly-identical descriptions.
+        if tier == 3 or i in EXTRA_MOD:
             MOD_PAIRS = [
                 ("Home health aide support visit", "Home health aide assistance visit"),
                 ("Skilled nursing home visit follow up", "Skilled nursing home visit review"),
                 ("In home therapeutic exercise session", "In home therapeutic exercise therapy"),
                 ("Home nursing assessment initial intake", "Home nursing assessment initial review"),
             ]
-            for k in range(8):
+            n_mod = 8 if tier == 3 else 12   # more pairs for extra T2 set
+            for k in range(n_mod):
                 d1, d2 = MOD_PAIRS[k % len(MOD_PAIRS)]
                 pid = f"pat-{i:03d}-MOD{k}"
                 mdate = ref - timedelta(days=22 + k)
                 cpt = random.choice(CODE_POOLS["home_health"]["cpt"])
-                emit(npi, sup0, "home_health", mdate, pid, home_zip, o3, phys_state,
+                emit(npi, sup_plant, "home_health", mdate, pid, home_zip, o_plant, phys_state,
                      cpt=cpt, amount=round(1850 + k, 2), desc=d1)
-                emit(npi, sup0, "home_health", mdate, pid, home_zip, o3, phys_state,
+                emit(npi, sup_plant, "home_health", mdate, pid, home_zip, o_plant, phys_state,
                      cpt=cpt, amount=round(1860 + k, 2), desc=d2)
 
-            # DECEASED PATIENT: a prior claim under a DIFFERENT physician >180 days earlier,
-            # then this physician bills the same patient now (gap > 180 → flagged).
+        # ---- DECEASED PATIENT ----
+        # T3 + extra T2: a prior claim >180 days ago under a neighbour NPI, then this
+        # physician bills the same patient recently (gap > 180 → flag fires).
+        if tier == 3 or i in EXTRA_DEC:
             other_npi = phys[(i + 1) % len(phys)]["npi"]
-            for k in range(4):
+            n_dec = 4 if tier == 3 else 8
+            for k in range(n_dec):
                 pid = f"pat-{i:03d}-DEC{k}"
-                emit(other_npi, sup0, "dme", ref - timedelta(days=215 + k * 3), pid, home_zip,
+                emit(other_npi, sup_plant, "dme", ref - timedelta(days=215 + k * 3), pid, home_zip,
                      False, phys_state, hcpcs=random.choice(CODE_POOLS["dme"]["hcpcs"]),
                      amount=round(random.uniform(400, 900), 2))
-                emit(npi, sup0, "dme", ref - timedelta(days=3), pid, home_zip, o3, phys_state,
+                emit(npi, sup_plant, "dme", ref - timedelta(days=3 + k), pid, home_zip, o_plant, phys_state,
                      hcpcs=random.choice(CODE_POOLS["dme"]["hcpcs"]), amount=round(random.uniform(400, 900), 2))
 
-            # NEW HIGH VALUE SUPPLIER: an EXISTING (real) supplier this physician has never
-            # billed before suddenly appears within the lookback window with only high-value
-            # claims. Done for 6 Tier-3 NPIs (>=5 required). A distinct clean (T1) supplier
-            # per physician keeps it genuinely "new" without tripping cross-NPI.
-            if 91 <= i <= 96:
-                nhvs = T1[(i + 7) % len(T1)]
-                for k in range(20):
-                    emit(npi, nhvs, "dme", ref - timedelta(days=2 + k), f"pat-{i:03d}-NHV{k}",
-                         home_zip, False, phys_state,
-                         hcpcs=random.choice(CODE_POOLS["dme"]["hcpcs"]),
-                         amount=round(random.uniform(1500, 2500), 2))
+        # ---- UNBUNDLING ----
+        # Extra T2: plant explicit groups of 4 distinct CPT codes for the same
+        # patient/date/npi/supplier so the rule fires. Use clean T1 supplier.
+        if i in EXTRA_UB:
+            cpt_pool = CODE_POOLS["home_health"]["cpt"]
+            for g in range(8):   # 8 groups × 4 CPTs = 32 claims per physician
+                pid = f"pat-{i:03d}-UBG{g}"
+                udate = ref - timedelta(days=30 + g * 4)
+                for cpt_code in cpt_pool[:4]:
+                    emit(npi, sup_plant, "home_health", udate, pid, home_zip, o_plant, phys_state,
+                         cpt=cpt_code, amount=round(random.uniform(1200, 2000), 2))
+
+        # ---- NEW HIGH VALUE SUPPLIER ----
+        # T3 (existing: 91-96) + extra T2: brand-new supplier appearing only within the
+        # lookback window with high-value claims. Use a unique synthetic supplier so
+        # it's genuinely "first seen" for this NPI and never shared across NPIs.
+        if (91 <= i <= 96) or i in EXTRA_NHVS:
+            nhvs = T1[(i + 7) % len(T1)] if tier == 3 else {"name": f"PlantNHVS {i:03d}", "supplier_id": f"sup-nhvs-{i:04d}", "tier": 1, "zip": home_zip, "state": phys_state}
+            for k in range(20):
+                emit(npi, nhvs, "dme", ref - timedelta(days=2 + k), f"pat-{i:03d}-NHV{k}",
+                     home_zip, False, phys_state,
+                     hcpcs=random.choice(CODE_POOLS["dme"]["hcpcs"]),
+                     amount=round(random.uniform(1500, 2500), 2))
+
+        # ---- DUPLICATE BILLING (extra T1) ----
+        # 3 same-patient/date/hcpcs pairs billed by two distinct synthetic suppliers
+        # (unique to this physician) so CNS never fires.
+        if "duplicate_billing" in pats or i in EXTRA_DB:
+            sup_a = {"name": f"PlantDup-A {i:03d}", "supplier_id": f"sup-dupa-{i:04d}", "tier": 1, "zip": home_zip, "state": phys_state}
+            sup_b = {"name": f"PlantDup-B {i:03d}", "supplier_id": f"sup-dupb-{i:04d}", "tier": 1, "zip": home_zip, "state": phys_state}
+            for d in range(3):
+                pid = f"pat-{i:03d}-DUP{d}"
+                dup_date = ref - timedelta(days=10 + d)
+                hcpcs_code = random.choice(CODE_POOLS["dme"]["hcpcs"])
+                amt = round(random.uniform(600, 1500), 2)
+                emit(npi, sup_a, "dme", dup_date, pid, home_zip, False, phys_state,
+                     hcpcs=hcpcs_code, amount=amt)
+                emit(npi, sup_b, "dme", dup_date, pid, home_zip, False, phys_state,
+                     hcpcs=hcpcs_code, amount=amt)
 
     log.info(f"Built {len(rows)} claim rows across 100 physicians")
 
