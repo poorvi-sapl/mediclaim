@@ -330,7 +330,7 @@ export default function SupplierWatchlist({ onSelect, search = '' }) {
 
                       <td className="td hidden sm:table-cell">
                         {s.oig
-                          ? <span className="pill pill-critical"><Icon name="alertTri" size={10} stroke={2.5} />OIG FLAGGED</span>
+                          ? <span className="pill pill-critical whitespace-nowrap"><Icon name="alertTri" size={10} stroke={2.5} />OIG FLAGGED</span>
                           : <span className="text-slate-300 text-sm">—</span>}
                       </td>
 

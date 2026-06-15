@@ -131,16 +131,28 @@ function UserChip({ user, subtitle, onLogout }) {
         </svg>
       </button>
 
-      {/* Logout button — hidden on small screens (use dropdown instead) */}
+      {/* Logout button — desktop only (mobile uses the dropdown) */}
       <button onClick={onLogout} title="Sign out"
               className="hidden sm:flex w-8 h-8 rounded-lg border border-slate-200/80 bg-white shadow-sm hover:bg-rose-50 hover:border-rose-200 items-center justify-center text-slate-400 hover:text-rose-500 transition-all duration-150">
         <Icon name="logout" size={14} />
       </button>
 
-      {/* Dropdown */}
+      {/* Dropdown — right-0 on mobile (no separate logout btn), right-10 on desktop */}
       {open && (
-        <div className="absolute right-10 top-full mt-2 w-64 bg-white rounded-xl border border-slate-200 z-50"
+        <div className="absolute right-0 sm:right-10 top-full mt-2 w-64 max-w-[calc(100vw-16px)] bg-white rounded-xl border border-slate-200 z-50"
              style={{ boxShadow: '0 4px 20px rgba(15,23,42,0.10)' }}>
+
+          {/* Name header — visible on mobile only (hidden in chip) */}
+          <div className="sm:hidden px-4 pt-3.5 pb-2.5 border-b border-slate-100 flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-[13px] font-bold flex-shrink-0"
+                 style={{ background: 'linear-gradient(135deg, #1a3d7c 0%, #0d1f35 100%)' }}>
+              {initials}
+            </div>
+            <div className="min-w-0">
+              <div className="text-[13px] font-bold text-slate-800 truncate">{user?.full_name || user?.email}</div>
+              <div className="text-[11px] text-slate-500 truncate">{subtitle}</div>
+            </div>
+          </div>
 
           {/* Info rows */}
           <div className="px-4 py-2">
@@ -159,8 +171,8 @@ function UserChip({ user, subtitle, onLogout }) {
           {/* Sign out */}
           <div className="px-3 pb-3 border-t border-slate-100">
             <button onClick={onLogout}
-                    className="mt-2 w-full flex items-center gap-2 px-3 py-2 rounded-lg text-[12px] font-medium text-rose-500 hover:bg-rose-50 transition-colors">
-              <Icon name="logout" size={13} /> Sign out
+                    className="mt-2 w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-[13px] font-medium text-rose-500 hover:bg-rose-50 transition-colors">
+              <Icon name="logout" size={14} /> Sign out
             </button>
           </div>
         </div>
@@ -305,7 +317,17 @@ function ProfileMenu({ user, onLogout }) {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-2 w-[288px] bg-white rounded-xl z-50 overflow-hidden border border-slate-200" style={{ boxShadow: '0 8px 24px rgba(15,23,42,0.10), 0 2px 6px rgba(15,23,42,0.06)' }}>
+        <div className="absolute right-0 top-full mt-2 w-[288px] max-w-[calc(100vw-16px)] bg-white rounded-xl z-50 overflow-hidden border border-slate-200" style={{ boxShadow: '0 8px 24px rgba(15,23,42,0.10), 0 2px 6px rgba(15,23,42,0.06)' }}>
+
+          {/* Name header — mobile only (hidden behind chip on sm+) */}
+          <div className="sm:hidden px-4 pt-3.5 pb-2.5 border-b border-slate-100 flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-[12px] font-bold flex-shrink-0"
+                 style={{ backgroundColor: '#1E3A5F' }}>PI</div>
+            <div className="min-w-0">
+              <div className="text-[13px] font-bold text-slate-800 truncate">{name}</div>
+              <div className="text-[11px] text-slate-400">Payer</div>
+            </div>
+          </div>
 
           {/* Info rows */}
           <div className="px-4 py-2">
@@ -316,10 +338,10 @@ function ProfileMenu({ user, onLogout }) {
               { label: 'SAM.gov',       value: '✓ Verified', green: true },
               { label: 'Member Since',  value: 'June 2026' },
             ].map(row => (
-              <div key={row.label} className="flex items-start justify-between gap-6 py-2.5 border-b border-slate-50 last:border-0">
+              <div key={row.label} className="flex items-start justify-between gap-4 py-2.5 border-b border-slate-50 last:border-0">
                 <span className="text-[11px] font-medium text-slate-400 shrink-0 mt-px">{row.label}</span>
-                <div className="text-right">
-                  <span className={`text-[12px] font-semibold ${row.green ? 'text-emerald-600' : 'text-slate-700'}`}>{row.value}</span>
+                <div className="text-right min-w-0">
+                  <span className={`text-[12px] font-semibold ${row.green ? 'text-emerald-600' : 'text-slate-700'} break-all`}>{row.value}</span>
                   {row.sub && <div className="text-[11px] text-slate-400 mt-0.5">{row.sub}</div>}
                 </div>
               </div>
@@ -329,7 +351,7 @@ function ProfileMenu({ user, onLogout }) {
           {/* Sign out */}
           <div className="px-3 pb-3 pt-1 border-t border-slate-100">
             <button onClick={onLogout}
-                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-[13px] font-medium text-rose-600 hover:bg-rose-50 transition-colors">
+                    className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-[13px] font-medium text-rose-600 hover:bg-rose-50 transition-colors">
               <Icon name="logout" size={13} stroke={2} />
               Sign out
             </button>

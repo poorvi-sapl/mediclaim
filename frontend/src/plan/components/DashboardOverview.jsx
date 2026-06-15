@@ -35,8 +35,8 @@ function ChartCard({ title, subtitle, children, className = '' }) {
   return (
     <div className={`bg-white rounded-2xl shadow-sm border border-gray-100 p-3 sm:p-5 ${className}`}>
       <div className="mb-2 sm:mb-4">
-        <p className="text-sm font-semibold text-gray-800">{title}</p>
-        {subtitle && <p className="text-xs text-gray-400 mt-0.5">{subtitle}</p>}
+        <p className="text-[13px] sm:text-sm font-semibold text-gray-800 leading-snug">{title}</p>
+        {subtitle && <p className="text-[11px] sm:text-xs text-gray-400 mt-0.5">{subtitle}</p>}
       </div>
       {children}
     </div>
@@ -182,13 +182,35 @@ export default function DashboardOverview() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-5">
         {/* Chart 3 — Claims Trend (dual line) */}
         <ChartCard title="Claims Trend — Last 6 Months" subtitle="Total vs Fraud Rules Hit">
-          <ResponsiveContainer width="100%" height={240}>
-            <LineChart data={trendData} margin={{ top: 5, right: 16, left: 0, bottom: 5 }}>
+          <ResponsiveContainer width="100%" height={typeof window !== 'undefined' && window.innerWidth < 640 ? 190 : 240}>
+            <LineChart data={trendData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
-              <XAxis dataKey="month" tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} width={38} />
-              <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e5e7eb' }} />
-              <Legend iconSize={10} wrapperStyle={{ fontSize: 11, paddingTop: 6 }} />
+              <XAxis
+                dataKey="month"
+                tick={{ fontSize: 10, fill: '#9ca3af' }}
+                axisLine={false}
+                tickLine={false}
+                tickFormatter={(v) => v.split(' ')[0]}
+                interval={0}
+              />
+              <YAxis
+                tick={{ fontSize: 10, fill: '#9ca3af' }}
+                axisLine={false}
+                tickLine={false}
+                width={36}
+                tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v}
+              />
+              <Tooltip
+                contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e5e7eb' }}
+                labelFormatter={(label) => label}
+              />
+              <Legend
+                iconSize={8}
+                wrapperStyle={{ fontSize: 11, paddingTop: 8 }}
+                formatter={(value) => (
+                  <span style={{ color: '#6b7280', fontSize: 11 }}>{value}</span>
+                )}
+              />
               <Line type="monotone" dataKey="total" name="Total Claims" stroke="#0d1f35" strokeWidth={2}
                 dot={{ r: 3, fill: '#0d1f35', strokeWidth: 0 }} activeDot={{ r: 5 }} />
               <Line type="monotone" dataKey="flagged" name="Fraud Rules Hit" stroke="#ef4444" strokeWidth={2}

@@ -65,7 +65,7 @@
   .nav-link-active { @apply bg-white text-ink shadow-sm; }
 
   .pill {
-    @apply inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[11px] font-bold ring-1 ring-inset;
+    @apply inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[11px] font-bold ring-1 ring-inset whitespace-nowrap;
   }
   .pill-critical { @apply bg-rose-50 text-rose-600 ring-rose-200; }
   .pill-high     { @apply bg-orange-50 text-orange-600 ring-orange-200; }

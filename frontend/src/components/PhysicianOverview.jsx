@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import {
   Area, AreaChart,
+  Bar, BarChart,
   CartesianGrid, Cell,
-  Pie, PieChart,
+  LabelList,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
 import { API_BASE } from '../api'
@@ -194,19 +195,28 @@ export default function PhysicianOverview({ npi }) {
         </ChartCard>
 
         <ChartCard title="Claims by Supplier">
-          <ResponsiveContainer width="100%" height={170}>
-            <PieChart>
-              <Pie
-                data={pieData}
-                cx="50%"
-                cy="50%"
-                innerRadius={48}
-                outerRadius={75}
-                dataKey="value"
-                paddingAngle={2}
-              >
-                {pieData.map((entry, i) => <Cell key={i} fill={supplierFill(entry.name, i)} />)}
-              </Pie>
+          <ResponsiveContainer width="100%" height={Math.max(180, pieData.length * 46)}>
+            <BarChart
+              layout="vertical"
+              data={pieData}
+              margin={{ top: 2, right: 44, left: 0, bottom: 2 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" horizontal={false} />
+              <XAxis
+                type="number"
+                tick={{ fontSize: 10, fill: '#9ca3af' }}
+                axisLine={false}
+                tickLine={false}
+              />
+              <YAxis
+                type="category"
+                dataKey="name"
+                width={130}
+                tick={{ fontSize: 10, fill: '#6b7280' }}
+                axisLine={false}
+                tickLine={false}
+                tickFormatter={(v) => v.length > 20 ? v.slice(0, 18) + '…' : v}
+              />
               <Tooltip
                 formatter={(value, name, props) => [
                   `${value} claims · $${props.payload.total_amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
@@ -214,9 +224,13 @@ export default function PhysicianOverview({ npi }) {
                 ]}
                 contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e5e7eb' }}
               />
-            </PieChart>
+              <Bar dataKey="value" radius={[0, 4, 4, 0]} maxBarSize={22}>
+                {pieData.map((entry, i) => <Cell key={i} fill={supplierFill(entry.name, i)} />)}
+                <LabelList dataKey="value" position="right"
+                           style={{ fontSize: 11, fontWeight: 600, fill: '#6b7280' }} />
+              </Bar>
+            </BarChart>
           </ResponsiveContainer>
-          <SupplierLegendList pieData={pieData} />
         </ChartCard>
 
       </div>
