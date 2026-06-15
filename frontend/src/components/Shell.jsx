@@ -9,7 +9,7 @@ function Sidebar({ navItems, activeId, onNavigate, collapsed, onToggleCollapse, 
   return (
     <aside
       className="flex-shrink-0 flex flex-col h-screen sticky top-0 transition-all duration-300 ease-in-out overflow-hidden"
-      style={{ backgroundColor: '#0d1f35', width: collapsed ? '64px' : '240px' }}>
+      style={{ backgroundColor: '#0d1f35', width: collapsed ? '64px' : onClose ? 'min(240px, 85vw)' : '240px' }}>
 
       {/* Logo row — with optional mobile close button */}
       <div className={`h-16 flex items-center flex-shrink-0 transition-all duration-300 ${collapsed ? 'justify-center px-0' : 'px-4'}`}>
@@ -43,7 +43,7 @@ function Sidebar({ navItems, activeId, onNavigate, collapsed, onToggleCollapse, 
           <button key={n.id} onClick={() => onNavigate(n.id)}
                   title={collapsed ? n.label : undefined}
                   className={`transition-all duration-200 w-full flex items-center rounded-lg text-[13px] font-medium
-                    ${collapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-3 py-2.5'}
+                    ${collapsed ? 'justify-center px-0 py-3' : 'gap-3 px-3 py-3'}
                     ${activeId === n.id
                       ? 'bg-white/10 text-white'
                       : 'text-white/60 hover:bg-white/5 hover:text-white'}`}>
@@ -416,50 +416,96 @@ export default function Shell({ navItems, activeId, onNavigate, title, user, sub
         </header>
 
         {/* Breadcrumb trail — only shown when more than one level deep */}
-        {showCrumbs && (
-          <nav className="px-4 sm:px-7 py-2 bg-white border-b border-slate-100/80 flex items-center gap-0.5 flex-shrink-0 min-w-0 overflow-x-auto">
-            {breadcrumbs.map((crumb, i) => {
-              const isRoot = i === 0
-              const isLast = i === breadcrumbs.length - 1
+        {showCrumbs && (() => {
+          const Sep = () => (
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"
+                 strokeLinecap="round" strokeLinejoin="round" className="text-slate-200 shrink-0 mx-0.5">
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          )
+          const HomeIcon = () => (
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
+            </svg>
+          )
+
+          const total = breadcrumbs.length
+          const root  = breadcrumbs[0]
+          const last  = breadcrumbs[total - 1]
+          const parent = total >= 2 ? breadcrumbs[total - 2] : null
+
+          // Render a single crumb item (shared between mobile and desktop)
+          function CrumbItem({ crumb, isRoot, isLast, maxW = 'max-w-[140px]' }) {
+            if (isLast) {
               return (
-                <Fragment key={i}>
-                  {i > 0 && (
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"
-                         strokeLinecap="round" strokeLinejoin="round" className="text-slate-200 shrink-0 mx-0.5">
-                      <polyline points="9 18 15 12 9 6" />
-                    </svg>
-                  )}
-                  {isLast ? (
-                    <span className="text-[12px] font-semibold text-slate-800 truncate max-w-[200px] px-1 whitespace-nowrap">
-                      {crumb.label}
-                    </span>
-                  ) : crumb.onClick ? (
-                    <button onClick={crumb.onClick}
-                            className={`text-[12px] font-medium px-1 py-0.5 rounded transition-colors whitespace-nowrap hover:text-[#0d1f35] hover:bg-slate-50 ${isRoot ? 'text-slate-400' : 'text-slate-500'}`}>
-                      {isRoot ? (
-                        <span className="flex items-center gap-1 whitespace-nowrap">
-                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-                            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
-                          </svg>
-                          {crumb.label}
-                        </span>
-                      ) : crumb.label}
-                    </button>
-                  ) : (
-                    <span className="text-[12px] font-medium text-slate-400 px-1 flex items-center gap-1 whitespace-nowrap">
-                      {isRoot && (
-                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-                          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
-                        </svg>
-                      )}
-                      {crumb.label}
-                    </span>
-                  )}
-                </Fragment>
+                <span className={`text-[11px] sm:text-[12px] font-semibold text-slate-800 truncate ${maxW} sm:max-w-[240px] px-1 whitespace-nowrap`}>
+                  {crumb.label}
+                </span>
               )
-            })}
-          </nav>
-        )}
+            }
+            if (crumb.onClick) {
+              return (
+                <button onClick={crumb.onClick}
+                        className={`text-[11px] sm:text-[12px] font-medium px-1 py-0.5 rounded transition-colors whitespace-nowrap hover:text-[#0d1f35] hover:bg-slate-50 ${isRoot ? 'text-slate-400' : 'text-slate-500'}`}>
+                  {isRoot
+                    ? <span className="flex items-center gap-1"><HomeIcon /><span className="hidden sm:inline">{crumb.label}</span></span>
+                    : <span className={`truncate block max-w-[100px] sm:max-w-[160px]`}>{crumb.label}</span>}
+                </button>
+              )
+            }
+            return (
+              <span className="text-[11px] sm:text-[12px] font-medium text-slate-400 px-1 flex items-center gap-1 whitespace-nowrap">
+                {isRoot && <HomeIcon />}
+                <span className="max-w-[100px] sm:max-w-none truncate">{crumb.label}</span>
+              </span>
+            )
+          }
+
+          return (
+            <nav className="px-3 sm:px-7 py-1.5 sm:py-2 bg-white border-b border-slate-100/80 flex-shrink-0">
+
+              {/* ── Mobile: collapsed to root › … › parent › current ── */}
+              <div className="sm:hidden flex items-center gap-0 min-w-0 overflow-hidden">
+                {/* Root (home icon only on mobile) */}
+                <CrumbItem crumb={root} isRoot isLast={total === 1} maxW="max-w-[60px]" />
+
+                {total > 3 && (
+                  <>
+                    <Sep />
+                    <span className="text-[11px] font-medium text-slate-400 px-1 select-none">…</span>
+                  </>
+                )}
+
+                {/* Parent — second-to-last, shown if it exists and isn't root */}
+                {parent && parent !== root && (
+                  <>
+                    <Sep />
+                    <CrumbItem crumb={parent} isRoot={false} isLast={false} maxW="max-w-[90px]" />
+                  </>
+                )}
+
+                {/* Current page */}
+                {total > 1 && (
+                  <>
+                    <Sep />
+                    <CrumbItem crumb={last} isRoot={false} isLast maxW="max-w-[110px]" />
+                  </>
+                )}
+              </div>
+
+              {/* ── Desktop: full trail ── */}
+              <div className="hidden sm:flex items-center gap-0 min-w-0 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+                {breadcrumbs.map((crumb, i) => (
+                  <Fragment key={i}>
+                    {i > 0 && <Sep />}
+                    <CrumbItem crumb={crumb} isRoot={i === 0} isLast={i === total - 1} />
+                  </Fragment>
+                ))}
+              </div>
+
+            </nav>
+          )
+        })()}
 
         <main className="flex-1 overflow-y-auto">{children}</main>
       </div>

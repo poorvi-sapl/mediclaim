@@ -66,14 +66,14 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6"
+    <div className="min-h-screen flex items-center justify-center p-3 sm:p-6"
          style={{ backgroundImage: `url(${bgImage})`, backgroundSize: 'cover', backgroundPosition: 'center' }}>
 
       {/* Blurred overlay */}
       <div className="absolute inset-0 bg-white/25 backdrop-blur-sm" />
 
       {/* Centered card */}
-      <div className="relative z-10 w-full max-w-[1160px] flex rounded-2xl shadow-2xl overflow-hidden" style={{ minHeight: '620px' }}>
+      <div className="relative z-10 w-full max-w-[1160px] flex rounded-2xl shadow-2xl overflow-hidden" style={{ minHeight: 'clamp(0px, 85vh, 680px)' }}>
         <button
           onClick={() => navigate('/welcome')}
           aria-label="Close"
@@ -82,19 +82,19 @@ export default function Login() {
         </button>
 
         {/* ── LEFT: illustration panel ── */}
-        <div className="hidden lg:flex w-[48%] flex-shrink-0 flex-col items-center justify-center relative"
-             style={{ backgroundColor: '#1a3d7c', minHeight: '580px' }}>
+        <div className="hidden lg:flex w-[48%] flex-shrink-0 flex-col items-center justify-center relative self-stretch"
+             style={{ backgroundColor: '#1a3d7c' }}>
           <img src={illustration} alt="Healthcare protection"
                className="w-[85%] object-contain"
                style={{ maxHeight: '78%' }} />
         </div>
 
         {/* ── RIGHT: form panel ── */}
-        <div className="flex-1 bg-white flex flex-col px-9 py-8">
+        <div className="flex-1 bg-white flex flex-col px-5 py-6 sm:px-8 sm:py-8 lg:px-9 lg:py-8">
 
           {/* Logo + badge */}
-          <div className="mb-5">
-            <div className="flex items-center gap-2 mb-3">
+          <div className="mb-4 sm:mb-5">
+            <div className="flex items-center gap-2 mb-2 sm:mb-3">
               <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#1a3d7c' }}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/>
@@ -108,11 +108,11 @@ export default function Login() {
             </div>
           </div>
 
-          <div className="border-t border-slate-100 mb-5" />
+          <div className="border-t border-slate-100 mb-4 sm:mb-5" />
 
           {/* Heading */}
-          <div className="mb-5">
-            <h1 className="text-[1.55rem] font-extrabold tracking-tight" style={{ color: '#1a3d7c' }}>Welcome Back</h1>
+          <div className="mb-4 sm:mb-5">
+            <h1 className="text-2xl sm:text-[1.55rem] font-extrabold tracking-tight" style={{ color: '#1a3d7c' }}>Welcome Back</h1>
             <p className="text-[11px] text-slate-400 mt-1">Monitor claims · Detect fraud · Protect patients.</p>
           </div>
 
@@ -179,7 +179,7 @@ export default function Login() {
                           className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-white ring-1 ring-slate-200 hover:ring-[#1a3d7c]/30 hover:bg-[#EEF2F7] transition-all text-left group">
                     <div className="min-w-0">
                       <span className="text-[11px] font-bold text-slate-600 group-hover:text-[#1a3d7c] transition-colors">{label}</span>
-                      <span className="ml-2 text-[11px] font-mono text-slate-400">{demoEmail}</span>
+                      <span className="ml-2 text-[11px] font-mono text-slate-400 truncate">{demoEmail}</span>
                     </div>
                     <span className="text-[10px] font-semibold text-[#1a3d7c] opacity-0 group-hover:opacity-100 transition-opacity shrink-0">Use →</span>
                   </button>

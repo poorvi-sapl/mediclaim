@@ -31,44 +31,46 @@ function HoverPreview({ children, url }) {
     <div className="relative" onMouseEnter={show} onMouseLeave={hide}>
       {children}
       {shouldLoad && (
-        <div
-          onMouseEnter={show} onMouseLeave={hide}
-          style={{
-            position: 'absolute', top: 'calc(100% + 12px)', left: '50%',
-            transform: 'translateX(-50%)', zIndex: 50,
-            opacity: visible ? 1 : 0, visibility: visible ? 'visible' : 'hidden',
-            pointerEvents: visible ? 'auto' : 'none',
-            transition: 'opacity 0.18s cubic-bezier(0.16,1,0.3,1), visibility 0.18s',
-            filter: 'drop-shadow(0 16px 48px rgba(15,23,42,0.22))',
-          }}
-        >
-          {/* Arrow */}
-          <div style={{ position: 'absolute', top: -6, left: '50%', transform: 'translateX(-50%)', width: 0, height: 0, borderLeft: '7px solid transparent', borderRight: '7px solid transparent', borderBottom: '7px solid #1e1e2e' }} />
-          {/* Browser chrome */}
-          <div style={{ width: THUMB_W, background: '#1e1e2e', borderRadius: '10px 10px 0 0', padding: '7px 10px', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ display: 'flex', gap: 5 }}>
-              {['#ff5f57', '#febc2e', '#28c840'].map(col => (
-                <span key={col} style={{ width: 9, height: 9, borderRadius: '50%', background: col, display: 'block' }} />
-              ))}
-            </div>
-            <div style={{ flex: 1, background: '#2d2d3f', borderRadius: 5, padding: '2px 8px', fontSize: 9, color: '#9ca3af', textAlign: 'center', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
-              {window.location.host}/dashboard
-            </div>
-          </div>
-          {/* Scaled iframe */}
-          <div style={{ width: THUMB_W, height: THUMB_H, overflow: 'hidden', borderRadius: '0 0 10px 10px', border: '1px solid #1e1e2e', borderTop: 'none', position: 'relative', background: '#f8fafc' }}>
-            <iframe
-              src={url}
-              title="dashboard-preview"
-              tabIndex={-1}
-              style={{ width: 1440, height: 900, transform: `scale(${PREVIEW_SCALE})`, transformOrigin: '0 0', border: 'none', pointerEvents: 'none' }}
-              onLoad={() => setLoaded(true)}
-            />
-            {!loaded && (
-              <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc' }}>
-                <div className="preview-spinner" />
+        <div className="hidden sm:block">
+          <div
+            onMouseEnter={show} onMouseLeave={hide}
+            style={{
+              position: 'absolute', top: 'calc(100% + 12px)', left: '50%',
+              transform: 'translateX(-50%)', zIndex: 50,
+              opacity: visible ? 1 : 0, visibility: visible ? 'visible' : 'hidden',
+              pointerEvents: visible ? 'auto' : 'none',
+              transition: 'opacity 0.18s cubic-bezier(0.16,1,0.3,1), visibility 0.18s',
+              filter: 'drop-shadow(0 16px 48px rgba(15,23,42,0.22))',
+            }}
+          >
+            {/* Arrow */}
+            <div style={{ position: 'absolute', top: -6, left: '50%', transform: 'translateX(-50%)', width: 0, height: 0, borderLeft: '7px solid transparent', borderRight: '7px solid transparent', borderBottom: '7px solid #1e1e2e' }} />
+            {/* Browser chrome */}
+            <div style={{ width: THUMB_W, background: '#1e1e2e', borderRadius: '10px 10px 0 0', padding: '7px 10px', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ display: 'flex', gap: 5 }}>
+                {['#ff5f57', '#febc2e', '#28c840'].map(col => (
+                  <span key={col} style={{ width: 9, height: 9, borderRadius: '50%', background: col, display: 'block' }} />
+                ))}
               </div>
-            )}
+              <div style={{ flex: 1, background: '#2d2d3f', borderRadius: 5, padding: '2px 8px', fontSize: 9, color: '#9ca3af', textAlign: 'center', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+                {window.location.host}/dashboard
+              </div>
+            </div>
+            {/* Scaled iframe */}
+            <div style={{ width: THUMB_W, height: THUMB_H, overflow: 'hidden', borderRadius: '0 0 10px 10px', border: '1px solid #1e1e2e', borderTop: 'none', position: 'relative', background: '#f8fafc' }}>
+              <iframe
+                src={url}
+                title="dashboard-preview"
+                tabIndex={-1}
+                style={{ width: 1440, height: 900, transform: `scale(${PREVIEW_SCALE})`, transformOrigin: '0 0', border: 'none', pointerEvents: 'none' }}
+                onLoad={() => setLoaded(true)}
+              />
+              {!loaded && (
+                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc' }}>
+                  <div className="preview-spinner" />
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -153,8 +155,8 @@ export default function PlanHome({ setActiveScreen, onOpenNpi, onOpenSupplier })
   const hasMore = displayed.length > visibleCount
 
   return (
-    <div className="w-full px-7 py-7">
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
+    <div className="w-full px-4 sm:px-7 py-4 sm:py-7">
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4 mb-4 sm:mb-6">
         {cards.map((c) => IS_PREVIEW ? (
           <StatCard key={c.label} {...c} spark={false} loading={loading} />
         ) : (
@@ -173,25 +175,25 @@ export default function PlanHome({ setActiveScreen, onOpenNpi, onOpenSupplier })
       )}
 
       {/* Live Activity Feed */}
-      <div id="live-feed" className="mc-card overflow-hidden scroll-mt-20">
+      <div id="live-feed" className="mc-card overflow-hidden scroll-mt-16 sm:scroll-mt-20">
 
         {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between gap-4 bg-gradient-to-r from-[#f8fafc] via-white to-white">
-          <div className="flex items-center gap-3 min-w-0">
-            <span className="grid place-items-center w-9 h-9 rounded-xl bg-[#1E3A5F]/[0.07] text-[#1E3A5F] ring-1 ring-inset ring-[#1E3A5F]/10 shrink-0">
-              <Icon name="alerts" size={17} />
+        <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 bg-gradient-to-r from-[#f8fafc] via-white to-white">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            <span className="grid place-items-center w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-[#1E3A5F]/[0.07] text-[#1E3A5F] ring-1 ring-inset ring-[#1E3A5F]/10 shrink-0">
+              <Icon name="alerts" size={16} />
             </span>
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-slate-900 leading-tight">Live Activity Feed</h2>
+                <h2 className="text-sm sm:text-base font-bold text-slate-900 leading-tight">Live Activity Feed</h2>
                 {displayed.length > 0 && (
                   <span className="text-[11px] font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-md tabular-nums">{displayed.length}</span>
                 )}
               </div>
-              <p className="text-xs text-slate-400 mt-0.5">Real-time physician actions · updates instantly</p>
+              <p className="text-xs text-slate-400 mt-0.5 hidden sm:block">Real-time physician actions · updates instantly</p>
             </div>
           </div>
-          <span className="inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-wide text-emerald-700 bg-emerald-50 ring-1 ring-inset ring-emerald-200/70 px-2.5 py-1 rounded-full shrink-0">
+          <span className="inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-wide text-emerald-700 bg-emerald-50 ring-1 ring-inset ring-emerald-200/70 px-2.5 py-1 rounded-full shrink-0 self-start sm:self-auto">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 text-emerald-500 live-dot" /> Live
           </span>
         </div>
@@ -203,9 +205,9 @@ export default function PlanHome({ setActiveScreen, onOpenNpi, onOpenSupplier })
         )}
 
         {/* Filter + Sort toolbar */}
-        <div className="px-4 sm:px-6 py-3 border-b border-slate-100 flex flex-wrap items-center gap-2 bg-white">
+        <div className="px-4 sm:px-6 py-2.5 sm:py-3 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center gap-2 bg-white">
           {/* Filter pills */}
-          <div className="flex items-center gap-1.5 flex-wrap flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 flex-wrap min-w-0 flex-1">
             {FILTERS.map(f => {
               const count = f.key === 'all' ? alerts.length : alerts.filter(a => a.action === f.key).length
               const isActive = filterAction === f.key
@@ -228,7 +230,7 @@ export default function PlanHome({ setActiveScreen, onOpenNpi, onOpenSupplier })
           </div>
 
           {/* Sort dropdown */}
-          <div className="relative ml-auto shrink-0">
+          <div className="relative self-end sm:self-auto sm:ml-auto shrink-0">
             <button onClick={() => setSortOpen(v => !v)} onBlur={() => setTimeout(() => setSortOpen(false), 150)}
                     className="inline-flex items-center gap-2 text-[12px] font-semibold text-slate-500 bg-slate-100 hover:bg-slate-200 hover:text-slate-700 px-3 py-1.5 rounded-full transition-all duration-150">
               <Icon name="clock" size={12} stroke={2} />
@@ -264,37 +266,38 @@ export default function PlanHome({ setActiveScreen, onOpenNpi, onOpenSupplier })
             const m = FEED_META[a.action] || FEED_META.flagged
             const supId = a.supplierNpi || a.supplierId
             return (
-              <div key={a.id} className={`group relative flex items-center gap-3.5 pl-5 pr-5 py-3.5 animate-fade-in-up transition-all duration-150 hover:-translate-y-0.5 hover:shadow-sm hover:z-10 ${m.rowHover}`}>
+              <div key={a.id} className={`group relative flex items-start sm:items-center gap-2.5 sm:gap-3.5 px-4 sm:px-5 py-3 sm:py-3.5 animate-fade-in-up transition-all duration-150 hover:-translate-y-0.5 hover:shadow-sm hover:z-10 ${m.rowHover}`}>
 
                 {/* Main content */}
                 <div className="flex-1 min-w-0">
                   {/* Names row */}
                   <div className="flex items-center flex-wrap gap-x-1.5 gap-y-0.5 leading-snug">
                     {a.npi
-                      ? <span onClick={() => onOpenNpi?.({ npi: a.npi, name: a.physicianName })} className={nameCls}>{a.physicianName}</span>
-                      : <span className="font-semibold text-sm text-slate-800">{a.physicianName}</span>}
-                    <span className="text-slate-300 text-xs select-none">→</span>
+                      ? <span onClick={() => onOpenNpi?.({ npi: a.npi, name: a.physicianName })} className={nameCls + ' max-w-[120px] sm:max-w-none truncate'}>{a.physicianName}</span>
+                      : <span className="font-semibold text-sm text-slate-800 max-w-[120px] sm:max-w-none truncate">{a.physicianName}</span>}
+                    <span className="text-slate-300 text-xs select-none shrink-0">→</span>
                     {a.action === 'unknownPatient'
-                      ? <span className="font-semibold text-sm text-slate-700">{a.patientName}</span>
+                      ? <span className="font-semibold text-sm text-slate-700 max-w-[120px] sm:max-w-none truncate">{a.patientName}</span>
                       : (supId
-                          ? <span onClick={() => onOpenSupplier?.({ id: supId, name: a.supplierName })} className={nameCls}>{a.supplierName}</span>
-                          : <span className="font-semibold text-sm text-slate-700">{a.supplierName}</span>)}
-                    {a.escalation && <span className="ml-1 pill pill-critical">PHYSICIAN DENIAL</span>}
+                          ? <span onClick={() => onOpenSupplier?.({ id: supId, name: a.supplierName })} className={nameCls + ' max-w-[120px] sm:max-w-none truncate'}>{a.supplierName}</span>
+                          : <span className="font-semibold text-sm text-slate-700 max-w-[120px] sm:max-w-none truncate">{a.supplierName}</span>)}
+                    {a.escalation && <span className="ml-1 pill pill-critical hidden sm:inline">PHYSICIAN DENIAL</span>}
                   </div>
                   {/* Meta row: action badge + timestamp */}
-                  <div className="mt-1.5 flex items-center gap-2">
+                  <div className="mt-1.5 flex items-center gap-2 flex-wrap">
                     <span className={`inline-flex items-center text-[11px] font-semibold px-2.5 py-0.5 rounded-md ${m.badge}`}>
                       {m.verb}
                     </span>
                     <span className="text-slate-200 text-xs select-none">·</span>
                     <Icon name="clock" size={10} className="text-slate-400 shrink-0" />
                     <span className="text-[11px] text-slate-400 tabular-nums">{timeAgo(a.ts)}</span>
+                    {a.escalation && <span className="pill pill-critical sm:hidden">PHYSICIAN DENIAL</span>}
                   </div>
                 </div>
 
                 {/* Amount */}
-                <div className="shrink-0 pr-2">
-                  <div className="text-[15px] font-bold tabular-nums text-slate-800 text-right">{fmtUSD(a.amount, 2)}</div>
+                <div className="shrink-0 pt-0.5 sm:pt-0">
+                  <div className="text-[13px] sm:text-[15px] font-bold tabular-nums text-slate-800 text-right whitespace-nowrap">{fmtUSD(a.amount, 2)}</div>
                 </div>
               </div>
             )

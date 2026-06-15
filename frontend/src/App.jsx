@@ -138,12 +138,12 @@ function PhysicianPortal() {
       ) : screen === 'summary' ? (
         loading ? <SummaryCardSkeleton />
           : <>
-              <div className="w-full px-7 pt-7 pb-0 flex flex-col gap-4">
+              <div className="w-full px-4 sm:px-7 pt-4 sm:pt-7 pb-0 flex flex-col gap-3 sm:gap-4">
                 <PhysicianHeader physician={physician} />
                 <StatCardGrid summary={summary} pendingCount={pendingCount}
                               setActiveScreen={(s) => navTo(s)} />
               </div>
-              <div className="w-full px-7 pt-6">
+              <div className="w-full px-4 sm:px-7 pt-4 sm:pt-6">
                 <PhysicianOverview npi={npi} />
               </div>
             </>

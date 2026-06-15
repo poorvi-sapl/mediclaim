@@ -101,11 +101,11 @@ function VRow({ label, tone, text }) {
     muted: { bg: 'bg-slate-50',   txt: 'text-slate-400',   border: 'border-slate-200/80',    dot: 'bg-slate-300'  },
   }[tone] || { bg: 'bg-slate-50', txt: 'text-slate-400', border: 'border-slate-200/80', dot: 'bg-slate-300' }
   return (
-    <div className="flex items-center justify-between gap-4 px-6 py-3.5 border-b border-slate-50 last:border-0 hover:bg-slate-50/50 transition-colors">
-      <span className="text-[13px] text-slate-600">{label}</span>
-      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border shrink-0 ${s.bg} ${s.txt} ${s.border}`}>
-        <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
-        {text}
+    <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-3 sm:py-3.5 border-b border-slate-50 last:border-0 hover:bg-slate-50/50 transition-colors">
+      <span className="text-[12px] sm:text-[13px] text-slate-600">{label}</span>
+      <span className={`inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-[11px] font-semibold border shrink-0 max-w-[180px] sm:max-w-none ${s.bg} ${s.txt} ${s.border}`}>
+        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${s.dot}`} />
+        <span className="truncate">{text}</span>
       </span>
     </div>
   )
@@ -115,17 +115,17 @@ function VerificationStatus({ verification }) {
   // Pre-feature accounts (registered before CMS verification existed) have no record.
   if (!verification || Object.keys(verification).length === 0) {
     return (
-      <div className="mc-card overflow-hidden mt-6">
-        <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl bg-slate-50 text-slate-500 flex items-center justify-center shrink-0 ring-1 ring-slate-200">
-            <Icon name="shield" size={15} stroke={2} />
+      <div className="mc-card overflow-hidden mt-4 sm:mt-6">
+        <div className="px-4 sm:px-5 py-3 sm:py-4 border-b border-slate-100 flex items-center gap-2.5 sm:gap-3">
+          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-slate-50 text-slate-500 flex items-center justify-center shrink-0 ring-1 ring-slate-200">
+            <Icon name="shield" size={14} stroke={2} />
           </div>
           <div>
             <h2 className="text-sm font-bold text-slate-900">Verification Status</h2>
-            <p className="text-[11px] text-slate-400">CMS &amp; registry checks run at registration</p>
+            <p className="text-[11px] text-slate-400 hidden sm:block">CMS &amp; registry checks run at registration</p>
           </div>
         </div>
-        <p className="px-5 py-4 text-sm text-slate-400">Verification not run — pre-dates this feature.</p>
+        <p className="px-4 sm:px-5 py-4 text-sm text-slate-400">Verification not run — pre-dates this feature.</p>
       </div>
     )
   }
@@ -173,15 +173,15 @@ function VerificationStatus({ verification }) {
   const issues = rows.filter((r) => r.tone === 'bad' || r.tone === 'warn').length
 
   return (
-    <div className="mc-card overflow-hidden mt-6">
-      <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl bg-slate-50 text-slate-500 flex items-center justify-center shrink-0 ring-1 ring-slate-200">
-            <Icon name="shield" size={15} stroke={2} />
+    <div className="mc-card overflow-hidden mt-4 sm:mt-6">
+      <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-100 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5 sm:gap-3">
+          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-slate-50 text-slate-500 flex items-center justify-center shrink-0 ring-1 ring-slate-200">
+            <Icon name="shield" size={14} stroke={2} />
           </div>
           <div>
             <h2 className="text-sm font-bold text-slate-900">Verification Status</h2>
-            <p className="text-[11px] text-slate-400">CMS &amp; registry checks run at registration</p>
+            <p className="text-[11px] text-slate-400 hidden sm:block">CMS &amp; registry checks run at registration</p>
           </div>
         </div>
         {issues > 0 ? (
@@ -358,36 +358,38 @@ export default function NPIDetail({ npi: row, onBack, backLabel, onOpenSupplier,
   })()
 
   return (
-    <div className="w-full px-4 sm:px-7 py-5 sm:py-7">
+    <div className="w-full px-4 sm:px-7 py-4 sm:py-7">
       {/* Top row: NPI header + AI Risk Summary side by side */}
-      <div className="flex flex-col lg:flex-row gap-4 mb-6">
+      <div className="flex flex-col lg:flex-row gap-3 sm:gap-4 mb-4 sm:mb-6">
         {/* NPI header card */}
         <div className="mc-card flex-1 min-w-0 overflow-hidden flex items-stretch">
           {/* Main info */}
-          <div className="flex-1 min-w-0 px-6 py-5 flex items-center gap-4">
-            <div className="w-11 h-11 rounded-2xl bg-[#EEF2FF] text-[#1B3A5C] flex items-center justify-center shrink-0">
-              <Icon name="users" size={20} stroke={1.9} />
+          <div className="flex-1 min-w-0 px-4 sm:px-6 py-4 sm:py-5 flex items-center gap-3 sm:gap-4">
+            <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-2xl bg-[#EEF2FF] text-[#1B3A5C] flex items-center justify-center shrink-0">
+              <Icon name="users" size={18} stroke={1.9} />
             </div>
             <div className="min-w-0">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">NPI Investigation</p>
-              <h1 className="text-[20px] font-bold text-slate-900 tracking-tight leading-tight">{npi.name}</h1>
-              <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                <span className="text-[11px] font-semibold bg-[#EEF2FF] text-[#1B3A5C] px-2.5 py-0.5 rounded-full">{npi.specialty}</span>
-                <span className="text-slate-300 text-xs select-none">·</span>
-                <span className="text-[12px] text-slate-500">NPI <span className="font-mono">{npi.npi}</span></span>
-                <span className="text-slate-300 text-xs select-none">·</span>
-                <span className="text-[12px] text-slate-500">{npi.city}, {npi.state}</span>
+              <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">NPI Investigation</p>
+              <h1 className="text-[15px] sm:text-[20px] font-bold text-slate-900 tracking-tight leading-tight truncate max-w-[200px] sm:max-w-none">{npi.name}</h1>
+              <div className="flex items-center gap-1.5 sm:gap-2 mt-1 sm:mt-1.5 flex-wrap">
+                <span className="text-[10px] sm:text-[11px] font-semibold bg-[#EEF2FF] text-[#1B3A5C] px-2 sm:px-2.5 py-0.5 rounded-full">{npi.specialty}</span>
+                <span className="text-slate-300 text-xs select-none hidden sm:inline">·</span>
+                <span className="text-[11px] sm:text-[12px] text-slate-500 hidden sm:inline">NPI <span className="font-mono">{npi.npi}</span></span>
+                <span className="text-slate-300 text-xs select-none hidden sm:inline">·</span>
+                <span className="text-[11px] sm:text-[12px] text-slate-500">{npi.city}, {npi.state}</span>
               </div>
+              {/* NPI shown on its own line on mobile only */}
+              <div className="sm:hidden text-[10px] text-slate-400 mt-0.5 font-mono">{npi.npi}</div>
             </div>
           </div>
           {/* Score ring panel */}
-          <div className="w-28 shrink-0 flex flex-col items-center justify-center bg-slate-50 border-l border-slate-100">
+          <div className="w-20 sm:w-28 shrink-0 flex flex-col items-center justify-center bg-slate-50 border-l border-slate-100">
             <ScoreRing score={npi.score} />
           </div>
         </div>
 
         {/* AI risk summary card */}
-        <div className="mc-card p-5 w-full lg:w-[340px] lg:shrink-0 flex flex-col justify-between">
+        <div className="mc-card p-4 sm:p-5 w-full lg:w-[340px] lg:shrink-0 flex flex-col justify-between">
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-xl bg-[#1B3A5C]/[0.08] text-[#1B3A5C] flex items-center justify-center shrink-0 ring-1 ring-[#1B3A5C]/10">
@@ -395,7 +397,7 @@ export default function NPIDetail({ npi: row, onBack, backLabel, onOpenSupplier,
               </div>
               <div>
                 <h2 className="text-sm font-bold text-slate-900">AI Risk Summary</h2>
-                <p className="text-[11px] text-slate-400">Plain-English explanation of this provider's risk</p>
+                <p className="text-[11px] text-slate-400 hidden sm:block">Plain-English explanation of this provider's risk</p>
               </div>
             </div>
           </div>
@@ -412,7 +414,7 @@ export default function NPIDetail({ npi: row, onBack, backLabel, onOpenSupplier,
 
       {/* AI summary expanded content (outside the card row, shown when summary exists) */}
       {(sumLoading || summary) && (
-        <div className="mc-card p-5 mb-6 -mt-2">
+        <div className="mc-card p-4 sm:p-5 mb-4 sm:mb-6 -mt-1 sm:-mt-2">
           {sumLoading && <div className="h-12 rounded-lg bg-slate-100 animate-pulse" />}
           {summary && !sumLoading && (
             <>
@@ -427,45 +429,45 @@ export default function NPIDetail({ npi: row, onBack, backLabel, onOpenSupplier,
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-3 gap-2.5 sm:gap-4 mb-4 sm:mb-6">
         {[
           { icon: 'claims', label: 'Total Claims',    value: (npi.totalClaims || 0).toLocaleString(), iconBg: 'bg-slate-100', iconText: 'text-slate-500', hoverIcon: 'group-hover:bg-slate-200 group-hover:text-slate-700', chevCls: 'text-slate-400', onClick: scrollToClaims   },
           { icon: 'doc',    label: 'Total Billed',    value: fmtUSD(npi.totalAmount),                  iconBg: 'bg-slate-100', iconText: 'text-slate-500', hoverIcon: 'group-hover:bg-slate-200 group-hover:text-slate-700', chevCls: 'text-slate-400', onClick: scrollToClaims   },
           { icon: 'flag',   label: 'Physician Flags', value: npi.physicianFlags,                       iconBg: 'bg-slate-100', iconText: 'text-slate-500', hoverIcon: 'group-hover:bg-slate-200 group-hover:text-slate-700', chevCls: 'text-slate-400', onClick: scrollToTimeline },
         ].map(({ icon, label, value, iconBg, iconText, hoverIcon, chevCls, onClick }) => (
           <button key={label} onClick={onClick}
-                  className="group mc-card px-4 sm:px-7 py-4 sm:py-7 text-left flex items-center gap-5 hover:-translate-y-1 hover:shadow-[0_12px_28px_-6px_rgba(15,23,42,0.14)] hover:border-slate-300/80 transition-all duration-200 cursor-pointer w-full">
-            <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 transition-all duration-200 ring-1 ring-inset ring-black/[0.04] ${iconBg} ${iconText} ${hoverIcon}`}>
-              <Icon name={icon} size={18} />
+                  className="group mc-card px-3 sm:px-6 py-3 sm:py-6 text-left flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-5 hover:-translate-y-1 hover:shadow-[0_12px_28px_-6px_rgba(15,23,42,0.14)] hover:border-slate-300/80 transition-all duration-200 cursor-pointer w-full overflow-hidden">
+            <div className={`w-8 h-8 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center shrink-0 transition-all duration-200 ring-1 ring-inset ring-black/[0.04] ${iconBg} ${iconText} ${hoverIcon}`}>
+              <Icon name={icon} size={15} />
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-2">{label}</p>
-              <p className="text-[22px] sm:text-[26px] font-bold text-slate-900 tabular-nums leading-none tracking-tight">{value}</p>
+            <div className="flex-1 min-w-0 w-full">
+              <p className="text-[8px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-1 sm:mb-2">{label}</p>
+              <p className="text-[16px] sm:text-[26px] font-bold text-slate-900 tabular-nums leading-none tracking-tight truncate">{value}</p>
             </div>
-            <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 bg-slate-100 transition-all duration-200 group-hover:bg-[#1B3A5C] group-hover:text-white ${chevCls}`}>
-              <Icon name="chevronRight" size={13} stroke={2.5} />
+            <div className={`hidden sm:flex w-7 h-7 rounded-full items-center justify-center shrink-0 bg-slate-100 transition-all duration-200 group-hover:bg-[#1B3A5C] group-hover:text-white ${chevCls}`}>
+              <Icon name="chevronRight" size={12} stroke={2.5} />
             </div>
           </button>
         ))}
       </div>
 
-      {/* Fraud Patterns + Timeline side by side — equal fixed height */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6 items-start">
+      {/* Fraud Patterns + Timeline side by side */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4 mb-4 sm:mb-6 items-start">
 
         {/* Fraud Patterns */}
         {(() => {
           const result = renderPatterns()
           const isEmpty = !result || !result.nodes
           return (
-            <div className="mc-card overflow-hidden flex flex-col max-h-[360px]">
-              <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-3 shrink-0">
-                <div className="flex items-center gap-2.5">
-                  <span className="w-8 h-8 rounded-xl bg-rose-50 text-rose-500 flex items-center justify-center shrink-0 ring-1 ring-rose-100">
-                    <Icon name="alertTri" size={15} />
+            <div className="mc-card overflow-hidden flex flex-col max-h-[340px] sm:max-h-[360px]">
+              <div className="px-4 sm:px-5 py-3 sm:py-4 border-b border-slate-100 flex items-center justify-between gap-3 shrink-0">
+                <div className="flex items-center gap-2 sm:gap-2.5">
+                  <span className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-rose-50 text-rose-500 flex items-center justify-center shrink-0 ring-1 ring-rose-100">
+                    <Icon name="alertTri" size={14} />
                   </span>
                   <div>
                     <h2 className="text-sm font-bold text-slate-900">Fraud Patterns Detected</h2>
-                    <p className="text-[11px] text-slate-400">Rules that fired on this provider's claims</p>
+                    <p className="text-[11px] text-slate-400 hidden sm:block">Rules that fired on this provider's claims</p>
                   </div>
                 </div>
                 {!isEmpty && (
@@ -474,22 +476,22 @@ export default function NPIDetail({ npi: row, onBack, backLabel, onOpenSupplier,
                   </span>
                 )}
               </div>
-              <div className="p-4 space-y-0.5 overflow-y-auto flex-1">{isEmpty ? <div className="px-1 py-2 text-xs text-slate-400">{result}</div> : result.nodes}</div>
+              <div className="p-3 sm:p-4 space-y-0.5 overflow-y-auto flex-1">{isEmpty ? <div className="px-1 py-2 text-xs text-slate-400">{result}</div> : result.nodes}</div>
             </div>
           )
         })()}
 
         {/* Physician Feedback Timeline */}
-        <div ref={timelineRef} className="mc-card overflow-hidden flex flex-col max-h-[360px]">
+        <div ref={timelineRef} className="mc-card overflow-hidden flex flex-col max-h-[340px] sm:max-h-[360px]">
           <button type="button" onClick={() => setTimelineOpen((o) => !o)}
-                  className="w-full flex items-center justify-between px-5 py-4 hover:bg-slate-50 transition-colors border-b border-slate-100 shrink-0">
-            <div className="flex items-center gap-2.5">
-              <span className="w-8 h-8 rounded-xl bg-slate-100 text-slate-500 flex items-center justify-center shrink-0">
-                <Icon name="flag" size={15} />
+                  className="w-full flex items-center justify-between px-4 sm:px-5 py-3 sm:py-4 hover:bg-slate-50 transition-colors border-b border-slate-100 shrink-0">
+            <div className="flex items-center gap-2 sm:gap-2.5">
+              <span className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-slate-100 text-slate-500 flex items-center justify-center shrink-0">
+                <Icon name="flag" size={14} />
               </span>
               <div className="text-left">
                 <h2 className="text-sm font-bold text-slate-900">Physician Feedback Timeline</h2>
-                <p className="text-[11px] text-slate-400">
+                <p className="text-[11px] text-slate-400 hidden sm:block">
                   {npi.actions.length > 0 ? `${npi.actions.length} action${npi.actions.length !== 1 ? 's' : ''} recorded` : 'No actions yet'}
                 </p>
               </div>
@@ -500,12 +502,12 @@ export default function NPIDetail({ npi: row, onBack, backLabel, onOpenSupplier,
                   {npi.actions.length}
                 </span>
               )}
-              <Icon name="chevronRight" size={15}
+              <Icon name="chevronRight" size={14}
                     className={`text-slate-400 transition-transform duration-200 ${timelineOpen ? 'rotate-90' : ''}`} />
             </div>
           </button>
           {timelineOpen && (
-            <div className="px-5 pb-4 overflow-y-auto flex-1 min-h-0">
+            <div className="px-4 sm:px-5 pb-3 sm:pb-4 overflow-y-auto flex-1 min-h-0">
               {npi.actions.length === 0 ? (
                 <p className="text-xs text-slate-400 pt-4">No physician actions recorded.</p>
               ) : (
@@ -513,20 +515,24 @@ export default function NPIDetail({ npi: row, onBack, backLabel, onOpenSupplier,
                   {npi.actions.map((a) => {
                     const meta = ACTION_META[a.action] ?? ACTION_META.confirmed
                     return (
-                      <div key={a.id} className="flex items-start gap-3 py-3">
+                      <div key={a.id} className="flex items-start gap-2.5 sm:gap-3 py-2.5 sm:py-3">
                         <div className="mt-1.5 w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: meta.dot }} />
-                        <div className="flex-1 min-w-0 flex items-center gap-1.5 flex-wrap">
-                          <span className="text-xs font-bold text-slate-800">{meta.label}</span>
-                          {a.supplier && (
-                            <span className="text-xs text-slate-500">·{' '}
-                              <button type="button" onClick={() => openSupplier(a.supplier)}
-                                      className="font-bold text-[#1E3A5F] rounded px-0.5 transition-colors hover:bg-[#1E3A5F]/[0.08] hover:underline cursor-pointer">
-                                {a.supplier}
-                              </button>
-                            </span>
-                          )}
-                          {a.patient && <span className="text-xs text-slate-500">· {a.patient}</span>}
-                          <span className="text-[11px] text-slate-400 ml-auto tabular-nums">{timeAgo(a.ts)}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between gap-2 flex-wrap">
+                            <div className="flex items-center gap-1 flex-wrap min-w-0">
+                              <span className="text-xs font-bold text-slate-800">{meta.label}</span>
+                              {a.supplier && (
+                                <span className="text-xs text-slate-500">·{' '}
+                                  <button type="button" onClick={() => openSupplier(a.supplier)}
+                                          className="font-bold text-[#1E3A5F] rounded px-0.5 transition-colors hover:bg-[#1E3A5F]/[0.08] hover:underline cursor-pointer max-w-[130px] sm:max-w-none truncate inline-block align-bottom">
+                                    {a.supplier}
+                                  </button>
+                                </span>
+                              )}
+                              {a.patient && <span className="text-xs text-slate-500 truncate max-w-[100px] sm:max-w-none">· {a.patient}</span>}
+                            </div>
+                            <span className="text-[11px] text-slate-400 tabular-nums whitespace-nowrap shrink-0">{timeAgo(a.ts)}</span>
+                          </div>
                         </div>
                       </div>
                     )
@@ -540,15 +546,56 @@ export default function NPIDetail({ npi: row, onBack, backLabel, onOpenSupplier,
       </div>
 
       <div ref={claimsRef} className="mc-card overflow-hidden scroll-mt-20">
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between gap-3">
+        <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-100 flex items-center justify-between gap-3">
           <h2 className="text-sm font-bold text-slate-900">Claims ({(claimFilter || claimWindow || claimSupplier) ? `${sortedClaims.length} of ${npi.claims.length}` : npi.claims.length})</h2>
           {(claimFilter || claimWindow || claimSupplier) && (
             <button onClick={() => { setClaimFilter(null); setClaimWindow(null); setClaimSupplier(null) }} className="text-[11px] font-semibold text-[#1E3A5F] hover:underline whitespace-nowrap">
-              {claimSupplier || (claimWindow ? claimWindow.label : `${FLAG_LABELS[claimFilter] || claimFilter} flags`)} · Clear ✕
+              Clear ✕
             </button>
           )}
         </div>
-        <div className="overflow-x-auto">
+
+        {/* Mobile card view (< sm) */}
+        <div className="sm:hidden divide-y divide-slate-100">
+          {sortedClaims.slice(0, claimsVisible).map((c) => {
+            const shown = (c.flags || []).filter((f) => !HIDDEN_FLAGS.includes(f))
+            return (
+              <div key={c.id} id={`claimrow-${c.id}`}
+                   className={`px-4 py-3 transition-colors ${c.id === highlightId ? 'bg-[#EFF6FF]' : ''}`}>
+                <div className="flex items-start justify-between gap-2 mb-1.5">
+                  <div className="min-w-0">
+                    <div className="text-[13px] font-semibold text-slate-800 truncate">{c.patient}</div>
+                    <div className="text-[11px] text-slate-400 mt-0.5">{fmtDate(c.date)}</div>
+                  </div>
+                  <div className="text-[13px] font-bold text-slate-800 tabular-nums whitespace-nowrap shrink-0">{fmtUSD(c.amount, 2)}</div>
+                </div>
+                {c.description && (
+                  <div className="text-[11px] text-slate-500 mb-1.5 line-clamp-2 leading-snug">{c.description}</div>
+                )}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className={CATEGORY_CHIP} style={CATEGORY_CHIP_STYLE}>{c.category}</span>
+                  {c.supplier && <span className="text-[11px] text-slate-400 truncate max-w-[160px]">{c.supplier}</span>}
+                  {shown.length > 0 && (
+                    <div className="flex items-center gap-1 flex-wrap">
+                      {shown.map((f) => (
+                        <button key={f} onClick={() => onFlagClick(c, f)}
+                                className="text-[10px] px-1.5 py-0.5 rounded bg-rose-50 text-rose-600 ring-1 ring-inset ring-rose-200 font-semibold hover:bg-rose-100 transition-colors whitespace-nowrap">
+                          {FLAG_LABELS[f] ?? f}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+          {sortedClaims.length === 0 && (
+            <div className="px-4 py-10 text-center text-sm text-slate-400">No claims match this filter.</div>
+          )}
+        </div>
+
+        {/* Desktop table (sm+) */}
+        <div className="hidden sm:block overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="border-b-2 border-slate-200 bg-[#F0F4F8]">
@@ -579,7 +626,7 @@ export default function NPIDetail({ npi: row, onBack, backLabel, onOpenSupplier,
                   <td className="td hidden lg:table-cell text-xs text-slate-500">{c.supplier}</td>
                   <td className="td text-right font-bold text-slate-800 tabular-nums">{fmtUSD(c.amount, 2)}</td>
                   <td className="td">
-                    <div className="flex items-center gap-1 flex-nowrap">
+                    <div className="flex items-center gap-1 flex-wrap">
                       {(() => {
                         const shown = (c.flags || []).filter((f) => !HIDDEN_FLAGS.includes(f))
                         return shown.length === 0 ? <span className="text-slate-300">—</span>
@@ -598,21 +645,21 @@ export default function NPIDetail({ npi: row, onBack, backLabel, onOpenSupplier,
           </table>
         </div>
 
-        {/* Show more footer */}
+        {/* Pagination — shared */}
         {sortedClaims.length > claimsVisible && (
-          <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between gap-4 bg-white">
+          <div className="px-4 sm:px-6 py-3 sm:py-4 border-t border-slate-100 flex items-center justify-between gap-4 bg-white">
             <span className="text-[12px] text-slate-400">
-              Showing <span className="font-semibold text-slate-600">{claimsVisible}</span> of <span className="font-semibold text-slate-600">{sortedClaims.length}</span> claims
+              Showing <span className="font-semibold text-slate-600">{claimsVisible}</span> of <span className="font-semibold text-slate-600">{sortedClaims.length}</span>
             </span>
             <button onClick={() => setClaimsVisible((v) => Math.min(v + 15, sortedClaims.length))}
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold text-[#0d1f35] bg-slate-100 hover:bg-slate-200 transition-colors">
+                    className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-[12px] sm:text-[13px] font-semibold text-[#0d1f35] bg-[#EEF2F7] hover:bg-[#dde6f0] border border-[#1B3A5C]/10 transition-colors">
               Show next {Math.min(15, sortedClaims.length - claimsVisible)}
-              <Icon name="chevronRight" size={14} className="rotate-90" stroke={2.2} />
+              <Icon name="chevronRight" size={13} className="rotate-90" stroke={2.2} />
             </button>
           </div>
         )}
         {sortedClaims.length > 0 && claimsVisible >= sortedClaims.length && sortedClaims.length > 15 && (
-          <div className="px-6 py-3.5 border-t border-slate-100 flex items-center justify-between bg-white">
+          <div className="px-4 sm:px-6 py-3.5 border-t border-slate-100 flex items-center justify-between bg-white">
             <span className="text-[12px] text-slate-400">All <span className="font-semibold text-slate-600">{sortedClaims.length}</span> claims shown</span>
             <button onClick={() => setClaimsVisible(15)} className="text-[12px] font-medium text-slate-400 hover:text-slate-600 transition-colors">
               Collapse ↑

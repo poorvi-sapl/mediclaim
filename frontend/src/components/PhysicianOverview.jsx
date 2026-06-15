@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import {
   Area, AreaChart,
-  CartesianGrid, Cell, Legend,
+  CartesianGrid, Cell,
   Pie, PieChart,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
@@ -18,15 +18,21 @@ const SUPPLIER_COLORS = {
 }
 const supplierFill = (name, idx) => SUPPLIER_COLORS[name]?.fill ?? PIE_COLORS[idx % PIE_COLORS.length]
 
-function SupplierLegend({ payload }) {
+function SupplierLegendList({ pieData }) {
   return (
-    <ul style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 12px', justifyContent: 'center', padding: 0, margin: 0, listStyle: 'none' }}>
-      {(payload || []).map((entry, i) => {
-        const custom = SUPPLIER_COLORS[entry.value]
+    <ul className="w-full mt-3 space-y-1.5 px-0.5">
+      {pieData.map((entry, i) => {
+        const custom = SUPPLIER_COLORS[entry.name]
         return (
-          <li key={i} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <span style={{ width: 8, height: 8, borderRadius: '50%', background: entry.color, display: 'inline-block', flexShrink: 0 }} />
-            <span style={{ fontSize: 11, color: custom?.text ?? '#374151', fontWeight: custom ? 600 : 400 }}>
+          <li key={i} className="flex items-center gap-2 min-w-0">
+            <span className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                  style={{ background: supplierFill(entry.name, i) }} />
+            <span className="text-[11px] leading-tight truncate"
+                  title={entry.name}
+                  style={{ color: custom?.text ?? '#374151', fontWeight: custom ? 600 : 400 }}>
+              {entry.name}
+            </span>
+            <span className="ml-auto text-[10px] text-gray-400 tabular-nums flex-shrink-0 pl-1">
               {entry.value}
             </span>
           </li>
@@ -87,11 +93,11 @@ function VennChart({ data }) {
   )
 }
 
-function ChartCard({ title, children, className = '' }) {
+function ChartCard({ title, children, className = '', stretch = false }) {
   return (
-    <div className={`bg-white rounded-2xl shadow-sm border border-gray-100 p-5 ${className}`}>
-      <p className="text-sm font-semibold text-gray-700 mb-4">{title}</p>
-      {children}
+    <div className={`bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-5 ${stretch ? 'flex flex-col' : ''} ${className}`}>
+      <p className={`text-sm font-semibold text-gray-700 mb-3 sm:mb-4 ${stretch ? 'flex-shrink-0' : ''}`}>{title}</p>
+      {stretch ? <div className="flex-1 min-h-[220px]">{children}</div> : children}
     </div>
   )
 }
@@ -161,13 +167,13 @@ export default function PhysicianOverview({ npi }) {
   const flagData = (flagTl?.months || []).map((m, i) => ({ month: m, flagged: flagTl.flagged_counts?.[i] || 0 }))
   const totalFlags = flagData.reduce((sum, d) => sum + d.flagged, 0)
   return (
-    <div className="mb-8">
+    <div className="mb-6 sm:mb-8">
       {/* ── Row 1: claims trend (2/3) + supplier donut (1/3) ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-5">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-5 mb-3 sm:mb-5">
 
-        <ChartCard title="My Claims — Last 6 Months" className="lg:col-span-2">
-          <ResponsiveContainer width="100%" height={240}>
-            <AreaChart data={trendData} margin={{ top: 5, right: 16, left: 0, bottom: 5 }}>
+        <ChartCard title="My Claims — Last 6 Months" className="lg:col-span-2" stretch>
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={trendData} margin={{ top: 10, right: 28, left: 0, bottom: 4 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
               <XAxis dataKey="month" tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} width={32} />
@@ -188,14 +194,14 @@ export default function PhysicianOverview({ npi }) {
         </ChartCard>
 
         <ChartCard title="Claims by Supplier">
-          <ResponsiveContainer width="100%" height={240}>
+          <ResponsiveContainer width="100%" height={170}>
             <PieChart>
               <Pie
                 data={pieData}
                 cx="50%"
-                cy="44%"
-                innerRadius={55}
-                outerRadius={85}
+                cy="50%"
+                innerRadius={48}
+                outerRadius={75}
                 dataKey="value"
                 paddingAngle={2}
               >
@@ -208,22 +214,22 @@ export default function PhysicianOverview({ npi }) {
                 ]}
                 contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e5e7eb' }}
               />
-              <Legend iconSize={8} iconType="circle" wrapperStyle={{ paddingTop: 4 }} content={<SupplierLegend />} />
             </PieChart>
           </ResponsiveContainer>
+          <SupplierLegendList pieData={pieData} />
         </ChartCard>
 
       </div>
 
       {/* ── Row 2: top suppliers by amount + flag timeline ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-5">
 
         <ChartCard title="Claims by Service Category">
           <VennChart data={catData} />
         </ChartCard>
 
         <ChartCard title="Monthly Flags Raised">
-          <ResponsiveContainer width="100%" height={260}>
+          <ResponsiveContainer width="100%" height={220}>
             <AreaChart data={flagData} margin={{ top: 44, right: 16, left: 0, bottom: 10 }}>
               <defs>
                 <linearGradient id="flagStroke" x1="0" y1="0" x2="1" y2="0">

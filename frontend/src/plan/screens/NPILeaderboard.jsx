@@ -71,9 +71,9 @@ function CustomSelect({ value, onChange, placeholder, options, optionGroups }) {
   function pick(val) { onChange(val); setOpen(false); setSearch('') }
 
   return (
-    <div ref={ref} className="relative">
+    <div ref={ref} className="relative w-full sm:w-auto sm:min-w-[148px]">
       <button onClick={() => setOpen(v => !v)}
-              className={`flex items-center justify-between gap-2 bg-white border rounded-lg px-3 py-2 text-[12px] font-medium transition-all min-w-[148px] ${open ? 'border-[#0d1f35]/40 ring-2 ring-[#0d1f35]/10' : 'border-slate-200 hover:border-slate-300'} ${value ? 'text-slate-800' : 'text-slate-500'}`}>
+              className={`flex items-center justify-between gap-2 bg-white border rounded-lg px-3 py-2 text-[12px] font-medium transition-all w-full ${open ? 'border-[#0d1f35]/40 ring-2 ring-[#0d1f35]/10' : 'border-slate-200 hover:border-slate-300'} ${value ? 'text-slate-800' : 'text-slate-500'}`}>
         <span className="truncate">{value || placeholder}</span>
         <Icon name="chevronDown" size={12} stroke={2.5} className={`shrink-0 text-slate-400 transition-transform duration-150 ${open ? 'rotate-180' : ''}`} />
       </button>
@@ -95,14 +95,12 @@ function CustomSelect({ value, onChange, placeholder, options, optionGroups }) {
           )}
 
           <div className="max-h-56 overflow-y-auto py-1">
-            {/* Clear / default option */}
             <button onMouseDown={() => pick('')}
                     className={`w-full text-left px-3.5 py-2 text-[12px] font-medium transition-colors flex items-center justify-between gap-3 ${!value ? 'text-[#0d1f35] bg-slate-50 font-semibold' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'}`}>
               {placeholder}
               {!value && <span className="text-[#0d1f35] text-[11px]">✓</span>}
             </button>
 
-            {/* Items */}
             {(filtered ?? (optionGroups ? [] : options)).map(opt => (
               <button key={opt} onMouseDown={() => pick(opt)}
                       className={`w-full text-left px-3.5 py-2 text-[12px] transition-colors flex items-center justify-between gap-3 ${value === opt ? 'bg-slate-50 text-[#0d1f35] font-semibold' : 'font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-800'}`}>
@@ -111,7 +109,6 @@ function CustomSelect({ value, onChange, placeholder, options, optionGroups }) {
               </button>
             ))}
 
-            {/* Grouped items (Fraud Pattern) */}
             {!filtered && optionGroups && optionGroups.map(g => (
               <div key={g.label}>
                 <div className="px-3.5 pt-2 pb-1 text-[10px] font-bold uppercase tracking-widest text-slate-400">{g.label}</div>
@@ -167,14 +164,20 @@ function RankBadge({ rank }) {
   return <span className="text-[12px] font-medium text-slate-400 tabular-nums">{rank}</span>
 }
 
+const WarnIcon = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+       strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+    <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+  </svg>
+)
+
 function exportCSV(filename, headers, rows) {
   const esc = (v) => { const s = String(v ?? ''); return /[,"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s }
   const csv = [headers, ...rows].map(r => r.map(esc).join(',')).join('\n')
   const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(new Blob([csv], { type: 'text/csv' })), download: filename })
   a.click(); URL.revokeObjectURL(a.href)
 }
-
-const SEL = "bg-white border border-slate-200 rounded-lg px-3 py-2 text-[12px] font-medium text-slate-600 outline-none cursor-pointer transition-colors hover:border-slate-300 focus:border-[#0d1f35] focus:ring-2 focus:ring-[#0d1f35]/10 pr-8"
 
 export default function NPILeaderboard({ setSelectedNPI, setActiveScreen, initialBand = 'all', search = '' }) {
   const [rows, setRows]         = useState([])
@@ -241,79 +244,173 @@ export default function NPILeaderboard({ setSelectedNPI, setActiveScreen, initia
     sorted.sort((a, b) => (b.score || 0) - (a.score || 0))
   }
 
+  function doExport() {
+    exportCSV('npi-leaderboard.csv',
+      ['Rank', 'Physician', 'NPI', 'City', 'State', 'Specialty', 'Risk Score', 'Claims', 'Billed', 'Rules Fired', 'Flags', 'Top Supplier'],
+      sorted.map((r, i) => [i + 1, r.name, r.npi, r.city, r.state, r.specialty, r.score, r.totalClaims, r.totalAmount, r.rulesFiredCount, r.physicianFlags, r.topSupplier])
+    )
+  }
+
+  const exportBtn = (extraCls = '') => (
+    <button onClick={doExport}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#1E3A5F]/20 bg-white text-[#1E3A5F] text-[12px] font-semibold hover:bg-[#EEF2F7] transition-colors ${extraCls}`}>
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+      </svg>
+      Export
+    </button>
+  )
+
   return (
-    <div className="w-full px-4 sm:px-7 py-5 sm:py-6 space-y-5">
+    <div className="w-full px-4 sm:px-7 py-4 sm:py-6 space-y-4 sm:space-y-5">
 
       {/* Page header */}
-      <div className="flex items-end justify-between gap-4">
+      <div className="flex items-start sm:items-end justify-between gap-3">
         <div>
-          <h2 className="text-display text-xl font-bold text-slate-900 tracking-tight">NPI Risk Leaderboard</h2>
-          <p className="text-sm text-slate-400 mt-0.5">Physicians ranked by composite fraud risk score</p>
+          <h2 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">NPI Risk Leaderboard</h2>
+          <p className="text-xs sm:text-sm text-slate-400 mt-0.5">Physicians ranked by composite fraud risk score</p>
         </div>
-        <span className="text-[12px] font-semibold text-slate-400 bg-white border border-slate-200 px-3 py-1.5 rounded-lg tabular-nums shrink-0">
+        <span className="text-[11px] sm:text-[12px] font-semibold text-slate-400 bg-white border border-slate-200 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg tabular-nums shrink-0">
           {rows.length.toLocaleString()} physicians
         </span>
       </div>
 
       <div className="mc-card">
 
-        {/* Filter bar */}
-        <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-100 flex flex-wrap items-center gap-2 sm:gap-3 bg-white">
+        {/* ── Filter bar ─────────────────────────────────────── */}
+        <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-100 bg-white flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
 
-          {/* Risk band segmented control */}
-          <div className="flex items-center bg-slate-100 rounded-xl p-1 gap-0.5">
-            {BANDS.map(([id, label]) => (
-              <button key={id} onClick={() => setBand(id)}
-                      className={`px-4 py-1.5 text-[12px] font-semibold rounded-lg transition-all duration-150 ${
-                        band === id
-                          ? 'bg-white text-slate-900 shadow-sm ring-1 ring-slate-200/60'
-                          : 'text-slate-500 hover:text-slate-700 hover:bg-white/50'
-                      }`}>
-                {label}
-              </button>
-            ))}
+          {/* Row 1 (mobile): band tabs + export */}
+          <div className="flex items-center gap-2">
+            <div className="flex items-center bg-slate-100 rounded-xl p-1 gap-0.5">
+              {BANDS.map(([id, label]) => (
+                <button key={id} onClick={() => setBand(id)}
+                        className={`px-3 sm:px-4 py-1.5 text-[12px] font-semibold rounded-lg transition-all duration-150 ${
+                          band === id
+                            ? 'bg-white text-slate-900 shadow-sm ring-1 ring-slate-200/60'
+                            : 'text-slate-500 hover:text-slate-700 hover:bg-white/50'
+                        }`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            {/* Export — mobile only, tucked next to band tabs */}
+            {exportBtn('sm:hidden ml-auto')}
           </div>
 
+          {/* Divider — desktop only */}
           <div className="hidden sm:block w-px h-6 bg-slate-200 mx-1 shrink-0" />
 
-          {/* Dropdowns */}
-          <CustomSelect value={specialty} onChange={setSpecialty} placeholder="All Specialties" options={specialties} />
-          <CustomSelect value={state}     onChange={setState}     placeholder="All States"      options={states} />
-          <CustomSelect
-            value={pattern} onChange={setPattern} placeholder="Fraud Pattern"
-            optionGroups={[
-              { label: 'Algorithmic Patterns', options: PATTERNS.map(p => ({ key: p.key, label: p.label })) },
-              { label: 'Physician Reported',   options: PHYSICIAN_REPORTED.map(p => ({ key: p.key, label: p.label })) },
-            ]}
-            options={[]}
-          />
+          {/* Row 2 (mobile): dropdowns in 2-col grid */}
+          <div className="grid grid-cols-2 gap-2 sm:hidden">
+            <CustomSelect value={specialty} onChange={setSpecialty} placeholder="All Specialties" options={specialties} />
+            <CustomSelect value={state}     onChange={setState}     placeholder="All States"      options={states} />
+            <div className="col-span-2">
+              <CustomSelect
+                value={pattern} onChange={setPattern} placeholder="Fraud Pattern"
+                optionGroups={[
+                  { label: 'Algorithmic Patterns', options: PATTERNS.map(p => ({ key: p.key, label: p.label })) },
+                  { label: 'Physician Reported',   options: PHYSICIAN_REPORTED.map(p => ({ key: p.key, label: p.label })) },
+                ]}
+                options={[]}
+              />
+            </div>
+          </div>
+
+          {/* Desktop dropdowns (sm:contents makes div transparent, children join parent flex) */}
+          <div className="hidden sm:contents">
+            <CustomSelect value={specialty} onChange={setSpecialty} placeholder="All Specialties" options={specialties} />
+            <CustomSelect value={state}     onChange={setState}     placeholder="All States"      options={states} />
+            <CustomSelect
+              value={pattern} onChange={setPattern} placeholder="Fraud Pattern"
+              optionGroups={[
+                { label: 'Algorithmic Patterns', options: PATTERNS.map(p => ({ key: p.key, label: p.label })) },
+                { label: 'Physician Reported',   options: PHYSICIAN_REPORTED.map(p => ({ key: p.key, label: p.label })) },
+              ]}
+              options={[]}
+            />
+          </div>
 
           {selectedPattern && (
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold bg-blue-50 text-blue-700 border border-blue-200 self-start sm:self-auto">
               {selectedPattern.label}
               <button onClick={() => setPattern('')} aria-label="Clear pattern filter"
                       className="hover:text-rose-500 transition-colors leading-none text-blue-400">✕</button>
             </span>
           )}
 
-          {/* Result count + export */}
-          <div className="ml-auto flex items-center gap-2">
+          {/* Result count (mobile, below dropdowns) */}
+          <div className="sm:hidden flex items-center gap-1.5">
             <span className="text-[12px] font-semibold text-slate-800 tabular-nums">{sorted.length.toLocaleString()}</span>
             <span className="text-[12px] text-slate-400">result{sorted.length !== 1 ? 's' : ''}</span>
-            <button onClick={() => exportCSV('npi-leaderboard.csv',
-                ['Rank', 'Physician', 'NPI', 'City', 'State', 'Specialty', 'Risk Score', 'Claims', 'Billed', 'Rules Fired', 'Flags', 'Top Supplier'],
-                sorted.map((r, i) => [i + 1, r.name, r.npi, r.city, r.state, r.specialty, r.score, r.totalClaims, r.totalAmount, r.rulesFiredCount, r.physicianFlags, r.topSupplier]))}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#1E3A5F]/20 bg-white text-[#1E3A5F] text-[12px] font-semibold hover:bg-[#EEF2F7] transition-colors">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-              </svg>
-              Export
-            </button>
+          </div>
+
+          {/* Result count + export — desktop */}
+          <div className="ml-auto hidden sm:flex items-center gap-2">
+            <span className="text-[12px] font-semibold text-slate-800 tabular-nums">{sorted.length.toLocaleString()}</span>
+            <span className="text-[12px] text-slate-400">result{sorted.length !== 1 ? 's' : ''}</span>
+            {exportBtn()}
           </div>
         </div>
 
-        {/* Table */}
-        <div className="overflow-x-auto">
+        {/* ── Mobile card view (< sm) ─────────────────────── */}
+        <div className="sm:hidden divide-y divide-slate-100">
+          {sorted.slice(0, visibleCount).map((r, idx) => {
+            const { color, track } = scoreStyle(r.score)
+            return (
+              <div key={r.id}
+                   onClick={() => { setSelectedNPI(r); setActiveScreen('detail') }}
+                   className="px-4 py-3.5 hover:bg-slate-50 active:bg-slate-100 cursor-pointer transition-colors">
+                <div className="flex items-start gap-3">
+                  {/* Rank */}
+                  <div className="shrink-0 w-6 flex justify-center mt-0.5">
+                    <RankBadge rank={idx + 1} />
+                  </div>
+
+                  {/* Main info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="text-[13px] font-semibold text-slate-800 truncate leading-tight">{r.name}</span>
+                      {r.needsManualReview && (
+                        <span className="text-amber-400 shrink-0"><WarnIcon /></span>
+                      )}
+                    </div>
+                    <div className="text-[11px] text-slate-400 mt-0.5 truncate">{r.npi} · {r.city}, {r.state}</div>
+                    {r.specialty && <div className="text-[11px] text-slate-500 mt-0.5">{r.specialty}</div>}
+                    {/* Score bar */}
+                    <div className="flex items-center gap-2 mt-2 pr-1">
+                      <span className="text-[13px] font-bold tabular-nums w-7 shrink-0" style={{ color }}>{r.score}</span>
+                      <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: track }}>
+                        <div className="h-full rounded-full" style={{ width: `${r.score}%`, backgroundColor: color }} />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right-side stats */}
+                  <div className="shrink-0 text-right ml-2">
+                    <div className="text-[13px] font-bold text-slate-700 tabular-nums whitespace-nowrap">{fmtUSD(r.totalAmount)}</div>
+                    <div className="text-[11px] text-slate-400 mt-0.5 whitespace-nowrap">{(r.totalClaims || 0).toLocaleString()} claims</div>
+                    {r.physicianFlags > 0
+                      ? <span className="inline-flex items-center justify-center min-w-[20px] h-4 px-1 rounded text-[10px] font-bold bg-rose-50 text-rose-500 ring-1 ring-inset ring-rose-200 mt-1">
+                          {r.physicianFlags}
+                        </span>
+                      : null}
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+
+          {sorted.length === 0 && (
+            <div className="px-6 py-16 text-center">
+              <p className="text-sm text-slate-400">No physicians match these filters.</p>
+              <p className="text-xs text-slate-300 mt-1">Try adjusting your search or filters.</p>
+            </div>
+          )}
+        </div>
+
+        {/* ── Desktop table view (sm+) ────────────────────── */}
+        <div className="hidden sm:block overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="border-y border-slate-100" style={{ backgroundColor: '#f8fafc' }}>
@@ -341,12 +438,10 @@ export default function NPILeaderboard({ setSelectedNPI, setActiveScreen, initia
                     onClick={() => { setSelectedNPI(r); setActiveScreen('detail') }}
                     className="hover:bg-[#f8fafc] cursor-pointer transition-colors group">
 
-                  {/* Rank */}
                   <td className="w-14 px-5 py-4 text-center">
                     <RankBadge rank={idx + 1} />
                   </td>
 
-                  {/* Physician name + NPI */}
                   <td className="px-4 py-4">
                     <div className="text-[13px] font-semibold text-slate-800 flex items-center gap-1.5 group-hover:text-[#0d1f35] transition-colors leading-tight">
                       {r.name}
@@ -363,23 +458,18 @@ export default function NPILeaderboard({ setSelectedNPI, setActiveScreen, initia
                     <div className="text-[11px] text-slate-400 tabular-nums mt-0.5">{r.npi} · {r.city}, {r.state}</div>
                   </td>
 
-                  {/* Specialty */}
                   <td className="px-4 py-4 hidden md:table-cell text-[12px] text-slate-500">{r.specialty || '—'}</td>
 
-                  {/* Risk score */}
                   <td className="px-4 py-4"><ScoreCell score={r.score} /></td>
 
-                  {/* Claims */}
                   <td className="px-4 py-4 text-right tabular-nums text-[13px] text-slate-600">
                     {(r.totalClaims || 0).toLocaleString()}
                   </td>
 
-                  {/* Billed amount */}
                   <td className="px-4 py-4 text-right tabular-nums text-[13px] font-semibold text-slate-800 hidden lg:table-cell">
                     {fmtUSD(r.totalAmount)}
                   </td>
 
-                  {/* Rules fired */}
                   <td className="px-4 py-4 text-right tabular-nums hidden lg:table-cell">
                     {pattern ? (
                       <div className="flex flex-wrap gap-1 justify-end">
@@ -402,7 +492,6 @@ export default function NPILeaderboard({ setSelectedNPI, setActiveScreen, initia
                     )}
                   </td>
 
-                  {/* Physician flags */}
                   <td className="px-4 py-4 text-right tabular-nums">
                     {r.physicianFlags > 0
                       ? <span className="inline-flex items-center justify-center min-w-[22px] h-5 px-1.5 rounded-md text-[11px] font-bold bg-rose-50 text-rose-500 ring-1 ring-inset ring-rose-200">
@@ -411,7 +500,6 @@ export default function NPILeaderboard({ setSelectedNPI, setActiveScreen, initia
                       : <span className="text-slate-300">—</span>}
                   </td>
 
-                  {/* Top supplier */}
                   <td className="px-4 py-4 hidden xl:table-cell text-[12px] text-slate-400">{r.topSupplier || '—'}</td>
                 </tr>
               ))}
@@ -428,24 +516,27 @@ export default function NPILeaderboard({ setSelectedNPI, setActiveScreen, initia
           </table>
         </div>
 
-        {/* Show more / pagination footer */}
+        {/* ── Pagination (shared) ─────────────────────────── */}
         {sorted.length > visibleCount && (
-          <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between gap-4 bg-white">
+          <div className="px-4 sm:px-6 py-3 sm:py-4 border-t border-slate-100 flex items-center justify-between gap-4 bg-white">
             <span className="text-[12px] text-slate-400">
-              Showing <span className="font-semibold text-slate-600">{visibleCount}</span> of <span className="font-semibold text-slate-600">{sorted.length}</span> physicians
+              Showing <span className="font-semibold text-slate-600">{visibleCount}</span> of{' '}
+              <span className="font-semibold text-slate-600">{sorted.length}</span>
+              <span className="hidden sm:inline"> physicians</span>
             </span>
             <button
               onClick={() => setVisibleCount(v => Math.min(v + 15, sorted.length))}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold text-[#0d1f35] bg-slate-100 hover:bg-slate-200 transition-colors">
+              className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-[12px] sm:text-[13px] font-semibold text-[#0d1f35] bg-[#EEF2F7] hover:bg-[#dde6f0] border border-[#1B3A5C]/10 transition-colors">
               Show next {Math.min(15, sorted.length - visibleCount)}
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="6 9 12 15 18 9"/>
+              </svg>
             </button>
           </div>
         )}
 
-        {/* All shown indicator */}
         {sorted.length > 0 && visibleCount >= sorted.length && sorted.length > 15 && (
-          <div className="px-6 py-3.5 border-t border-slate-100 flex items-center justify-between bg-white">
+          <div className="px-4 sm:px-6 py-3.5 border-t border-slate-100 flex items-center justify-between bg-white">
             <span className="text-[12px] text-slate-400">All <span className="font-semibold text-slate-600">{sorted.length}</span> physicians shown</span>
             <button onClick={() => setVisibleCount(15)} className="text-[12px] font-medium text-slate-400 hover:text-slate-600 transition-colors">
               Collapse ↑

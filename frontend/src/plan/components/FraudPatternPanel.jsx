@@ -125,7 +125,7 @@ function duplicatePairs(claims) {
 // Shared clickable-name styles.
 const LINK = 'font-semibold text-[#1E3A5F] hover:underline cursor-pointer'
 const SUMMARY = 'text-[12px] text-slate-400 text-center mt-4 leading-relaxed'
-const VIEWALL = 'inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-[13px] font-semibold text-slate-700 shadow-sm transition-all duration-150 hover:border-[#1E3A5F]/25 hover:bg-[#EEF2FF] hover:text-[#1E3A5F]'
+const VIEWALL = 'w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-[13px] font-semibold text-slate-700 shadow-sm transition-all duration-150 hover:border-[#1E3A5F]/25 hover:bg-[#EEF2FF] hover:text-[#1E3A5F]'
 const RED_CARD = { background: '#FEF2F2', border: '1px solid #FECACA' }
 
 function SupplierLink({ name, onOpenSupplier }) {
@@ -229,10 +229,12 @@ export default function FraudPatternPanel({ npi, label, rule, focusClaim, practi
       return (
         <div className="mt-4">
           {vol && (
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               <StatBox label="Normal" value={`${vol.avg}/wk`} />
               <StatBox label="Peak" value={`${vol.peak}/wk`} />
-              <StatBox label="Window" value={`${fmtDate(vol.start)}–${fmtDate(vol.end)}`} />
+              <div className="col-span-2 sm:col-span-1">
+                <StatBox label="Window" value={`${fmtDate(vol.start)}–${fmtDate(vol.end)}`} />
+              </div>
             </div>
           )}
           <div className={SUMMARY}>{claims.length} claims during spike window · {fmtUSD(sumAmt(claims))} total</div>
@@ -551,9 +553,9 @@ export default function FraudPatternPanel({ npi, label, rule, focusClaim, practi
             </div>
             <div className="text-[13px] text-slate-500 mt-0.5">{dom} of {tot} claims</div>
           </div>
-          <div className="mt-3 font-mono text-[12px] space-y-1">
-            <div><span className="text-[#1E3A5F]">{bar(pct)}</span> <span className="text-slate-600">{sname.slice(0, 22)} {pct != null ? `${pct}%` : ''}</span></div>
-            <div><span className="text-slate-300">{bar(opct)}</span> <span className="text-slate-500">Others {opct != null ? `${opct}%` : ''}</span></div>
+          <div className="mt-3 font-mono text-[11px] sm:text-[12px] space-y-1 overflow-hidden">
+            <div className="truncate"><span className="text-[#1E3A5F]">{bar(pct)}</span> <span className="text-slate-600">{sname.slice(0, 20)} {pct != null ? `${pct}%` : ''}</span></div>
+            <div className="truncate"><span className="text-slate-300">{bar(opct)}</span> <span className="text-slate-500">Others {opct != null ? `${opct}%` : ''}</span></div>
           </div>
           <div className="text-center mt-3"><button type="button" onClick={() => onViewClaims?.({ flag: 'SUPPLIER_CONCENTRATION', label: 'Supplier concentration' })} className={VIEWALL}>View all claims →</button></div>
         </div>
@@ -644,15 +646,20 @@ export default function FraudPatternPanel({ npi, label, rule, focusClaim, practi
   )
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-6"
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-6"
          style={{ background: 'rgba(15,23,42,0.45)', backdropFilter: 'blur(2px)' }}
          onClick={onClose}>
       {showMap ? (
-        <div className="bg-white rounded-2xl w-full max-w-[1360px] overflow-hidden flex"
-             style={{ height: '86vh', boxShadow: '0 32px 80px -12px rgba(15,23,42,0.30), 0 0 0 1px rgba(15,23,42,0.06)' }}
+        /* Geo-map modal: stacks vertically on mobile, side-by-side on desktop */
+        <div className="bg-white w-full sm:rounded-2xl sm:max-w-[1360px] overflow-hidden flex flex-col sm:flex-row rounded-t-2xl"
+             style={{ height: '92vh', maxHeight: '92vh', boxShadow: '0 32px 80px -12px rgba(15,23,42,0.30), 0 0 0 1px rgba(15,23,42,0.06)' }}
              onClick={(e) => e.stopPropagation()}>
-          <div className="w-[320px] shrink-0 overflow-y-auto p-5 border-r border-slate-100">{body}</div>
-          <div className="flex-1 h-full overflow-hidden">
+          {/* Info panel — top section on mobile, left sidebar on desktop */}
+          <div className="sm:w-[320px] shrink-0 overflow-y-auto p-4 sm:p-5 border-b sm:border-b-0 sm:border-r border-slate-100 max-h-[46vh] sm:max-h-none sm:h-full">
+            {body}
+          </div>
+          {/* Map — bottom section on mobile, fills remaining space on desktop */}
+          <div className="flex-1 min-h-[180px] overflow-hidden">
             <GeoMap
               center={practiceCoords}
               physicianLabel={`${evidence?.physicianName || 'Physician'}${practice?.city ? ` · ${practice.city}` : ''}`}
@@ -663,7 +670,8 @@ export default function FraudPatternPanel({ npi, label, rule, focusClaim, practi
           </div>
         </div>
       ) : (
-        <div className="bg-white rounded-2xl w-full max-w-[480px] max-h-[80vh] overflow-y-auto p-5"
+        /* Standard modal — slides up from bottom on mobile, centered on desktop */
+        <div className="bg-white w-full sm:rounded-2xl sm:max-w-[480px] sm:max-h-[85vh] max-h-[90vh] overflow-y-auto p-4 sm:p-5 rounded-t-2xl"
              style={{ boxShadow: '0 24px 64px -12px rgba(15,23,42,0.22)' }}
              onClick={(e) => e.stopPropagation()}>
           {body}

@@ -59,6 +59,9 @@ export default function LandingPage() {
   const { user, logout } = useAuth();
   const [openFaq, setOpenFaq] = useState(null);
 
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const closeMobile = () => setMobileMenuOpen(false);
+
   const [fullName, setFullName] = useState('Jane Smith');
   const [email, setEmail] = useState('jane@healthcare.org');
   const [orgName, setOrgName] = useState('United Health Partners');
@@ -69,37 +72,66 @@ export default function LandingPage() {
     <div className="min-h-screen bg-surface-100 text-text-primary antialiased selection:bg-brand selection:text-white">
 
       {/* 1. Navbar */}
-      <nav className="bg-[#0d1f35] text-white px-4 sm:px-6 lg:px-0 xl:px-16 2xl:px-20 py-3 sm:py-4 flex items-center justify-between sticky top-0 z-50 shadow-lg border-b border-white/5">
-        <div className="flex items-center gap-2 sm:gap-2.5 cursor-pointer" onClick={() => navigate('/')}>
-          <div className="bg-white p-1 sm:p-1.5 rounded-lg shadow-sm relative">
-            <Shield size={16} className="sm:w-5 sm:h-5 text-[#1e3a8a]" fill="#1e3a8a" fillOpacity={0.1} />
-            <Check size={10} className="sm:w-3 sm:h-3 text-[#1e3a8a] absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 font-bold" />
+      <nav className="bg-[#0d1f35] text-white px-4 sm:px-6 lg:px-10 xl:px-16 py-3 sm:py-4 sticky top-0 z-50 shadow-lg border-b border-white/5">
+        <div className="flex items-center justify-between">
+          {/* Logo */}
+          <div className="flex items-center gap-2 sm:gap-2.5 cursor-pointer" onClick={() => navigate('/')}>
+            <div className="bg-white p-1 sm:p-1.5 rounded-lg shadow-sm relative">
+              <Shield size={16} className="sm:w-5 sm:h-5 text-[#1e3a8a]" fill="#1e3a8a" fillOpacity={0.1} />
+              <Check size={10} className="sm:w-3 sm:h-3 text-[#1e3a8a] absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 font-bold" />
+            </div>
+            <span className="font-bold text-sm sm:text-lg tracking-tight">MedClaim Analytics</span>
           </div>
-          <span className="font-bold text-sm sm:text-lg tracking-tight">MedClaim Analytics</span>
+
+          {/* Desktop links */}
+          <div className="hidden md:flex items-center gap-6 lg:gap-8 text-[13px] font-semibold text-white/70">
+            <a href="#features" className="hover:text-white transition-colors">Features</a>
+            <a href="#how" className="hover:text-white transition-colors">How It Works</a>
+            <a href="#plans" className="hover:text-white transition-colors">For Health Plans</a>
+            <a href="#faq" className="hover:text-white transition-colors">FAQ</a>
+          </div>
+
+          {/* Right: sign in + hamburger */}
+          <div className="flex items-center gap-2 sm:gap-3">
+            {user ? (
+              <button onClick={() => { logout(); navigate('/welcome'); }}
+                className="text-[12px] sm:text-[13px] font-semibold px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg border border-white/20 text-white/80 hover:bg-white/10 hover:text-white transition-all">
+                Log Out
+              </button>
+            ) : (
+              <button onClick={() => navigate('/login')}
+                className="hidden md:inline-flex text-[12px] sm:text-[13px] font-semibold px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg border border-white/20 text-white/80 hover:bg-white/10 hover:text-white transition-all">
+                Sign In
+              </button>
+            )}
+            {/* Hamburger — mobile only */}
+            <button onClick={() => setMobileMenuOpen(v => !v)}
+              className="md:hidden flex flex-col justify-center items-center w-9 h-9 rounded-lg hover:bg-white/10 transition-all gap-1.5"
+              aria-label="Toggle menu">
+              <span className={`block w-5 h-0.5 bg-white transition-all duration-200 ${mobileMenuOpen ? 'rotate-45 translate-y-2' : ''}`} />
+              <span className={`block w-5 h-0.5 bg-white transition-all duration-200 ${mobileMenuOpen ? 'opacity-0' : ''}`} />
+              <span className={`block w-5 h-0.5 bg-white transition-all duration-200 ${mobileMenuOpen ? '-rotate-45 -translate-y-2' : ''}`} />
+            </button>
+          </div>
         </div>
 
-        <div className="hidden md:flex items-center gap-8 text-[13px] font-semibold text-white/70">
-          <a href="#features" className="hover:text-white transition-colors">Features</a>
-          <a href="#how" className="hover:text-white transition-colors">How It Works</a>
-          <a href="#plans" className="hover:text-white transition-colors">For Health Plans</a>
-          <a href="#faq" className="hover:text-white transition-colors">FAQ</a>
-        </div>
-
-        <div className="flex items-center gap-2 sm:gap-3">
-          {user ? (
-            <button
-              onClick={() => { logout(); navigate('/welcome'); }}
-              className="text-[12px] sm:text-[13px] font-semibold px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg border border-white/20 text-white/80 hover:bg-white/10 hover:text-white transition-all">
-              Log Out
-            </button>
-          ) : (
-            <button
-              onClick={() => navigate('/login')}
-              className="text-[12px] sm:text-[13px] font-semibold px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg border border-white/20 text-white/80 hover:bg-white/10 hover:text-white transition-all">
-              Sign In
-            </button>
-          )}
-        </div>
+        {/* Mobile dropdown */}
+        {mobileMenuOpen && (
+          <div className="md:hidden mt-3 pb-3 border-t border-white/10 flex flex-col gap-1 pt-3">
+            {[['#features','Features'],['#how','How It Works'],['#plans','For Health Plans'],['#faq','FAQ']].map(([href, label]) => (
+              <a key={href} href={href} onClick={closeMobile}
+                className="text-[14px] font-semibold text-white/80 hover:text-white hover:bg-white/10 px-3 py-2.5 rounded-lg transition-all">
+                {label}
+              </a>
+            ))}
+            {!user && (
+              <button onClick={() => { navigate('/login'); closeMobile(); }}
+                className="mt-1 text-[14px] font-semibold text-white bg-white/10 hover:bg-white/20 px-3 py-2.5 rounded-lg transition-all text-left">
+                Sign In →
+              </button>
+            )}
+          </div>
+        )}
       </nav>
 
       {/* 2. Hero Section */}
@@ -109,7 +141,7 @@ export default function LandingPage() {
         <div className="absolute inset-0 bg-gradient-to-r from-white/50 via-white/40 to-white/20 z-0 pointer-events-none" />
         <div className="absolute inset-0 bg-gradient-to-t from-white/60 via-transparent to-transparent z-0 pointer-events-none" />
 
-        <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-0 py-12 sm:py-20 relative z-10 grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 lg:gap-16 items-center">
+        <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-10 xl:px-0 py-12 sm:py-20 relative z-10 grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 lg:gap-16 items-center">
           <div className="space-y-4 sm:space-y-6 text-left">
             <div className="inline-flex items-center gap-1.5 bg-blue-50 border border-blue-200 px-2.5 sm:px-3 py-1 rounded-full shadow-sm">
               <span className="w-1 sm:w-1.5 h-1 sm:h-1.5 bg-emerald-400 rounded-full animate-pulse"></span>
@@ -137,7 +169,7 @@ export default function LandingPage() {
 
       {/* 3. Stats Bar */}
       <section className="bg-white border-b border-blue-100 py-12 sm:py-20 shadow-sm relative z-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-0">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-10 xl:px-0">
           <p className="text-center text-[10px] sm:text-[12px] font-bold text-[#1a3d7c] uppercase tracking-widest mb-8 sm:mb-14">
             Trusted by Healthcare Organizations Nationwide
           </p>
@@ -156,7 +188,7 @@ export default function LandingPage() {
 
       {/* 4. How the Feedback Loop Works */}
       <section id="how" className="py-12 sm:py-20 bg-[#1a3d7c] text-surface relative overflow-hidden">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-0 relative z-10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-10 xl:px-0 relative z-10">
           <div className="text-center max-w-3xl mx-auto mb-10 sm:mb-16">
             <span className="text-[10px] sm:text-xs font-semibold uppercase tracking-widest text-blue-200 bg-blue-900/30 px-2.5 sm:px-3 py-1 rounded-full border border-blue-400/30">
               Our Process
@@ -171,7 +203,7 @@ export default function LandingPage() {
 
           <div className="relative mb-8 sm:mb-12">
             <div className="hidden lg:block absolute top-6 sm:top-8 left-0 right-0 h-1 bg-gradient-to-r from-blue-400 via-blue-300 to-blue-400 z-0" />
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 lg:gap-0 relative z-10">
+            <div className="hidden sm:grid grid-cols-4 gap-0 relative z-10">
               {steps.map((s, i) => (
                 <div key={i} className="flex flex-col items-center">
                   <div className={`w-12 sm:w-16 h-12 sm:h-16 rounded-full border-4 flex items-center justify-center mb-6 sm:mb-9 shadow-lg ${i === 0 ? 'bg-[#E2E8F0] border-[#E2E8F0]' : 'bg-white border-blue-200'}`}>
@@ -182,7 +214,7 @@ export default function LandingPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5 lg:gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5 lg:gap-6">
             {steps.map((s, i) => (
               <div key={i} className="bg-white rounded-lg sm:rounded-2xl p-4 sm:p-5 shadow-lg hover:shadow-xl transition-all flex flex-col">
                 <div className="text-[#1a3d7c] font-bold text-sm sm:text-base mb-1.5 sm:mb-2">{s.num}</div>
@@ -196,7 +228,7 @@ export default function LandingPage() {
 
       {/* 5. Features Section */}
       <section id="features" className="py-16 sm:py-24 bg-gradient-to-b from-blue-50 to-white border-b border-blue-100">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-0">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-10 xl:px-0">
           <div className="text-center max-w-3xl mx-auto mb-12 sm:mb-16">
             <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-[#1a3d7c] tracking-tight mt-2 sm:mt-4 mb-3 sm:mb-4">
               Built for Healthcare Integrity
@@ -227,11 +259,11 @@ export default function LandingPage() {
       </section>
 
       {/* 6. Built For Health Plans / Request Demo */}
-      <section id="plans" className="py-12 sm:py-20 relative text-white overflow-hidden" style={{backgroundImage: `url(${imageCard})`, backgroundSize: 'cover', backgroundPosition: 'right center', backgroundAttachment: 'fixed', backgroundRepeat: 'no-repeat'}}>
+      <section id="plans" className="py-12 sm:py-20 relative text-white overflow-hidden" style={{backgroundImage: `url(${imageCard})`, backgroundSize: 'cover', backgroundPosition: 'right center', backgroundRepeat: 'no-repeat'}}>
         <div className="absolute inset-0 bg-gradient-to-r from-[#1a3d7c]/90 via-[#1a3d7c]/70 to-[#1a3d7c]/30 z-0 pointer-events-none" />
         <div className="absolute inset-0 opacity-5 bg-[radial-gradient(#ffffff_1px,transparent_1px)] [background-size:16px_16px] pointer-events-none" />
 
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-0 relative z-10 grid grid-cols-1 lg:grid-cols-2 gap-8 sm:gap-12 lg:gap-16 items-center">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-10 xl:px-0 relative z-10 grid grid-cols-1 lg:grid-cols-2 gap-8 sm:gap-12 lg:gap-16 items-center">
           <div className="space-y-3 sm:space-y-4 text-left">
             <span className="text-[9px] sm:text-[11px] font-bold text-blue-300 uppercase tracking-widest bg-blue-900/60 border border-blue-700/40 px-2.5 sm:px-3 py-1 rounded-md w-fit inline-block">
               BUILT FOR HEALTH PLANS
@@ -310,7 +342,7 @@ export default function LandingPage() {
 
       {/* 7. FAQ Section */}
       <section id="faq" className="py-12 sm:py-20 bg-white border-b border-blue-100">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-0">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-10 xl:px-0">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 sm:gap-12 lg:gap-16 items-start">
             <div className="flex flex-col items-center lg:items-start">
               <div className="text-center lg:text-left mb-4 sm:mb-6 w-full">
@@ -351,8 +383,8 @@ export default function LandingPage() {
       </section>
 
       {/* 8. Footer */}
-      <footer className="bg-[#0d1f35] text-white py-16 px-4 sm:px-6 lg:px-0 border-t border-white/5">
-        <div className="max-w-7xl mx-auto px-0 grid grid-cols-1 md:grid-cols-4 gap-10">
+      <footer className="bg-[#0d1f35] text-white py-12 sm:py-16 px-4 sm:px-6 lg:px-10 xl:px-0 border-t border-white/5">
+        <div className="max-w-7xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 sm:gap-10">
           <div className="space-y-3">
             <div className="flex items-center gap-2.5 cursor-pointer" onClick={() => navigate('/')}>
               <div className="bg-white p-1.5 rounded-lg shadow-sm relative">
@@ -368,18 +400,18 @@ export default function LandingPage() {
 
           <div>
             <h5 className="text-white text-sm font-bold tracking-wider uppercase mb-3.5">Quick Links</h5>
-            <ul className="space-y-2 text-[13px] font-medium">
-              <li><a href="#features" className="hover:text-white transition-colors">MedClaim Analytics</a></li>
+            <ul className="space-y-2 text-[13px] font-medium text-slate-400">
+              <li><a href="#features" className="hover:text-white transition-colors">Features</a></li>
               <li><a href="#how" className="hover:text-white transition-colors">How It Works</a></li>
               <li><a href="#plans" className="hover:text-white transition-colors">For Physicians</a></li>
               <li><a href="#plans" className="hover:text-white transition-colors">For Investigators</a></li>
-              <li><a href="#faq" className="hover:text-white transition-colors">Pricing</a></li>
+              <li><a href="#faq" className="hover:text-white transition-colors">FAQ</a></li>
             </ul>
           </div>
 
           <div>
             <h5 className="text-white text-sm font-bold tracking-wider uppercase mb-3.5">Support</h5>
-            <ul className="space-y-2 text-[13px] font-medium">
+            <ul className="space-y-2 text-[13px] font-medium text-slate-400">
               <li><button type="button" className="hover:text-white transition-colors text-left">Help Center</button></li>
               <li><button type="button" className="hover:text-white transition-colors text-left">API Docs</button></li>
               <li><button type="button" className="hover:text-white transition-colors text-left">Contact Support</button></li>
@@ -388,7 +420,7 @@ export default function LandingPage() {
 
           <div>
             <h5 className="text-white text-sm font-bold tracking-wider uppercase mb-3.5">Legal</h5>
-            <ul className="space-y-2 text-[13px] font-medium">
+            <ul className="space-y-2 text-[13px] font-medium text-slate-400">
               <li><button type="button" className="hover:text-white transition-colors text-left">Privacy Policy</button></li>
               <li><button type="button" className="hover:text-white transition-colors text-left">Terms of Service</button></li>
               <li><button type="button" className="hover:text-white transition-colors text-left">Compliance</button></li>
@@ -396,7 +428,7 @@ export default function LandingPage() {
           </div>
         </div>
 
-        <div className="max-w-7xl mx-auto px-0 border-t border-slate-700/60 mt-12 pt-6 flex flex-col sm:flex-row items-center justify-between text-sm text-slate-400 font-medium">
+        <div className="max-w-7xl mx-auto border-t border-slate-700/60 mt-10 sm:mt-12 pt-5 sm:pt-6 flex flex-col sm:flex-row items-center justify-between text-sm text-slate-400 font-medium gap-2">
           <span>© 2026 MedClaim Analytics. All rights reserved.</span>
           <span className="mt-2 sm:mt-0 tracking-wide uppercase text-xs bg-slate-700/40 border border-slate-600/30 px-2 py-0.5 rounded text-slate-300">
             HIPAA COMPLIANT ARCHITECTURE

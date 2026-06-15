@@ -33,8 +33,8 @@ function PillTick({ x, y, payload }) {
 
 function ChartCard({ title, subtitle, children, className = '' }) {
   return (
-    <div className={`bg-white rounded-2xl shadow-sm border border-gray-100 p-5 ${className}`}>
-      <div className="mb-4">
+    <div className={`bg-white rounded-2xl shadow-sm border border-gray-100 p-3 sm:p-5 ${className}`}>
+      <div className="mb-2 sm:mb-4">
         <p className="text-sm font-semibold text-gray-800">{title}</p>
         {subtitle && <p className="text-xs text-gray-400 mt-0.5">{subtitle}</p>}
       </div>
@@ -83,10 +83,10 @@ export default function DashboardOverview() {
 
   if (loading) {
     return (
-      <section className="mb-8">
-        <h2 className="text-lg font-bold text-gray-900 mb-1">Dashboard Overview</h2>
-        <p className="text-xs text-gray-400 mb-5">Live snapshot of your claims portfolio</p>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <section className="mb-4 sm:mb-8">
+        <h2 className="text-base sm:text-lg font-bold text-gray-900 mb-0.5 sm:mb-1">Dashboard Overview</h2>
+        <p className="text-xs text-gray-400 mb-3 sm:mb-5">Live snapshot of your claims portfolio</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-5">
           {[0, 1, 2, 3].map(i => <SkeletonCard key={i} />)}
         </div>
       </section>
@@ -121,13 +121,13 @@ export default function DashboardOverview() {
   }))
 
   return (
-    <section className="mb-8">
-      <div className="flex flex-col gap-5">
-      <div className="grid grid-cols-5 gap-5">
+    <section className="mb-4 sm:mb-8">
+      <div className="flex flex-col gap-3 sm:gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-3 sm:gap-5">
 
         {/* Chart 1 — Fraud Rule Breakdown (vertical bar) — 60% */}
-        <ChartCard title="Fraud Rule Firing Frequency" subtitle="Hover a bar for full rule name" className="col-span-3">
-          <ResponsiveContainer width="100%" height={260}>
+        <ChartCard title="Fraud Rule Firing Frequency" subtitle="Hover a bar for full rule name" className="col-span-1 lg:col-span-3">
+          <ResponsiveContainer width="100%" height={240}>
             <BarChart data={ruleData} margin={{ top: 5, right: 16, left: 0, bottom: 28 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
               <XAxis
@@ -155,8 +155,8 @@ export default function DashboardOverview() {
         </ChartCard>
 
         {/* Chart 2 — Top 10 NPIs by Risk Score (list) — 40% */}
-        <ChartCard title="Top 10 NPIs by Risk Score" subtitle="Ranked by risk score · color = risk band" className="col-span-2">
-          <div className="space-y-0.5 max-h-[260px] overflow-y-auto">
+        <ChartCard title="Top 10 NPIs by Risk Score" subtitle="Ranked by risk score · color = risk band" className="col-span-1 lg:col-span-2">
+          <div className="space-y-0.5 max-h-[220px] sm:max-h-[260px] overflow-y-auto">
             {npiData.map((n, i) => {
               const bs = n.band === 'high'
                 ? { badge: 'bg-red-50 text-red-600 ring-red-200/60',           label: 'High Risk' }
@@ -179,10 +179,10 @@ export default function DashboardOverview() {
         </ChartCard>
 
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-5">
         {/* Chart 3 — Claims Trend (dual line) */}
         <ChartCard title="Claims Trend — Last 6 Months" subtitle="Total vs Fraud Rules Hit">
-          <ResponsiveContainer width="100%" height={260}>
+          <ResponsiveContainer width="100%" height={240}>
             <LineChart data={trendData} margin={{ top: 5, right: 16, left: 0, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
               <XAxis dataKey="month" tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
@@ -199,7 +199,7 @@ export default function DashboardOverview() {
 
         {/* Chart 4 — NPI Risk Distribution (donut) */}
         <ChartCard title="NPI Risk Distribution" subtitle={`${total} total NPIs monitored`}>
-          <ResponsiveContainer width="100%" height={260}>
+          <ResponsiveContainer width="100%" height={240}>
             <PieChart>
               <Pie
                 data={riskPie}

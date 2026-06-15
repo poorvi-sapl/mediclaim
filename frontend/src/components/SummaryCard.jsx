@@ -27,41 +27,43 @@ function HoverPreview({ children, url }) {
     <div className="relative" onMouseEnter={show} onMouseLeave={hide}>
       {children}
       {shouldLoad && (
-        <div
-          onMouseEnter={show} onMouseLeave={hide}
-          style={{
-            position: 'absolute', top: 'calc(100% + 12px)', left: '50%',
-            transform: 'translateX(-50%)', zIndex: 50,
-            opacity: visible ? 1 : 0, visibility: visible ? 'visible' : 'hidden',
-            pointerEvents: visible ? 'auto' : 'none',
-            transition: 'opacity 0.18s cubic-bezier(0.16,1,0.3,1), visibility 0.18s',
-            filter: 'drop-shadow(0 16px 48px rgba(15,23,42,0.22))',
-          }}
-        >
-          <div style={{ position: 'absolute', top: -6, left: '50%', transform: 'translateX(-50%)', width: 0, height: 0, borderLeft: '7px solid transparent', borderRight: '7px solid transparent', borderBottom: '7px solid #1e1e2e' }} />
-          <div style={{ width: THUMB_W, background: '#1e1e2e', borderRadius: '10px 10px 0 0', padding: '7px 10px', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ display: 'flex', gap: 5 }}>
-              {['#ff5f57', '#febc2e', '#28c840'].map(col => (
-                <span key={col} style={{ width: 9, height: 9, borderRadius: '50%', background: col, display: 'block' }} />
-              ))}
-            </div>
-            <div style={{ flex: 1, background: '#2d2d3f', borderRadius: 5, padding: '2px 8px', fontSize: 9, color: '#9ca3af', textAlign: 'center', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
-              {typeof window !== 'undefined' ? window.location.host : ''}/claims
-            </div>
-          </div>
-          <div style={{ width: THUMB_W, height: THUMB_H, overflow: 'hidden', borderRadius: '0 0 10px 10px', border: '1px solid #1e1e2e', borderTop: 'none', position: 'relative', background: '#f8fafc' }}>
-            <iframe
-              src={url}
-              title="page-preview"
-              tabIndex={-1}
-              style={{ width: 1440, height: 900, transform: `scale(${PREVIEW_SCALE})`, transformOrigin: '0 0', border: 'none', pointerEvents: 'none' }}
-              onLoad={() => setLoaded(true)}
-            />
-            {!loaded && (
-              <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc' }}>
-                <div className="preview-spinner" />
+        <div className="hidden sm:block">
+          <div
+            onMouseEnter={show} onMouseLeave={hide}
+            style={{
+              position: 'absolute', top: 'calc(100% + 12px)', left: '50%',
+              transform: 'translateX(-50%)', zIndex: 50,
+              opacity: visible ? 1 : 0, visibility: visible ? 'visible' : 'hidden',
+              pointerEvents: visible ? 'auto' : 'none',
+              transition: 'opacity 0.18s cubic-bezier(0.16,1,0.3,1), visibility 0.18s',
+              filter: 'drop-shadow(0 16px 48px rgba(15,23,42,0.22))',
+            }}
+          >
+            <div style={{ position: 'absolute', top: -6, left: '50%', transform: 'translateX(-50%)', width: 0, height: 0, borderLeft: '7px solid transparent', borderRight: '7px solid transparent', borderBottom: '7px solid #1e1e2e' }} />
+            <div style={{ width: THUMB_W, background: '#1e1e2e', borderRadius: '10px 10px 0 0', padding: '7px 10px', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ display: 'flex', gap: 5 }}>
+                {['#ff5f57', '#febc2e', '#28c840'].map(col => (
+                  <span key={col} style={{ width: 9, height: 9, borderRadius: '50%', background: col, display: 'block' }} />
+                ))}
               </div>
-            )}
+              <div style={{ flex: 1, background: '#2d2d3f', borderRadius: 5, padding: '2px 8px', fontSize: 9, color: '#9ca3af', textAlign: 'center', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+                {typeof window !== 'undefined' ? window.location.host : ''}/claims
+              </div>
+            </div>
+            <div style={{ width: THUMB_W, height: THUMB_H, overflow: 'hidden', borderRadius: '0 0 10px 10px', border: '1px solid #1e1e2e', borderTop: 'none', position: 'relative', background: '#f8fafc' }}>
+              <iframe
+                src={url}
+                title="page-preview"
+                tabIndex={-1}
+                style={{ width: 1440, height: 900, transform: `scale(${PREVIEW_SCALE})`, transformOrigin: '0 0', border: 'none', pointerEvents: 'none' }}
+                onLoad={() => setLoaded(true)}
+              />
+              {!loaded && (
+                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc' }}>
+                  <div className="preview-spinner" />
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -78,23 +80,23 @@ function KpiTile({ icon, label, value, accent = 'slate', valueClass = '', loadin
     rose:   { icon: 'bg-red-100 text-red-400',         chevDot: 'bg-red-100 text-red-400' },
   }
   const s = styles[accent] || styles.slate
-  const cls = `group mc-card p-4 flex flex-col transition-all duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[0_10px_20px_-6px_rgba(15,23,42,0.15)] w-full text-left ${onClick ? 'cursor-pointer' : ''}`
+  const cls = `group mc-card p-3 sm:p-4 flex flex-col transition-all duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[0_10px_20px_-6px_rgba(15,23,42,0.15)] w-full text-left ${onClick ? 'cursor-pointer' : ''}`
   const inner = (
     <>
-      <div className="flex items-center justify-between mb-3">
-        <div className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all duration-200 group-hover:scale-110 group-hover:rotate-6 group-hover:brightness-90 group-hover:shadow-[0_4px_12px_-2px_rgba(0,0,0,0.18)] ${s.icon}`}>
-          <Icon name={icon} size={16} />
+      <div className="flex items-center justify-between mb-2 sm:mb-3">
+        <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center transition-all duration-200 group-hover:scale-110 group-hover:rotate-6 group-hover:brightness-90 group-hover:shadow-[0_4px_12px_-2px_rgba(0,0,0,0.18)] ${s.icon}`}>
+          <Icon name={icon} size={15} />
         </div>
         {onClick && (
-          <span className={`flex items-center justify-center w-6 h-6 rounded-full transition-all duration-200 group-hover:translate-x-0.5 ${s.chevDot}`}>
-            <Icon name="chevronRight" size={12} stroke={2.5} />
+          <span className={`flex items-center justify-center w-5 h-5 sm:w-6 sm:h-6 rounded-full transition-all duration-200 group-hover:translate-x-0.5 ${s.chevDot}`}>
+            <Icon name="chevronRight" size={11} stroke={2.5} />
           </span>
         )}
       </div>
-      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">{label}</div>
+      <div className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">{label}</div>
       {loading
-        ? <div className="h-7 w-16 rounded bg-slate-100 animate-pulse mt-1.5" />
-        : <div className={`text-2xl font-bold tabular-nums mt-1 text-slate-900 ${valueClass}`}>{value}</div>}
+        ? <div className="h-6 sm:h-7 w-14 sm:w-16 rounded bg-slate-100 animate-pulse mt-1.5" />
+        : <div className={`text-xl sm:text-2xl font-bold tabular-nums mt-1 text-slate-900 ${valueClass}`}>{value}</div>}
     </>
   )
   if (onClick) return <button onClick={onClick} className={cls}>{inner}</button>
@@ -120,18 +122,18 @@ export function PhysicianHeader({ physician = DEFAULT_PHYSICIAN }) {
   const initials = (physician.name || 'Dr')
     .replace('Dr. ', '').split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase()
   return (
-    <div className="mc-card px-5 py-3.5 relative overflow-hidden">
-      <div className="flex items-center gap-3">
-        <div className="w-9 h-9 rounded-xl bg-[#1B3A5C] flex items-center justify-center text-sm font-bold text-white flex-shrink-0">{initials}</div>
-        <div className="flex items-center gap-2.5 flex-wrap min-w-0">
-          <h1 className="text-[15px] font-bold text-slate-900 whitespace-nowrap">{physician.name || '—'}</h1>
+    <div className="mc-card px-4 sm:px-5 py-3 sm:py-3.5 relative overflow-hidden">
+      <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+        <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-[#1B3A5C] flex items-center justify-center text-xs sm:text-sm font-bold text-white flex-shrink-0">{initials}</div>
+        <div className="flex items-center gap-2 flex-wrap min-w-0 flex-1">
+          <h1 className="text-[13px] sm:text-[15px] font-bold text-slate-900 truncate max-w-[180px] sm:max-w-none">{physician.name || '—'}</h1>
           <span className="text-slate-300 hidden sm:inline text-xs">·</span>
-          <p className="text-xs text-slate-500 whitespace-nowrap hidden sm:block">
+          <p className="text-xs text-slate-500 hidden sm:block whitespace-nowrap">
             {physician.specialty || 'Physician'} · {[physician.city, physician.state].filter(Boolean).join(', ') || '—'}
           </p>
-          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-[#EEF2F7] text-[#1B3A5C] ring-1 ring-[#1B3A5C]/10 tabular-nums whitespace-nowrap">NPI {physician.npi}</span>
+          <span className="text-[9px] sm:text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-[#EEF2F7] text-[#1B3A5C] ring-1 ring-[#1B3A5C]/10 tabular-nums whitespace-nowrap">NPI {physician.npi}</span>
         </div>
-        <div className="ml-auto hidden sm:block text-slate-200"><Icon name="shield" size={32} stroke={1.4} /></div>
+        <div className="ml-auto hidden sm:block text-slate-200 flex-shrink-0"><Icon name="shield" size={28} stroke={1.4} /></div>
       </div>
     </div>
   )
@@ -139,16 +141,18 @@ export function PhysicianHeader({ physician = DEFAULT_PHYSICIAN }) {
 
 export function ReviewBanner({ pendingCount = 0, unknownCount = 0, setActiveScreen }) {
   return (
-    <div className="mc-card px-6 py-4 flex items-center gap-4">
-      <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-500 flex items-center justify-center flex-shrink-0"><Icon name="alertTri" size={18} /></div>
-      <div className="min-w-0">
-        <div className="text-sm font-semibold text-slate-800">
-          {pendingCount > 0 ? `You have ${pendingCount} claims that need a quick review.` : "You're all caught up — no claims pending review."}
+    <div className="mc-card px-4 sm:px-6 py-3.5 sm:py-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+      <div className="flex items-start sm:items-center gap-3 sm:gap-4 flex-1 min-w-0">
+        <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-500 flex items-center justify-center flex-shrink-0"><Icon name="alertTri" size={18} /></div>
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-slate-800">
+            {pendingCount > 0 ? `You have ${pendingCount} claims that need a quick review.` : "You're all caught up — no claims pending review."}
+          </div>
+          {unknownCount > 0 && <div className="text-xs text-slate-500 mt-0.5">{unknownCount} came from suppliers flagged on your account.</div>}
         </div>
-        {unknownCount > 0 && <div className="text-xs text-slate-500 mt-0.5">{unknownCount} came from suppliers flagged on your account.</div>}
       </div>
       <button onClick={() => setActiveScreen('claims')}
-              className="ml-auto flex-shrink-0 inline-flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-semibold text-[#1B3A5C] bg-[#EEF2F7] hover:bg-[#dde6f0] border border-[#1B3A5C]/10 hover:border-[#1B3A5C]/20 transition-all duration-200 hover:-translate-y-px">
+              className="w-full sm:w-auto sm:ml-auto flex-shrink-0 inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-[13px] font-semibold text-[#1B3A5C] bg-[#EEF2F7] hover:bg-[#dde6f0] border border-[#1B3A5C]/10 hover:border-[#1B3A5C]/20 transition-all duration-200 hover:-translate-y-px">
         Review Pending Claims
         <Icon name="chevronRight" size={13} stroke={2.5} />
       </button>
@@ -167,7 +171,7 @@ export function StatCardGrid({ summary = DEFAULT_SUMMARY, pendingCount = 0, setA
   const _base = `${window.location.origin}${window.location.pathname}?preview=1&screen=claims`
   const wrap = (url, tile) => IS_PREVIEW ? tile : <HoverPreview url={url}>{tile}</HoverPreview>
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
       {wrap(_base,
         <KpiTile icon="claims" label="Claims This Month"       value={(summary.totalClaimsMonth || 0).toLocaleString()} accent="navy"
                  onClick={() => goClaims({ reviewed: 'all' })} />
@@ -194,7 +198,7 @@ export default function SummaryCard({ setActiveScreen, pendingCount = 0, unknown
   }
 
   return (
-    <div className="w-full px-7 py-7">
+    <div className="w-full px-4 sm:px-7 py-4 sm:py-7">
       {/* Header card — hidden when rendered separately at the top */}
       {!hideHeader && <div className="mb-6"><PhysicianHeader physician={physician} /></div>}
 

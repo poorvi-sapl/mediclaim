@@ -13,15 +13,15 @@ function KpiTile({ icon, label, value, accent = 'slate', valueClass = '', loadin
   }
   const s = styles[accent] || styles.slate
   return (
-    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm px-5 py-4 flex items-center gap-4 group cursor-default transition-all duration-200 hover:-translate-y-1 hover:shadow-md hover:border-slate-200">
-      <div className={`w-11 h-11 rounded-full flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-110 ${s.wrap}`}>
-        <Icon name={icon} size={18} className={s.icon} />
+    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm px-3 py-3 sm:px-5 sm:py-4 flex items-center gap-2.5 sm:gap-4 group cursor-default transition-all duration-200 hover:-translate-y-1 hover:shadow-md hover:border-slate-200">
+      <div className={`w-9 h-9 sm:w-11 sm:h-11 rounded-full flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-110 ${s.wrap}`}>
+        <Icon name={icon} size={16} className={s.icon} />
       </div>
       <div className="min-w-0">
         {loading
-          ? <div className="h-7 w-20 rounded-lg bg-slate-100 animate-pulse" />
-          : <div className={`text-[1.45rem] font-bold tabular-nums leading-none tracking-tight text-slate-900 ${valueClass}`}>{value}</div>}
-        <div className="text-[11px] font-medium text-slate-400 mt-1 uppercase tracking-wider leading-none">{label}</div>
+          ? <div className="h-6 sm:h-7 w-14 sm:w-20 rounded-lg bg-slate-100 animate-pulse" />
+          : <div className={`text-xl sm:text-[1.45rem] font-bold tabular-nums leading-none tracking-tight text-slate-900 ${valueClass}`}>{value}</div>}
+        <div className="text-[10px] sm:text-[11px] font-medium text-slate-400 mt-1 uppercase tracking-wider leading-none">{label}</div>
       </div>
     </div>
   )
@@ -543,9 +543,9 @@ export default function ClaimsTable({ npi = PHYSICIAN_NPI, onActioned, supplierF
   })()
 
   return (
-    <div className="w-full px-7 py-7">
+    <div className="w-full px-4 sm:px-7 py-4 sm:py-7">
       {/* Stat cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-5">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4 mb-4 sm:mb-5">
         <KpiTile icon="doc"      label="Total Claims"     value={(totalCount    || 0).toLocaleString()} accent="blue"    loading={loading} />
         <KpiTile icon="check"    label="Confirmed"        value={(confirmedCount || 0).toLocaleString()} accent="emerald" loading={loading} valueClass={confirmedCount > 0 ? 'text-emerald-600' : ''} />
         <KpiTile icon="x"        label="Disputed"         value={(disputedCount  || 0).toLocaleString()} accent="rose"    loading={loading} valueClass={disputedCount  > 0 ? 'text-rose-500'    : ''} />
@@ -555,19 +555,19 @@ export default function ClaimsTable({ npi = PHYSICIAN_NPI, onActioned, supplierF
 
       <div className="mc-card">
         {/* Filter bar */}
-        <div className="px-5 py-3.5 border-b border-slate-100 flex flex-wrap items-center gap-2.5">
-          {/* Review status toggle */}
+        <div className="px-4 sm:px-5 py-3 sm:py-3.5 border-b border-slate-100 flex flex-wrap items-center gap-2 sm:gap-2.5">
+          {/* Row 1: Review tabs + category + last30 */}
           <div className="flex items-center gap-0.5 bg-slate-100 rounded-xl p-1 shrink-0">
             {[['all', 'All'], ['unreviewed', 'Unreviewed'], ['reviewed', 'Reviewed']].map(([id, label]) => (
               <button key={id} onClick={() => setFilter('reviewed', id)}
-                      className={`px-3.5 py-1.5 text-[12px] font-semibold rounded-lg transition-all duration-150 ${filters.reviewed === id ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-white/60'}`}>
+                      className={`px-2.5 sm:px-3.5 py-1.5 text-[12px] font-semibold rounded-lg transition-all duration-150 ${filters.reviewed === id ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-white/60'}`}>
                 {label}
               </button>
             ))}
           </div>
 
-          {/* Divider */}
-          <div className="w-px h-5 bg-slate-200 mx-0.5 shrink-0" />
+          {/* Divider — hidden on mobile */}
+          <div className="hidden sm:block w-px h-5 bg-slate-200 mx-0.5 shrink-0" />
 
           {/* Category custom select */}
           <CustomSelect
@@ -578,20 +578,20 @@ export default function ClaimsTable({ npi = PHYSICIAN_NPI, onActioned, supplierF
 
           {/* Last 30 days toggle */}
           <button onClick={toggleLast30}
-                  className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[13px] font-medium border transition-all duration-150 whitespace-nowrap ${last30Active ? 'bg-[#EEF2F7] border-[#1B3A5C]/20 text-[#1B3A5C]' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50'}`}>
+                  className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[12px] sm:text-[13px] font-medium border transition-all duration-150 whitespace-nowrap ${last30Active ? 'bg-[#EEF2F7] border-[#1B3A5C]/20 text-[#1B3A5C]' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50'}`}>
             <Icon name="clock" size={13} stroke={2} />
             Last 30 Days
           </button>
 
-          {/* Search */}
-          <div className="relative min-w-[180px] max-w-xs flex-1">
+          {/* Search — full width on mobile */}
+          <div className="relative w-full sm:flex-1 sm:min-w-[180px] sm:max-w-xs">
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"><Icon name="search" size={13} /></span>
             <input type="text" placeholder="Search supplier name…" value={filters.supplier} onChange={(e) => setFilter('supplier', e.target.value)}
                    className="w-full pl-8 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-[13px] font-medium text-slate-700 placeholder-slate-400 outline-none focus:border-[#1B3A5C]/40 focus:ring-2 focus:ring-[#1B3A5C]/10 transition-all hover:border-slate-300" />
           </div>
 
           {/* Right: count + clear + export */}
-          <div className="ml-auto flex items-center gap-3 shrink-0">
+          <div className="flex items-center gap-2 sm:gap-3 sm:ml-auto shrink-0 w-full sm:w-auto justify-between sm:justify-start">
             {isActive && (
               <button onClick={clearAll}
                       className="text-[12px] font-semibold text-slate-500 hover:text-rose-500 transition-colors flex items-center gap-1">
@@ -604,7 +604,7 @@ export default function ClaimsTable({ npi = PHYSICIAN_NPI, onActioned, supplierF
                 : `${total.toLocaleString()} claim${total !== 1 ? 's' : ''}`}
             </span>
             <button onClick={handleExport}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#1E3A5F]/20 bg-white text-[#1E3A5F] text-[12px] font-semibold hover:bg-[#EEF2F7] transition-colors">
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#1E3A5F]/20 bg-white text-[#1E3A5F] text-[12px] font-semibold hover:bg-[#EEF2F7] transition-colors ml-auto sm:ml-0">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
               </svg>
@@ -616,15 +616,15 @@ export default function ClaimsTable({ npi = PHYSICIAN_NPI, onActioned, supplierF
         {/* Active supplier filter indicator + patient summary */}
         {supFilter && (
           <>
-            <div className="px-5 py-3 border-b border-slate-100 bg-gradient-to-r from-[#1B3A5C]/[0.06] to-transparent flex items-center justify-between gap-3 text-sm">
-              <span className="text-slate-700 flex items-center gap-2.5 min-w-0">
+            <div className="px-4 sm:px-5 py-3 border-b border-slate-100 bg-gradient-to-r from-[#1B3A5C]/[0.06] to-transparent flex items-center justify-between gap-3 text-sm">
+              <span className="text-slate-700 flex items-center gap-2 sm:gap-2.5 min-w-0">
                 <span className="flex items-center justify-center w-7 h-7 rounded-lg bg-[#1B3A5C]/10 text-[#1B3A5C] flex-shrink-0"><Icon name="suppliers" size={15} stroke={2.1} /></span>
-                <span className="whitespace-nowrap text-slate-500">Showing claims for</span>
-                <span className="font-bold text-[#1B3A5C] truncate">{supFilter}</span>
+                <span className="hidden sm:inline whitespace-nowrap text-slate-500">Showing claims for</span>
+                <span className="font-bold text-[#1B3A5C] truncate max-w-[160px] sm:max-w-none">{supFilter}</span>
               </span>
               <button onClick={clearSupplier}
                       className="group flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-rose-600 whitespace-nowrap rounded-lg px-2.5 py-1.5 hover:bg-rose-50 transition-colors flex-shrink-0">
-                <Icon name="x" size={13} stroke={2.4} /> Clear filter
+                <Icon name="x" size={13} stroke={2.4} /> Clear
               </button>
             </div>
             {supSummary && (
@@ -649,14 +649,78 @@ export default function ClaimsTable({ npi = PHYSICIAN_NPI, onActioned, supplierF
         )}
 
         {error ? (
-          <div className="px-6 py-5">
+          <div className="px-5 py-5">
             <div className="text-sm font-semibold text-rose-600">Couldn't load claims</div>
             <div className="text-xs text-slate-500 mt-1">{error}</div>
             <button onClick={() => setFilters((f) => ({ ...f }))} className="mt-3 text-xs font-semibold px-3 py-1.5 rounded-lg btn-navy">Retry</button>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
+          <>
+          {/* ── Mobile card view (< sm) ── */}
+          <div className="sm:hidden divide-y divide-slate-100">
+            {loading ? (
+              Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="px-4 py-3 space-y-2">
+                  <div className="h-3 rounded bg-slate-100 animate-pulse w-1/3" />
+                  <div className="h-4 rounded bg-slate-100 animate-pulse w-3/4" />
+                  <div className="h-3 rounded bg-slate-100 animate-pulse w-1/2" />
+                </div>
+              ))
+            ) : sortedItems.length === 0 ? (
+              <div className="px-5 py-12 text-center">
+                <Icon name="doc" size={32} stroke={1.4} />
+                <div className="text-sm font-semibold text-slate-500 mt-3">No claims match your filters</div>
+                {isActive && <button onClick={clearAll} className="mt-3 text-xs font-semibold text-ink hover:underline">Clear Filters</button>}
+              </div>
+            ) : sortedItems.map((claim) => {
+              const reviewed = claim.reviewed || !!claim.latestAction
+              const status = statusFor(claim)
+              const rowPending = pending && pending.claimId === claim.id
+              return (
+                <div key={claim.id} className={`px-4 py-3 ${reviewed ? 'bg-slate-50/40' : ''}`}>
+                  <div className="flex items-start justify-between gap-2 mb-1.5">
+                    <div className="min-w-0">
+                      <span className={`text-sm font-semibold ${claim.patient?.startsWith('Unknown') ? 'text-violet-600' : 'text-slate-900'}`}>{claim.patient}</span>
+                      <span className="ml-2 text-[11px] text-slate-400 tabular-nums">{fmtDate(claim.date)}</span>
+                    </div>
+                    <span className={`text-sm font-semibold tabular-nums flex-shrink-0 ${status.cls}`}>{fmtUSD(claim.amount, 2)}</span>
+                  </div>
+                  <button onClick={() => applySupplier(claim.supplier)} title={claim.supplier}
+                          className={`text-xs text-left truncate block w-full mb-1.5 ${supplierTierCls(claim)}`}>
+                    {claim.supplier}
+                  </button>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className={CATEGORY_CHIP} style={CATEGORY_CHIP_STYLE}>{claim.category}</span>
+                      <span className={`text-[11px] ${status.cls}`}>{status.label}</span>
+                    </div>
+                    <div className="flex-shrink-0">
+                      {reviewed ? (
+                        <ActionedCell key={claim.actionId || claim.id} claim={claim} onUndo={doUndo} />
+                      ) : (
+                        <div className="flex items-center gap-1.5">
+                          {ACTIONS.map((a) => {
+                            const isThis = rowPending && pending.action === a.id
+                            return (
+                              <button key={a.id} onClick={() => handleAction(claim.id, a.id)} disabled={rowPending}
+                                      aria-label={a.label}
+                                      className={`w-7 h-7 rounded-lg ring-1 ring-inset transition-all duration-150 inline-flex items-center justify-center flex-shrink-0 active:scale-95 disabled:opacity-40 ${a.cls}`}>
+                                {isThis ? <Spinner /> : <Icon name={a.icon} size={14} stroke={2.4} />}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* ── Desktop table view (sm+) ── */}
+          <div className="hidden sm:block overflow-x-auto">
+            <table className="w-full" style={{ minWidth: 700 }}>
               <colgroup>
                 {COLS.map((c) => (
                   <col key={c.key} style={c.flex ? { width: '100%' } : c.width ? { width: `${c.width}px` } : undefined} />
@@ -748,20 +812,23 @@ export default function ClaimsTable({ npi = PHYSICIAN_NPI, onActioned, supplierF
               </tbody>
             </table>
 
-            {!loading && total > 0 && (
-              <div className="flex items-center justify-between px-5 py-3 border-t border-slate-100">
-                <span className="text-[11px] text-slate-400 tabular-nums">
-                  Showing <span className="font-semibold text-slate-500">{data.items.length.toLocaleString()}</span> of <span className="font-semibold text-slate-500">{total.toLocaleString()}</span> claims
-                </span>
-                {page < totalPages - 1 && (
-                  <button onClick={() => setPage(page + 1)}
-                          className="text-[11px] font-semibold text-[#1B3A5C] px-3 py-1.5 rounded-lg border border-slate-200 bg-white cursor-pointer">
-                    Show More <span className="text-slate-400 font-normal">+{Math.min(PAGE_SIZE, total - data.items.length)}</span>
-                  </button>
-                )}
-              </div>
-            )}
           </div>
+
+          {/* Pagination — shared by both mobile card view and desktop table */}
+          {!loading && total > 0 && (
+            <div className="flex items-center justify-between px-4 sm:px-5 py-3 border-t border-slate-100 bg-white">
+              <span className="text-[11px] text-slate-400 tabular-nums">
+                Showing <span className="font-semibold text-slate-500">{data.items.length.toLocaleString()}</span> of <span className="font-semibold text-slate-500">{total.toLocaleString()}</span> claims
+              </span>
+              {page < totalPages - 1 && (
+                <button onClick={() => setPage(page + 1)}
+                        className="text-[12px] font-semibold text-[#1B3A5C] px-4 py-2 rounded-lg border border-[#1B3A5C]/20 bg-[#EEF2F7] hover:bg-[#dde6f0] transition-colors cursor-pointer">
+                  Show More <span className="text-slate-400 font-normal">+{Math.min(PAGE_SIZE, total - data.items.length)}</span>
+                </button>
+              )}
+            </div>
+          )}
+          </>
         )}
       </div>
 
