@@ -28,7 +28,7 @@ log = logging.getLogger("rules.engine")
 class RuleFlagResult:
     claim_id: UUID
     npi: str
-    supplier_id: str
+    vendor_id: str
     rule_name: str
     rule_description: str
     severity: str
@@ -61,7 +61,8 @@ def rule_volume_spike(db: Session, settings) -> list[RuleFlagResult]:
 
     recent = dict(
         db.query(Claim.npi, func.count(Claim.id))
-        .filter(Claim.date_of_service >= recent_start)
+        .filter(Claim.date_of_service >= recent_start,
+                Claim.date_of_service <= ref)
         .group_by(Claim.npi).all()
     )
     baseline = dict(
@@ -86,7 +87,7 @@ def rule_volume_spike(db: Session, settings) -> list[RuleFlagResult]:
     results = []
     if flagged:
         rows = (
-            db.query(Claim.id, Claim.npi, Claim.supplier_id)
+            db.query(Claim.id, Claim.npi, Claim.vendor_id)
             .filter(Claim.npi.in_(list(flagged)),
                     Claim.date_of_service >= recent_start)
             .all()
@@ -106,7 +107,7 @@ def rule_volume_spike(db: Session, settings) -> list[RuleFlagResult]:
 def rule_geographic_anomaly(db: Session, settings) -> list[RuleFlagResult]:
     threshold = settings.geographic_anomaly_miles
     rows = (
-        db.query(Claim.id, Claim.npi, Claim.supplier_id, Claim.patient_zip,
+        db.query(Claim.id, Claim.npi, Claim.vendor_id, Claim.patient_zip,
                  Claim.patient_lat, Claim.patient_lng,
                  NpiProfile.practice_zip, NpiProfile.practice_lat,
                  NpiProfile.practice_lng)
@@ -133,16 +134,16 @@ def rule_geographic_anomaly(db: Session, settings) -> list[RuleFlagResult]:
 def rule_cross_npi_supplier(db: Session, settings) -> list[RuleFlagResult]:
     threshold = settings.cross_npi_threshold
     counts = (
-        db.query(Claim.supplier_id, func.count(distinct(Claim.npi)))
-        .group_by(Claim.supplier_id).all()
+        db.query(Claim.vendor_id, func.count(distinct(Claim.npi)))
+        .group_by(Claim.vendor_id).all()
     )
     flagged = {sid: cnt for sid, cnt in counts if cnt > threshold}
 
     results = []
     if flagged:
         rows = (
-            db.query(Claim.id, Claim.npi, Claim.supplier_id, Claim.supplier_name)
-            .filter(Claim.supplier_id.in_(list(flagged))).all()
+            db.query(Claim.id, Claim.npi, Claim.vendor_id, Claim.vendor_name)
+            .filter(Claim.vendor_id.in_(list(flagged))).all()
         )
         for cid, npi, sid, sname in rows:
             desc = (f"Supplier '{sname}' is billing under {flagged[sid]} distinct "
@@ -157,26 +158,26 @@ def rule_cross_npi_supplier(db: Session, settings) -> list[RuleFlagResult]:
 # ---------------------------------------------------------------------------
 def rule_new_high_value_supplier(db: Session, settings) -> list[RuleFlagResult]:
     ref = _ref_date(db)
-    cutoff = ref - timedelta(days=settings.new_supplier_days_lookback)
-    amt_threshold = settings.new_supplier_amount_threshold
+    cutoff = ref - timedelta(days=settings.new_vendor_days_lookback)
+    amt_threshold = settings.new_vendor_amount_threshold
 
     pairs = (
-        db.query(Claim.npi, Claim.supplier_id, func.min(Claim.date_of_service))
-        .group_by(Claim.npi, Claim.supplier_id).all()
+        db.query(Claim.npi, Claim.vendor_id, func.min(Claim.date_of_service))
+        .group_by(Claim.npi, Claim.vendor_id).all()
     )
     new_pairs = {(npi, sid) for npi, sid, first_seen in pairs if first_seen >= cutoff}
 
     results = []
     if new_pairs:
         rows = (
-            db.query(Claim.id, Claim.npi, Claim.supplier_id, Claim.supplier_name,
+            db.query(Claim.id, Claim.npi, Claim.vendor_id, Claim.vendor_name,
                      Claim.claim_amount)
             .filter(Claim.claim_amount > amt_threshold).all()
         )
         for cid, npi, sid, sname, amount in rows:
             if (npi, sid) in new_pairs:
                 desc = (f"Supplier '{sname}' appeared for the first time under NPI "
-                        f"{npi} within the last {settings.new_supplier_days_lookback} "
+                        f"{npi} within the last {settings.new_vendor_days_lookback} "
                         f"days with claim amount ${float(amount):.2f} "
                         f"(threshold: ${amt_threshold:.2f})")
                 results.append(RuleFlagResult(cid, npi, sid,
@@ -190,7 +191,7 @@ def rule_new_high_value_supplier(db: Session, settings) -> list[RuleFlagResult]:
 # ---------------------------------------------------------------------------
 def rule_oig_leie_hit(db: Session, settings) -> list[RuleFlagResult]:
     rows = (
-        db.query(Claim.id, Claim.npi, Claim.supplier_id, Claim.supplier_name)
+        db.query(Claim.id, Claim.npi, Claim.vendor_id, Claim.vendor_name)
         .filter(Claim.oig_flagged.is_(True)).all()
     )
     results = []
@@ -214,7 +215,7 @@ def rule_duplicate_billing(db: Session, settings) -> list[RuleFlagResult]:
         .filter(Claim.hcpcs_code.isnot(None))
         .group_by(Claim.npi, Claim.patient_id, Claim.date_of_service,
                   Claim.hcpcs_code)
-        .having(func.count(func.distinct(Claim.supplier_id)) > 1)
+        .having(func.count(func.distinct(Claim.vendor_id)) > 1)
         .subquery()
     )
 
@@ -235,7 +236,7 @@ def rule_duplicate_billing(db: Session, settings) -> list[RuleFlagResult]:
                 f"({claim.hcpcs_code}) from multiple suppliers on "
                 f"{claim.date_of_service} under NPI {claim.npi} — "
                 f"possible duplicate billing")
-        results.append(RuleFlagResult(claim.id, claim.npi, claim.supplier_id,
+        results.append(RuleFlagResult(claim.id, claim.npi, claim.vendor_id,
                                       "duplicate_billing", desc, "high"))
     return results
 
@@ -254,7 +255,7 @@ def rule_identity_reuse(db: Session, settings) -> list[RuleFlagResult]:
     results = []
     if flagged:
         rows = (
-            db.query(Claim.id, Claim.npi, Claim.supplier_id, Claim.patient_id)
+            db.query(Claim.id, Claim.npi, Claim.vendor_id, Claim.patient_id)
             .filter(Claim.patient_id.in_(list(flagged))).all()
         )
         for cid, npi, sid, pid in rows:
@@ -284,7 +285,7 @@ def rule_abnormal_hospice_duration(db: Session, settings) -> list[RuleFlagResult
     results = []
     if flagged:
         crows = (
-            db.query(Claim.id, Claim.npi, Claim.supplier_id, Claim.patient_id)
+            db.query(Claim.id, Claim.npi, Claim.vendor_id, Claim.patient_id)
             .filter(Claim.service_category == "hospice",
                     Claim.patient_id.in_(list(flagged))).all()
         )
@@ -302,7 +303,7 @@ def rule_abnormal_hospice_duration(db: Session, settings) -> list[RuleFlagResult
 def rule_upcoding(db: Session, settings) -> list[RuleFlagResult]:
     mult = settings.upcoding_amount_multiplier
     floor = settings.upcoding_amount_floor
-    rows = db.query(Claim.id, Claim.npi, Claim.supplier_id,
+    rows = db.query(Claim.id, Claim.npi, Claim.vendor_id,
                     Claim.service_category, Claim.claim_amount).all()
     by_cat = defaultdict(list)
     for _cid, _npi, _sid, cat, amt in rows:
@@ -326,9 +327,9 @@ def rule_upcoding(db: Session, settings) -> list[RuleFlagResult]:
 def rule_unbundling(db: Session, settings) -> list[RuleFlagResult]:
     min_codes = settings.unbundling_min_codes
     grp = (
-        db.query(Claim.npi, Claim.patient_id, Claim.date_of_service, Claim.supplier_id)
+        db.query(Claim.npi, Claim.patient_id, Claim.date_of_service, Claim.vendor_id)
         .filter(Claim.cpt_code.isnot(None))
-        .group_by(Claim.npi, Claim.patient_id, Claim.date_of_service, Claim.supplier_id)
+        .group_by(Claim.npi, Claim.patient_id, Claim.date_of_service, Claim.vendor_id)
         .having(func.count(distinct(Claim.cpt_code)) >= min_codes)
         .subquery()
     )
@@ -337,15 +338,15 @@ def rule_unbundling(db: Session, settings) -> list[RuleFlagResult]:
             Claim.npi == grp.c.npi,
             Claim.patient_id == grp.c.patient_id,
             Claim.date_of_service == grp.c.date_of_service,
-            Claim.supplier_id == grp.c.supplier_id,
+            Claim.vendor_id == grp.c.vendor_id,
         )).all()
     )
     results = []
     for c in rows:
         desc = (f"NPI {c.npi} billed {min_codes}+ separate procedure codes for patient "
-                f"{c.patient_id} on {c.date_of_service} via '{c.supplier_name}' — "
+                f"{c.patient_id} on {c.date_of_service} via '{c.vendor_name}' — "
                 f"possible unbundling")
-        results.append(RuleFlagResult(c.id, c.npi, c.supplier_id, "unbundling", desc, "high"))
+        results.append(RuleFlagResult(c.id, c.npi, c.vendor_id, "unbundling", desc, "high"))
     return results
 
 
@@ -360,6 +361,7 @@ def run_all_rules(db: Session, settings) -> int:
     from .modifier_abuse import rule_modifier_abuse
     from .rapid_cycling import rule_rapid_cycling
     from .supplier_concentration import rule_supplier_concentration
+    from .ghost_billing import rule_ghost_billing_all
 
     # 1. idempotency — wipe existing flags
     deleted = db.query(RulesFlag).delete()
@@ -384,6 +386,7 @@ def run_all_rules(db: Session, settings) -> int:
         ("modifier_abuse", rule_modifier_abuse),
         ("rapid_cycling", rule_rapid_cycling),
         ("supplier_concentration", rule_supplier_concentration),
+        ("ghost_billing", rule_ghost_billing_all),
     ]
 
     all_results: list[RuleFlagResult] = []
@@ -400,7 +403,7 @@ def run_all_rules(db: Session, settings) -> int:
             "id": uuid4(),
             "claim_id": r.claim_id,
             "npi": r.npi,
-            "supplier_id": r.supplier_id,
+            "vendor_id": r.vendor_id,
             "rule_name": r.rule_name,
             "rule_description": r.rule_description,
             "severity": r.severity,

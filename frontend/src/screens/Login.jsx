@@ -173,6 +173,7 @@ export default function Login() {
                 {[
                   { label: 'Physician', email: 'physician@mediclaim.com', password: 'demo1234' },
                   { label: 'Payer',     email: 'payer@mediclaim.com',     password: 'demo1234' },
+                  { label: 'Vendor',    email: 'vendor@mediclaim.com',    password: 'demo1234' },
                 ].map(({ label, email: demoEmail, password: demoPw }) => (
                   <button key={label} type="button"
                           onClick={() => { setEmail(demoEmail); setPassword(demoPw); setError('') }}
@@ -208,10 +209,11 @@ export default function Login() {
               <h2 className="text-xl font-bold text-slate-900">Try a live demo</h2>
               <p className="text-sm text-slate-500 mt-1">Choose a portal to explore MediClaim instantly — no sign-up needed.</p>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {[
                 { portal: 'physician', emoji: '🩺', title: 'Physician Portal', desc: "See claims filed under your NPI, flag fraud, and dispute orders you didn't place." },
                 { portal: 'payer',    emoji: '🏥', title: 'Payer Portal',     desc: 'Investigate fraud, view NPI risk scores, and monitor live alerts across physicians.' },
+                { portal: 'vendor',   emoji: '🏢', title: 'Vendor Portal',    desc: 'DME supplier / Home Health / Hospice — view claims, respond to disputes.' },
               ].map(({ portal, emoji, title, desc }) => (
                 <div key={portal} className="border border-slate-200 rounded-xl p-5 flex flex-col hover:border-[#1a3d7c]/30 hover:shadow-md transition-all">
                   <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-xl mb-3">{emoji}</div>

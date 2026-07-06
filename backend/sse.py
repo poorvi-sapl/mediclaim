@@ -40,6 +40,6 @@ class SSEBroker:
 broker = SSEBroker()
 
 
-def broadcast_alert(event: dict) -> None:
-    """Module-level entry point used by POST /actions."""
-    broker.publish(event)
+def broadcast_alert(event: dict, recipient: str = 'plan') -> None:
+    """Module-level entry point used by POST /actions and the rules engine."""
+    broker.publish({**event, 'recipient': recipient})

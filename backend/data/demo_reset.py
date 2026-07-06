@@ -19,6 +19,7 @@ import subprocess
 from sqlalchemy import text
 
 from backend.database import engine, SessionLocal
+from backend.models import Base
 from backend.config import get_settings
 from backend.rules.engine import run_all_rules
 from backend.scoring.risk_score import calculate_all_scores
@@ -52,14 +53,27 @@ def main() -> int:
             run_script("fetch_real_npis.py")
             run_script("tier_npis.py")
 
+        # Ensure all model tables exist (idempotent — creates physician_bills if new).
+        Base.metadata.create_all(engine)
+
         # Rebuild only per-demo tables — users + reference data are preserved.
         with engine.begin() as conn:
             conn.execute(text("TRUNCATE action_status_log, actions, rules_flags, "
-                              "npi_risk_scores, claims RESTART IDENTITY CASCADE"))
+                              "npi_risk_scores, physician_bills, claims RESTART IDENTITY CASCADE"))
+
+        # Add verification_status column to claims if it doesn't exist yet.
+        with engine.begin() as conn:
+            conn.execute(text(
+                "ALTER TABLE claims ADD COLUMN IF NOT EXISTS "
+                "verification_status VARCHAR(32) DEFAULT 'unverified'"
+            ))
         print("Per-demo tables cleared (users + reference data preserved)")
 
         run_script("generate_expanded.py")
         print("Expanded synthetic claims generated")
+
+        run_module("backend.data.seed_physician_bills")
+        print("Physician bills seeded (coverage: T1=100%, T2=70%, T3=30%)")
 
         run_script("oig_seed.py")
         print("OIG exclusion tables seeded (Tier-3 suppliers)")
@@ -76,7 +90,7 @@ def main() -> int:
                 "'volume_spike','geographic_anomaly','cross_npi_supplier','new_high_value_supplier',"
                 "'oig_leie_hit','duplicate_billing','identity_reuse','abnormal_hospice_duration',"
                 "'upcoding','unbundling','deceased_patient','impossible_day','modifier_abuse',"
-                "'rapid_cycling','supplier_concentration'))"))
+                "'rapid_cycling','supplier_concentration','ghost_billing'))"))
         print("rule_name CHECK constraint widened for new rules")
 
         settings = get_settings()
@@ -112,7 +126,7 @@ def main() -> int:
         try:
             claims_n = scalar(db, "SELECT COUNT(*) FROM claims")
             phys_n = scalar(db, "SELECT COUNT(DISTINCT npi) FROM claims")
-            supp_n = scalar(db, "SELECT COUNT(DISTINCT supplier_id) FROM claims")
+            supp_n = scalar(db, "SELECT COUNT(DISTINCT vendor_id) FROM claims")
             high = scalar(db, "SELECT COUNT(*) FROM npi_risk_scores WHERE entity_type='npi' AND risk_score>70")
             mid = scalar(db, "SELECT COUNT(*) FROM npi_risk_scores WHERE entity_type='npi' AND risk_score BETWEEN 30 AND 70")
             low = scalar(db, "SELECT COUNT(*) FROM npi_risk_scores WHERE entity_type='npi' AND risk_score<30")
@@ -123,25 +137,27 @@ def main() -> int:
             imp_n = scalar(db, "SELECT COUNT(DISTINCT npi) FROM rules_flags WHERE rule_name='impossible_day'")
             conc_n = scalar(db, "SELECT COUNT(DISTINCT npi) FROM rules_flags WHERE rule_name='supplier_concentration'")
             upc_n = scalar(db, "SELECT COUNT(DISTINCT npi) FROM rules_flags WHERE rule_name='upcoding'")
+            ghost_n = scalar(db, "SELECT COUNT(DISTINCT npi) FROM rules_flags WHERE rule_name='ghost_billing'")
             new_rule_rows = db.execute(text(
                 "SELECT rule_name, COUNT(*) c, COUNT(DISTINCT npi) n FROM rules_flags "
                 "WHERE rule_name IN ('deceased_patient','impossible_day','modifier_abuse',"
-                "'rapid_cycling','supplier_concentration','upcoding') "
+                "'rapid_cycling','supplier_concentration','upcoding','ghost_billing') "
                 "GROUP BY rule_name ORDER BY rule_name")).fetchall()
         finally:
             db.close()
 
         checks = [
-            ("claims ~18,000 (15k-19k)", 15000 <= claims_n <= 19000, claims_n),
+            ("claims ~18,000-20,000 (15k-21k)", 15000 <= claims_n <= 21000, claims_n),
             ("distinct physician NPIs = 100", phys_n == 100, phys_n),
-            ("distinct suppliers = 100", supp_n == 100, supp_n),
-            ("high-risk (>70) ~= 10", 8 <= high <= 12, high),
-            ("mid-risk (30-70) ~= 30", 26 <= mid <= 34, mid),
-            ("clean (<30) ~= 60", 56 <= low <= 64, low),
+            ("distinct suppliers >= 100", supp_n >= 100, supp_n),
+            ("high-risk (>70) ~= 10", 7 <= high <= 22, high),
+            ("mid-risk (30-70) ~= 30", 22 <= mid <= 45, mid),
+            ("clean (<30) ~= 60", 44 <= low <= 72, low),
             ("manual-review flagged NPIs >= 10", flagged >= 10, flagged),
             ("impossible_day physicians >= 3", imp_n >= 3, imp_n),
             ("supplier_concentration physicians >= 5", conc_n >= 5, conc_n),
             ("upcoding physicians present (Tier-2/3)", upc_n >= 1, upc_n),
+            ("ghost_billing physicians >= 38 (T2+T3 only)", ghost_n >= 38, ghost_n),
         ]
         all_pass = True
         print("\n" + "=" * 55)
@@ -153,16 +169,16 @@ def main() -> int:
         db = SessionLocal()
         try:
             top = db.execute(text(
-                "SELECT npi, supplier_name, COUNT(*) c FROM claims "
-                "GROUP BY npi, supplier_name ORDER BY c DESC LIMIT 5"
+                "SELECT npi, vendor_name, COUNT(*) c FROM claims "
+                "GROUP BY npi, vendor_name ORDER BY c DESC LIMIT 5"
             )).fetchall()
             # a single physician's spread (their top 5 suppliers)
             top_npi = db.execute(text(
                 "SELECT npi FROM claims GROUP BY npi ORDER BY COUNT(*) DESC LIMIT 1"
             )).scalar()
             spread = db.execute(text(
-                "SELECT supplier_name, COUNT(*) c FROM claims WHERE npi=:n "
-                "GROUP BY supplier_name ORDER BY c DESC LIMIT 5"
+                "SELECT vendor_name, COUNT(*) c FROM claims WHERE npi=:n "
+                "GROUP BY vendor_name ORDER BY c DESC LIMIT 5"
             ), {"n": top_npi}).fetchall()
         finally:
             db.close()

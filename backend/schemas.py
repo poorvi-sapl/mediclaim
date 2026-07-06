@@ -14,6 +14,7 @@ class FlagBadge(BaseModel):
 
 class ClaimResponse(BaseModel):
     id: str
+    ccn: str
     patient_name: str
     patient_zip: str
     date_of_service: date
@@ -21,8 +22,8 @@ class ClaimResponse(BaseModel):
     hcpcs_code: Optional[str]
     service_description: str
     service_category: str
-    supplier_name: str
-    supplier_id: str
+    vendor_name: str
+    vendor_id: str
     supplier_npi: Optional[str]
     claim_amount: float
     oig_flagged: bool
@@ -63,8 +64,8 @@ class PhysicianSummaryResponse(BaseModel):
 
 
 class FlaggedSupplierResponse(BaseModel):
-    supplier_id: str
-    supplier_name: str
+    vendor_id: str
+    vendor_name: str
     claim_count: int
     total_amount: float
     first_flagged_at: datetime
@@ -113,12 +114,12 @@ class NpiRiskRow(BaseModel):
     total_claim_count: int
     total_claim_amount: float
     physician_flag_count: int
-    top_supplier_name: Optional[str]
+    top_vendor_name: Optional[str]
     volume_flag: bool
     geo_flag: bool
     cross_npi_flag: bool
     oig_flag: bool
-    new_supplier_flag: bool
+    new_vendor_flag: bool
     identity_reuse_flag: bool = False
     hospice_duration_flag: bool = False
     upcoding_flag: bool = False
@@ -148,8 +149,8 @@ class NpiDetailResponse(BaseModel):
 
 
 class SupplierWatchlistRow(BaseModel):
-    supplier_id: str
-    supplier_name: str
+    vendor_id: str
+    vendor_name: str
     oig_flag: bool
     distinct_npi_count: Optional[int]
     physician_flag_count: int
@@ -171,8 +172,8 @@ class PlanActionDetail(BaseModel):
     action_id: str
     npi: str
     physician_name: Optional[str]
-    supplier_name: str
-    supplier_id: Optional[str] = None
+    vendor_name: str
+    vendor_id: Optional[str] = None
     claim_id: str
     action_type: str
     amount: float
@@ -199,14 +200,14 @@ class AlertEvent(BaseModel):
     action_type: str
     physician_name: str
     npi: str
-    supplier_name: str
+    vendor_name: str
     patient_name: str
     claim_amount: float
     timestamp: str
     escalation: bool = False
     escalation_label: Optional[str] = None
     plan_status: str = "pending"
-    supplier_id: Optional[str] = None
+    vendor_id: Optional[str] = None
 
 
 def get_risk_band(score: int) -> str:

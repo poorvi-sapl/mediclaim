@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { getNpiDetail, getNpiSummary, getSuppliers } from '../../api'
+import { getNpiDetail, getNpiSummary, getSuppliers, API_BASE } from '../../api'
 import { Icon, StatCard, fmtUSD, fmtDate, timeAgo } from '../../components/ui'
 import FraudPatternPanel from '../components/FraudPatternPanel'
 
@@ -218,6 +218,8 @@ export default function NPIDetail({ npi: row, onBack, backLabel, onOpenSupplier,
   const [summary, setSummary] = useState(null)
   const [sumSource, setSumSource] = useState(null)
   const [sumLoading, setSumLoading] = useState(false)
+  const [fraudCheckLoading, setFraudCheckLoading] = useState(false)
+  const [fraudCheckResult, setFraudCheckResult] = useState(null)
   const timelineRef = useRef(null)
   const scrollToTimeline = () => timelineRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   const scrollToClaims = () => claimsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -239,7 +241,7 @@ export default function NPIDetail({ npi: row, onBack, backLabel, onOpenSupplier,
   useEffect(() => {
     const target = activeNpi || row
     let cancelled = false
-    setSummary(null); setSumSource(null); setClaimSort({ key: null, dir: null }); setClaimFilter(null); setClaimWindow(null); setClaimSupplier(null); setHighlightId(null); setData(null); setClaimsVisible(15)
+    setSummary(null); setSumSource(null); setClaimSort({ key: null, dir: null }); setClaimFilter(null); setClaimWindow(null); setClaimSupplier(null); setHighlightId(null); setData(null); setClaimsVisible(15); setFraudCheckResult(null)
     // keep the restored modal open on mount / back-navigation; clear it only when the NPI
     // actually changes. Ref-based check is StrictMode-safe (the double-invoked effect sees
     // the same NPI on its second run and skips, so it won't wipe the restored modal).
@@ -310,6 +312,24 @@ export default function NPIDetail({ npi: row, onBack, backLabel, onOpenSupplier,
     } catch (e) {
       setSummary(`Couldn't generate a summary: ${e.message}`); setSumSource('error')
     } finally { setSumLoading(false) }
+  }
+
+  async function runFraudCheck(npiId) {
+    setFraudCheckLoading(true)
+    setFraudCheckResult(null)
+    try {
+      const res = await fetch(`${API_BASE}/plan/npi/${npiId}/run-fraud-check`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+      })
+      const data = await res.json()
+      setFraudCheckResult(data)
+    } catch (e) {
+      setFraudCheckResult({ error: e.message })
+    } finally {
+      setFraudCheckLoading(false)
+    }
   }
 
   if (!row) return <div className="w-full px-4 sm:px-7 py-5 sm:py-7 text-slate-500">No NPI selected.</div>
@@ -408,6 +428,25 @@ export default function NPIDetail({ npi: row, onBack, backLabel, onOpenSupplier,
           )}
           {summary && !sumLoading && (
             <button onClick={() => genSummary(npi.npi)} className="mt-3 w-full px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-500 hover:bg-slate-50 transition-colors">Regenerate</button>
+          )}
+          <button
+            onClick={() => runFraudCheck(npi.npi)}
+            disabled={fraudCheckLoading}
+            className="mt-2 w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-red-600 hover:bg-red-700 disabled:opacity-60 text-white text-[13px] font-semibold transition-colors"
+          >
+            {fraudCheckLoading ? 'Checking…' : 'Run Fraud Check'}
+          </button>
+          {fraudCheckResult && !fraudCheckResult.error && (
+            <div className="mt-2 px-3 py-2 rounded-lg bg-rose-50 border border-rose-200 text-[12px] text-rose-700">
+              {fraudCheckResult.ghost_count > 0
+                ? `${fraudCheckResult.ghost_count} ghost billing claim${fraudCheckResult.ghost_count !== 1 ? 's' : ''} detected out of ${fraudCheckResult.checked_claims} checked`
+                : `No ghost billing detected across ${fraudCheckResult.checked_claims} claims`}
+            </div>
+          )}
+          {fraudCheckResult?.error && (
+            <div className="mt-2 px-3 py-2 rounded-lg bg-rose-50 border border-rose-200 text-[12px] text-rose-700">
+              Check failed: {fraudCheckResult.error}
+            </div>
           )}
         </div>
       </div>

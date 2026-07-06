@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import Optional
 from datetime import date, datetime
 from sqlalchemy.orm import Session
-from sqlalchemy import func, and_, text, bindparam
+from sqlalchemy import func, and_
 from backend.database import get_db
 from backend.models import Claim, NpiProfile, Action, RulesFlag
 from backend.schemas import (
@@ -40,16 +40,6 @@ def get_physician_or_404(npi: str, db: Session) -> NpiProfile:
     return profile
 
 
-def _supplier_npi_map(db: Session, names: set) -> dict:
-    """Map supplier_name -> npi from supplier_profiles (claims has no supplier_npi)."""
-    if not names:
-        return {}
-    stmt = text(
-        "SELECT supplier_name, npi FROM supplier_profiles WHERE supplier_name IN :names"
-    ).bindparams(bindparam("names", expanding=True))
-    rows = db.execute(stmt, {"names": list(names)}).fetchall()
-    return {r[0]: r[1] for r in rows}
-
 
 # ---------------------------------------------------------------------------
 # GET /physician/{npi}/summary
@@ -75,7 +65,7 @@ def physician_summary(npi: str, db: Session = Depends(get_db)):
         .filter(Claim.npi == npi, Claim.reviewed.is_(False)).scalar()
     ) or 0
     unknown_supplier_count = (
-        db.query(func.count(func.distinct(Action.supplier_id)))
+        db.query(func.count(func.distinct(Action.vendor_id)))
         .filter(Action.npi == npi, Action.action_type.in_(FLAG_ACTIONS)).scalar()
     ) or 0
 
@@ -105,6 +95,7 @@ def physician_claims(
     date_to: Optional[date] = None,
     reviewed: Optional[bool] = None,
     supplier_search: Optional[str] = None,
+    claim_search: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
     validate_npi(npi)
@@ -116,14 +107,14 @@ def physician_claims(
                     "code": "INVALID_CATEGORY"}
         )
     return build_claims_page(db, npi, page, page_size, category,
-                             date_from, date_to, reviewed, supplier_search)
+                             date_from, date_to, reviewed, supplier_search, claim_search)
 
 
 def build_claims_page(
     db: Session, npi: str, page: int = 0, page_size: int = 50,
     category: Optional[str] = None, date_from: Optional[date] = None,
     date_to: Optional[date] = None, reviewed: Optional[bool] = None,
-    supplier_search: Optional[str] = None,
+    supplier_search: Optional[str] = None, claim_search: Optional[str] = None,
 ) -> ClaimsPageResponse:
     """Paginated claims-with-flags for an NPI. Shared by the physician claims
     endpoint and the plan NPI-detail endpoint."""
@@ -137,7 +128,9 @@ def build_claims_page(
     if reviewed is not None:
         q = q.filter(Claim.reviewed.is_(reviewed))
     if supplier_search:
-        q = q.filter(Claim.supplier_name.ilike(f"%{supplier_search}%"))
+        q = q.filter(Claim.vendor_name.ilike(f"%{supplier_search}%"))
+    if claim_search:
+        q = q.filter(Claim.ccn.ilike(f"%{claim_search}%"))
 
     total = q.count()
     total_pages = (total + page_size - 1) // page_size if page_size else 0
@@ -164,8 +157,6 @@ def build_claims_page(
             entry["severities"].append(severity)
             entry["descs"].append(desc)
 
-    sup_npi = _supplier_npi_map(db, {c.supplier_name for c in claims})
-
     # latest action per claim on this page (for the Status column)
     latest_action_by_claim = {}
     if claim_ids:
@@ -182,6 +173,7 @@ def build_claims_page(
         fb = flags_by_claim.get(c.id, {"flags": [], "severities": [], "descs": []})
         items.append(ClaimResponse(
             id=str(c.id),
+            ccn=c.ccn,
             patient_name=c.patient_name,
             patient_zip=c.patient_zip,
             date_of_service=c.date_of_service,
@@ -189,9 +181,9 @@ def build_claims_page(
             hcpcs_code=c.hcpcs_code,
             service_description=c.service_description,
             service_category=c.service_category,
-            supplier_name=c.supplier_name,
-            supplier_id=c.supplier_id,
-            supplier_npi=sup_npi.get(c.supplier_name),
+            vendor_name=c.vendor_name,
+            vendor_id=c.vendor_id,
+            supplier_npi=c.vendor_npi,
             claim_amount=float(c.claim_amount),
             oig_flagged=c.oig_flagged,
             reviewed=c.reviewed,
@@ -240,40 +232,40 @@ def physician_flagged_suppliers(npi: str, db: Session = Depends(get_db)):
     # suppliers this physician has flagged, with first-flag time + flag count
     flagged = (
         db.query(
-            Action.supplier_id,
-            Action.supplier_name,
+            Action.vendor_id,
+            Action.vendor_name,
             func.min(Action.created_at).label("first_flagged_at"),
             func.count(Action.id).label("flag_count"),
         )
         .filter(Action.npi == npi, Action.action_type.in_(FLAG_ACTIONS))
-        .group_by(Action.supplier_id, Action.supplier_name)
+        .group_by(Action.vendor_id, Action.vendor_name)
         .order_by(func.min(Action.created_at).desc())
         .all()
     )
 
     items = []
-    for supplier_id, supplier_name, first_flagged_at, flag_count in flagged:
+    for vendor_id, vendor_name, first_flagged_at, flag_count in flagged:
         stats = (
             db.query(
                 func.count(Claim.id),
                 func.coalesce(func.sum(Claim.claim_amount), 0),
                 func.bool_or(Claim.oig_flagged),
             )
-            .filter(Claim.npi == npi, Claim.supplier_id == supplier_id)
+            .filter(Claim.npi == npi, Claim.vendor_id == vendor_id)
             .first()
         )
         claim_count, total_amount, oig_flagged = stats
-        # plan_status from the most recent flag action for this supplier
+        # plan_status from the most recent flag action for this vendor
         plan_status = (
             db.query(Action.plan_status)
-            .filter(Action.npi == npi, Action.supplier_id == supplier_id,
+            .filter(Action.npi == npi, Action.vendor_id == vendor_id,
                     Action.action_type.in_(FLAG_ACTIONS))
             .order_by(Action.created_at.desc())
             .limit(1).scalar()
         ) or "pending"
         items.append(FlaggedSupplierResponse(
-            supplier_id=supplier_id,
-            supplier_name=supplier_name,
+            vendor_id=vendor_id,
+            vendor_name=vendor_name,
             claim_count=claim_count or 0,
             total_amount=float(total_amount or 0),
             first_flagged_at=first_flagged_at,

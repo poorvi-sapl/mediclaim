@@ -37,7 +37,7 @@ def _claim(db, *, key, npi, patient_id, patient_name, category, supplier, suppli
         patient_zip=ZIP, patient_state=STATE, patient_lat=None, patient_lng=None,
         date_of_service=dos, cpt_code=cpt, hcpcs_code=hcpcs,
         service_description=desc, service_category=category,
-        supplier_name=supplier, supplier_id=supplier_id, supplier_zip=ZIP, supplier_state=STATE,
+        vendor_name=supplier, vendor_id=supplier_id, vendor_zip=ZIP, vendor_state=STATE,
         claim_amount=amount, plan_name=PLAN, oig_flagged=False, reviewed=False,
     ))
 

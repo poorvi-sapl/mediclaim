@@ -89,7 +89,7 @@ def _npi_rule_points(fired: set, settings) -> float:
     if "geographic_anomaly" in fired:        pts += settings.weight_geo_anomaly
     if "cross_npi_supplier" in fired:        pts += settings.weight_cross_npi
     if "oig_leie_hit" in fired:              pts += settings.weight_oig_hit
-    if "new_high_value_supplier" in fired:   pts += settings.weight_new_supplier
+    if "new_high_value_supplier" in fired:   pts += settings.weight_new_vendor
     if "duplicate_billing" in fired:         pts += settings.weight_duplicate_billing
     if "identity_reuse" in fired:            pts += settings.weight_identity_reuse
     if "abnormal_hospice_duration" in fired: pts += settings.weight_hospice_duration
@@ -113,7 +113,7 @@ def calculate_npi_scores(db: Session, settings) -> None:
     for npi, rule, n in (
         db.query(RulesFlag.npi, RulesFlag.rule_name, func.count(RulesFlag.id))
         .filter(RulesFlag.rule_name.in_(
-            ("deceased_patient", "modifier_abuse", "supplier_concentration")))
+            ("deceased_patient", "modifier_abuse", "supplier_concentration", "ghost_billing")))
         .group_by(RulesFlag.npi, RulesFlag.rule_name).all()
     ):
         _fc[npi][rule] = n
@@ -129,8 +129,8 @@ def calculate_npi_scores(db: Session, settings) -> None:
     # dominant-supplier share per npi (for the >95% concentration tier)
     _tot, _topc = defaultdict(int), defaultdict(int)
     for npi, sid, c in (
-        db.query(Claim.npi, Claim.supplier_id, func.count(Claim.id))
-        .group_by(Claim.npi, Claim.supplier_id).all()
+        db.query(Claim.npi, Claim.vendor_id, func.count(Claim.id))
+        .group_by(Claim.npi, Claim.vendor_id).all()
     ):
         _tot[npi] += c
         if c > _topc[npi]:
@@ -139,13 +139,19 @@ def calculate_npi_scores(db: Session, settings) -> None:
     def _new_rule_points(npi):
         fc, dc = _fc.get(npi, {}), _dc.get(npi, {})
         p = 0.0
-        p += min(fc.get("deceased_patient", 0) * 15, 30)
-        p += min(dc.get("impossible_day", 0) * 20, 40)
+        p += min(fc.get("deceased_patient", 0) * 15, 20)
+        p += min(dc.get("impossible_day", 0) * 15, 30)
         p += min(dc.get("rapid_cycling", 0) * 15, 30)
         p += min((fc.get("modifier_abuse", 0) // 2) * 6, 12)
         if fc.get("supplier_concentration", 0) > 0:
             share = (_topc[npi] / _tot[npi]) if _tot.get(npi) else 0
             p += 12 if share > 0.95 else 8
+        # Ghost billing: proportional to fraction of claims flagged.
+        # T3 (~70% flagged) → ~20 pts; T2 (~30%) → ~8 pts; T1 (~5%) → ~1.4 pts (noise).
+        ghost_count = fc.get("ghost_billing", 0)
+        if ghost_count > 0:
+            ghost_frac = ghost_count / max(_tot.get(npi, 1), 1)
+            p += min(ghost_frac * 28, settings.weight_ghost_billing)
         return p
 
     # PASS 1 — gather raw rule/action + continuous signals per NPI.
@@ -160,7 +166,7 @@ def calculate_npi_scores(db: Session, settings) -> None:
             func.coalesce(func.sum(Claim.claim_amount), 0)
         ).filter(Claim.npi == npi).scalar()
         supplier_count = (
-            db.query(func.count(distinct(Claim.supplier_id))).filter(Claim.npi == npi).scalar()
+            db.query(func.count(distinct(Claim.vendor_id))).filter(Claim.npi == npi).scalar()
         ) or 0
         oig_claims = db.query(func.count(Claim.id)).filter(
             Claim.npi == npi, Claim.oig_flagged.is_(True)
@@ -168,9 +174,9 @@ def calculate_npi_scores(db: Session, settings) -> None:
         flagged_frac = (oig_claims / claim_count) if claim_count else 0.0
 
         top = (
-            db.query(Claim.supplier_id, Claim.supplier_name)
+            db.query(Claim.vendor_id, Claim.vendor_name)
             .filter(Claim.npi == npi)
-            .group_by(Claim.supplier_id, Claim.supplier_name)
+            .group_by(Claim.vendor_id, Claim.vendor_name)
             .order_by(func.count(Claim.id).desc())
             .first()
         )
@@ -181,8 +187,8 @@ def calculate_npi_scores(db: Session, settings) -> None:
             raw_points=_npi_rule_points(fired, settings) + flag_contribution + _new_rule_points(npi),
             claim_count=claim_count, claim_amount=claim_amount,
             supplier_count=supplier_count, flagged_frac=flagged_frac,
-            top_supplier_id=top[0] if top else None,
-            top_supplier_name=top[1] if top else None,
+            top_vendor_id=top[0] if top else None,
+            top_vendor_name=top[1] if top else None,
         ))
 
     # Population percentiles for the continuous signals (spread the scores).
@@ -206,7 +212,7 @@ def calculate_npi_scores(db: Session, settings) -> None:
             geo_flag="geographic_anomaly" in fired,
             cross_npi_flag="cross_npi_supplier" in fired,
             oig_flag="oig_leie_hit" in fired,
-            new_supplier_flag="new_high_value_supplier" in fired,
+            new_vendor_flag="new_high_value_supplier" in fired,
             identity_reuse_flag="identity_reuse" in fired,
             hospice_duration_flag="abnormal_hospice_duration" in fired,
             upcoding_flag="upcoding" in fired,
@@ -214,8 +220,8 @@ def calculate_npi_scores(db: Session, settings) -> None:
             physician_flag_count=r["physician_flag_count"],
             total_claim_count=r["claim_count"],
             total_claim_amount=r["claim_amount"],
-            top_supplier_id=r["top_supplier_id"],
-            top_supplier_name=r["top_supplier_name"],
+            top_vendor_id=r["top_vendor_id"],
+            top_vendor_name=r["top_vendor_name"],
             distinct_npi_count=None,
             last_calculated=datetime.utcnow(),
         )
@@ -242,35 +248,35 @@ def _supplier_rule_points(fired: set, settings) -> float:
     pts = 0.0
     if "cross_npi_supplier" in fired:      pts += settings.weight_cross_npi
     if "oig_leie_hit" in fired:            pts += settings.weight_oig_hit
-    if "new_high_value_supplier" in fired: pts += settings.weight_new_supplier
+    if "new_high_value_supplier" in fired: pts += settings.weight_new_vendor
     if "duplicate_billing" in fired:       pts += settings.weight_duplicate_billing
     return pts
 
 
 def calculate_supplier_scores(db: Session, settings) -> None:
-    supplier_ids = [r[0] for r in db.query(Claim.supplier_id).distinct().all()]
+    supplier_ids = [r[0] for r in db.query(Claim.vendor_id).distinct().all()]
     total = len(supplier_ids)
 
     # PASS 1 — gather raw rule/action + continuous signals per supplier.
     recs = []
     for supplier_id in supplier_ids:
-        fired = _fired_rules(db, RulesFlag.supplier_id, supplier_id)
+        fired = _fired_rules(db, RulesFlag.vendor_id, supplier_id)
         physician_flag_count, flag_contribution = _physician_signal(
-            db, Action.supplier_id, supplier_id, settings)
+            db, Action.vendor_id, supplier_id, settings)
 
         supplier_name = (
-            db.query(Claim.supplier_name)
-            .filter(Claim.supplier_id == supplier_id).first()[0]
+            db.query(Claim.vendor_name)
+            .filter(Claim.vendor_id == supplier_id).first()[0]
         )
         claim_count = db.query(func.count(Claim.id)).filter(
-            Claim.supplier_id == supplier_id).scalar() or 0
+            Claim.vendor_id == supplier_id).scalar() or 0
         claim_amount = db.query(
             func.coalesce(func.sum(Claim.claim_amount), 0)
-        ).filter(Claim.supplier_id == supplier_id).scalar()
+        ).filter(Claim.vendor_id == supplier_id).scalar()
         distinct_npi_count = db.query(func.count(distinct(Claim.npi))).filter(
-            Claim.supplier_id == supplier_id).scalar() or 0
+            Claim.vendor_id == supplier_id).scalar() or 0
         oig_claims = db.query(func.count(Claim.id)).filter(
-            Claim.supplier_id == supplier_id, Claim.oig_flagged.is_(True)
+            Claim.vendor_id == supplier_id, Claim.oig_flagged.is_(True)
         ).scalar() or 0
         flagged_frac = (oig_claims / claim_count) if claim_count else 0.0
 
@@ -302,12 +308,12 @@ def calculate_supplier_scores(db: Session, settings) -> None:
             geo_flag=False,
             cross_npi_flag="cross_npi_supplier" in fired,
             oig_flag="oig_leie_hit" in fired,
-            new_supplier_flag="new_high_value_supplier" in fired,
+            new_vendor_flag="new_high_value_supplier" in fired,
             physician_flag_count=r["physician_flag_count"],
             total_claim_count=r["claim_count"],
             total_claim_amount=r["claim_amount"],
-            top_supplier_id=None,
-            top_supplier_name=None,
+            top_vendor_id=None,
+            top_vendor_name=None,
             distinct_npi_count=r["distinct_npi_count"],
             last_calculated=datetime.utcnow(),
         )

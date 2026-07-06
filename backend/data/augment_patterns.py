@@ -136,8 +136,8 @@ def main():
         INSERT INTO claims
         (id, npi, patient_id, patient_name, patient_zip, patient_state,
          patient_lat, patient_lng, date_of_service, cpt_code, hcpcs_code,
-         service_description, service_category, supplier_name, supplier_id,
-         supplier_zip, supplier_state, claim_amount, plan_name, oig_flagged,
+         service_description, service_category, vendor_name, vendor_id,
+         vendor_zip, vendor_state, claim_amount, plan_name, oig_flagged,
          reviewed, ingested_at, created_at)
         VALUES %s
         ON CONFLICT (id) DO NOTHING

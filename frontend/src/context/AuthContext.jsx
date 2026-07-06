@@ -7,6 +7,7 @@ const AuthContext = createContext(null)
 export const DASHBOARD_PATH = {
   physician: '/physician/dashboard',
   plan_investigator: '/payer/dashboard',
+  vendor: '/vendor/portal',
 }
 
 export function AuthProvider({ children }) {

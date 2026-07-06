@@ -28,7 +28,7 @@ def _similarity(a: str, b: str) -> float:
 
 def rule_modifier_abuse(db, settings) -> list:
     rows = (
-        db.query(Claim.id, Claim.npi, Claim.supplier_id, Claim.patient_id,
+        db.query(Claim.id, Claim.npi, Claim.vendor_id, Claim.patient_id,
                  Claim.date_of_service, Claim.service_category, Claim.service_description,
                  Claim.cpt_code, Claim.hcpcs_code)
         .all()

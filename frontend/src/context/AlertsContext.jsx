@@ -5,27 +5,50 @@ const AlertsContext = createContext(null)
 
 export function AlertsProvider({ children }) {
   const [alerts, setAlerts] = useState([])
-  const [connected, setConnected] = useState(true)   // SSE connection health (drives the feed banner)
+  const [physicianAlerts, setPhysicianAlerts] = useState([])
+  const [bellOpen, setBellOpenState] = useState(false)
+  const [seenCount, setSeenCount] = useState(0)
+  const [connected, setConnected] = useState(true)
 
   const addAlert = useCallback((a) => {
-    setAlerts((prev) => {
-      const id = a.id ?? Date.now()
-      if (prev.some((x) => x.id === id)) return prev   // dedupe (SSE reconnect/replay)
-      return [{ ...a, id, ts: a.ts || new Date() }, ...prev]
-    })
+    if (a.recipient === 'physician') {
+      setPhysicianAlerts((prev) => {
+        const id = a.id ?? Date.now()
+        if (prev.some((x) => x.id === id)) return prev
+        return [{ ...a, id, ts: a.ts || new Date() }, ...prev]
+      })
+    } else if (!a.recipient || a.recipient === 'plan') {
+      setAlerts((prev) => {
+        const id = a.id ?? Date.now()
+        if (prev.some((x) => x.id === id)) return prev
+        return [{ ...a, id, ts: a.ts || new Date() }, ...prev]
+      })
+    }
   }, [])
 
-  // Stream physician-action alerts from the backend SSE endpoint.
+  const setBellOpen = useCallback((val) => {
+    setBellOpenState(val)
+  }, [])
+
+  useEffect(() => {
+    if (bellOpen) setSeenCount(physicianAlerts.length)
+  }, [bellOpen, physicianAlerts.length])
+
+  const unreadCount = Math.max(0, physicianAlerts.length - seenCount)
+
   useEffect(() => {
     const es = subscribeAlerts(addAlert, {
       onOpen: () => setConnected(true),
-      onError: () => setConnected(false),   // EventSource auto-reconnects; onOpen flips it back
+      onError: () => setConnected(false),
     })
     return () => es.close()
   }, [addAlert])
 
   return (
-    <AlertsContext.Provider value={{ alerts, addAlert, connected }}>
+    <AlertsContext.Provider value={{
+      alerts, addAlert, connected,
+      physicianAlerts, unreadCount, bellOpen, setBellOpen,
+    }}>
       {children}
     </AlertsContext.Provider>
   )

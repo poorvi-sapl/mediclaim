@@ -25,3 +25,12 @@ sse*.txt
 *.dump
 *.sql.gz
 mediclaim_backup.sql
+
+# Large sample datasets — keep local only
+DE1_0_2008_to_2010_Carrier_Claims_Sample_1A.zip
+DE1_0_2008_to_2010_Carrier_Claims_Sample_1B.zip
+physician sample data.pdf
+
+# curl cookie jar — contains live session/auth tokens
+cookies.txt
+

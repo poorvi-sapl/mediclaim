@@ -19,6 +19,10 @@ from .routers import mfa as mfa_router
 from .routers import documents as documents_router
 from .routers import admin as admin_router
 from .routers import analytics as analytics_router
+from .routers import ingest as ingest_router
+from .routers import respond as respond_router
+from .routers import vendor as vendor_router
+from .routers import npi_watch as npi_watch_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -43,7 +47,10 @@ _PUBLIC = ("/health", "/", "/openapi.json")
 
 def _is_public(path: str) -> bool:
     return (path in _PUBLIC or path.startswith("/auth")
-            or path.startswith("/docs") or path.startswith("/redoc"))
+            or path.startswith("/docs") or path.startswith("/redoc")
+            or path.startswith("/api/v1/respond")
+            or path.startswith("/api/v1/claims/ingest")
+            or path.startswith("/api/v1/vendor/disputes"))
 
 
 def _required_role(path: str):
@@ -126,6 +133,10 @@ app.include_router(actions_router.router)
 app.include_router(dashboard_router.router)
 app.include_router(alerts_router.router)
 app.include_router(analytics_router.router, prefix="/analytics", tags=["analytics"])
+app.include_router(ingest_router.router)
+app.include_router(respond_router.router)
+app.include_router(vendor_router.router)
+app.include_router(npi_watch_router.router)
 
 @app.get("/health")
 def health_check(db: Session = Depends(get_db)):

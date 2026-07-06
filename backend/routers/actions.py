@@ -15,6 +15,10 @@ from backend.scoring.risk_score import (
 )
 from backend.sse import broadcast_alert
 from backend.auth import extract_token, decode_token, is_blacklisted
+from backend.rules.trigger_engine import notify_vendor_from_claim_action
+
+# action_types that should also open a vendor dispute case (My Claims -> NPI Watch bridge)
+VENDOR_NOTIFY_ACTION_TYPES = {"dispute", "fraud"}
 
 router = APIRouter()
 log = logging.getLogger("routers.actions")
@@ -43,7 +47,7 @@ def _decrement_supplier(db: Session, supplier_id: str, settings) -> None:
     db.commit()
 
 VALID_ACTION_TYPES = {"confirm", "dispute", "flag_supplier", "unknown_patient",
-                      "did_not_order"}
+                      "did_not_order", "fraud"}
 ALERT_ACTION_TYPES = {"flag_supplier", "unknown_patient", "did_not_order"}
 ESCALATION_ACTION_TYPES = {"did_not_order"}
 
@@ -79,8 +83,8 @@ def create_action(payload: ActionRequest, db: Session = Depends(get_db)):
         npi=payload.npi,
         action_type=payload.action_type,
         note=payload.note,
-        supplier_id=claim.supplier_id,
-        supplier_name=claim.supplier_name,
+        vendor_id=claim.vendor_id,
+        vendor_name=claim.vendor_name,
         patient_name=claim.patient_name,
         claim_amount=claim.claim_amount,
         broadcast=False,
@@ -96,11 +100,28 @@ def create_action(payload: ActionRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=503, detail={
             "error": "Transaction failed — action not recorded", "code": "DB_ERROR"})
 
+    # --- bridge to NPI Watch: dispute/fraud actions also open a vendor dispute case.
+    # notify_vendor_from_claim_action() never raises, but this is wrapped anyway —
+    # a vendor-notification problem must never fail the underlying claim action,
+    # which has already been committed above.
+    if payload.action_type in VENDOR_NOTIFY_ACTION_TYPES:
+        try:
+            notified = notify_vendor_from_claim_action(
+                claim_id=str(action.claim_id),
+                physician_npi=action.npi,
+                action_type=payload.action_type,
+                db=db,
+            )
+            if notified:
+                log.info(f"Vendor notified for claim {action.claim_id} — action: {payload.action_type}")
+        except Exception as e:
+            log.error(f"Vendor notification failed for claim {action.claim_id}: {e}")
+
     # --- supplier risk bump for flag_supplier / unknown_patient / did_not_order ---
     if payload.action_type in ALERT_ACTION_TYPES:
         # bump supplier risk score (no-op if no score row)
         try:
-            increment_supplier_flag_count(db, claim.supplier_id, settings)
+            increment_supplier_flag_count(db, claim.vendor_id, settings)
         except Exception as e:
             log.error(f"increment_supplier_flag_count failed: {e}")
 
@@ -119,8 +140,8 @@ def create_action(payload: ActionRequest, db: Session = Depends(get_db)):
         "action_type": action.action_type,
         "physician_name": physician_name,
         "npi": payload.npi,
-        "supplier_name": claim.supplier_name,
-        "supplier_npi": claim.supplier_id,
+        "vendor_name": claim.vendor_name,
+        "vendor_npi": claim.vendor_npi,
         "patient_name": claim.patient_name,
         "claim_amount": float(claim.claim_amount),
         "timestamp": action.created_at.isoformat(),
@@ -167,7 +188,7 @@ def undo_action(action_id: str, request: Request, db: Session = Depends(get_db))
             "code": "UNDO_EXPIRED"})
 
     claim_id = str(action.claim_id)
-    supplier_id = action.supplier_id
+    vendor_id = action.vendor_id
     action_type = action.action_type
     npi = action.npi
 
@@ -182,7 +203,7 @@ def undo_action(action_id: str, request: Request, db: Session = Depends(get_db))
     # so the physician's risk score drops on the payer leaderboard.
     if action_type in ALERT_ACTION_TYPES:
         try:
-            _decrement_supplier(db, supplier_id, settings)
+            _decrement_supplier(db, vendor_id, settings)
         except Exception as e:
             log.error(f"undo: supplier decrement failed: {e}")
     try:

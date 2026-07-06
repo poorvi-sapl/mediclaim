@@ -86,12 +86,13 @@ const PAGE_SIZE = 15
 const CATEGORY_CHIP = 'inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium'
 const CATEGORY_CHIP_STYLE = { backgroundColor: '#EFF6FF', color: '#1E3A5F' }
 
-// four row actions (icon-only). UI id -> backend action_type mapped in api.js.
+// five row actions (icon-only). UI id -> backend action_type mapped in api.js.
 const ACTIONS = [
   { id: 'confirmed',     label: 'Confirm',         desc: 'Claim is legitimate — you recognize the supplier',   accent: '#10b981', icon: 'check', cls: 'bg-emerald-50/70 text-emerald-500 ring-emerald-100 hover:bg-emerald-100 hover:text-emerald-700 hover:ring-emerald-300 hover:shadow-emerald-100' },
   { id: 'disputed',      label: 'Dispute',          desc: 'Amount or service details look incorrect to you',    accent: '#ef4444', icon: 'x',     cls: 'bg-rose-50/70 text-rose-400 ring-rose-100 hover:bg-rose-100 hover:text-rose-600 hover:ring-rose-300 hover:shadow-rose-100'                   },
   { id: 'flagged',       label: 'Flag Supplier',    desc: 'Supplier is unknown or suspicious — raise a flag',   accent: '#f59e0b', icon: 'flag',  cls: 'bg-amber-50/70 text-amber-500 ring-amber-100 hover:bg-amber-100 hover:text-amber-700 hover:ring-amber-300 hover:shadow-amber-100'             },
   { id: 'unknownPatient',label: 'Unknown Patient',  desc: "You don't recognize the patient on this claim",   accent: '#94a3b8', icon: 'userx', cls: 'bg-slate-50 text-slate-400 ring-slate-200 hover:bg-slate-100 hover:text-slate-600 hover:ring-slate-300'                                       },
+  { id: 'fraud',         label: 'Report Fraud',     desc: 'This claim appears fraudulent — vendor billed for a service never provided', accent: '#0f172a', icon: 'alertTri', cls: 'bg-slate-800 text-white ring-slate-800 hover:bg-slate-900 hover:ring-slate-900 hover:shadow-slate-400' },
 ]
 
 function ActionTooltip({ action, children }) {
@@ -297,6 +298,7 @@ function statusFor(claim) {
   if (act === 'confirm') return { label: 'Confirmed', cls: 'text-[#059669] font-normal' }
   if (act === 'dispute') return { label: 'Disputed', cls: 'text-[#7C3AED] font-normal' }
   if (act === 'unknown_patient') return { label: 'Unknown Patient', cls: 'text-[#6B7280] font-normal' }
+  if (act === 'fraud') return { label: 'Fraud Reported', cls: 'text-[#DC2626] font-bold' }
   if (act) return { label: 'Flagged', cls: 'text-[#DC2626] font-medium' }   // flag_supplier / did_not_order
   if (claim.reviewed) return { label: 'Reviewed', cls: 'text-[#6B7280] font-normal' }
   return { label: 'Unreviewed', cls: 'text-[#6B7280] font-normal' }
@@ -315,6 +317,7 @@ const CELL = 'px-4 py-3 align-middle'
 // Column order + widths. `sort` = client-side sort key (omitted = not sortable).
 // Service Description is the flex column (takes remaining space, truncates).
 const COLS = [
+  { key: 'ccn', label: 'Claim #', width: 110 },   // not sortable — CCN sort has no meaningful order
   { key: 'date', label: 'Date', width: 100, sort: 'date' },
   { key: 'patient', label: 'Patient Name', width: 140, sort: 'patient' },
   { key: 'supplier', label: 'Supplier', width: 200, sort: 'supplier' },
@@ -348,7 +351,7 @@ const CLAIM_COMPARATORS = {
   status: (a, b) => statusRank(a) - statusRank(b),
 }
 
-const CLEARED = { category: 'All Categories', dateFrom: '', dateTo: '', supplier: '', reviewed: 'all' }
+const CLEARED = { category: 'All Categories', dateFrom: '', dateTo: '', supplier: '', claimSearch: '', reviewed: 'all' }
 const DEFAULT_FILTERS = { ...CLEARED, reviewed: 'unreviewed', page: 0 }
 const inputCls = 'bg-white border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-slate-600 outline-none cursor-pointer transition-colors hover:border-slate-300 focus:border-ink focus:ring-2 focus:ring-ink/15'
 
@@ -361,6 +364,7 @@ function last30Iso() {
 export default function ClaimsTable({ npi = PHYSICIAN_NPI, onActioned, supplierFilter: incomingSupplier = null, onSupplierFilterChange }) {
   const [filters, setFilters] = useState(DEFAULT_FILTERS)
   const [debouncedSupplier, setDebouncedSupplier] = useState('')
+  const [debouncedClaimSearch, setDebouncedClaimSearch] = useState('')
   const [data, setData] = useState({ items: [], total: 0, page: 0, totalPages: 0, totalCount: 0, flaggedCount: 0, confirmedCount: 0 })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -397,6 +401,11 @@ export default function ClaimsTable({ npi = PHYSICIAN_NPI, onActioned, supplierF
     const t = setTimeout(() => setDebouncedSupplier(filters.supplier), 300)
     return () => clearTimeout(t)
   }, [filters.supplier])
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedClaimSearch(filters.claimSearch), 300)
+    return () => clearTimeout(t)
+  }, [filters.claimSearch])
 
   // A supplier picked on the Flagged Suppliers screen arrives via props -> apply it and
   // switch to "All" so every claim from that supplier shows (not just unreviewed).
@@ -451,6 +460,7 @@ export default function ClaimsTable({ npi = PHYSICIAN_NPI, onActioned, supplierF
       page: filters.page, pageSize: PAGE_SIZE,
       category: filters.category, dateFrom: filters.dateFrom, dateTo: filters.dateTo,
       reviewed: filters.reviewed, supplierSearch: supFilter || debouncedSupplier,
+      claimSearch: debouncedClaimSearch,
     })
       .then((res) => {
         if (!cancelled) {
@@ -464,18 +474,18 @@ export default function ClaimsTable({ npi = PHYSICIAN_NPI, onActioned, supplierF
       })
       .catch((e) => { if (!cancelled) { setError(e.message); setLoading(false) } })
     return () => { cancelled = true }
-  }, [npi, filters.page, filters.category, filters.dateFrom, filters.dateTo, filters.reviewed, debouncedSupplier, supFilter])
+  }, [npi, filters.page, filters.category, filters.dateFrom, filters.dateTo, filters.reviewed, debouncedSupplier, debouncedClaimSearch, supFilter])
 
   function handleExport() {
     exportCSV('claims.csv',
-      ['Date', 'Patient Name', 'Supplier', 'Amount', 'Category', 'Description', 'Status'],
-      sortedItems.map(c => [fmtDate(c.date), c.patient, c.supplier, c.amount, c.category, c.description, statusFor(c).label])
+      ['Claim #', 'Date', 'Patient Name', 'Supplier', 'Amount', 'Category', 'Description', 'Status'],
+      sortedItems.map(c => [c.ccn, fmtDate(c.date), c.patient, c.supplier, c.amount, c.category, c.description, statusFor(c).label])
     )
   }
 
   function setFilter(key, value) { resetSort(); setUnknownOnly(false); setFilters((f) => ({ ...f, [key]: value, page: 0 })) }
   function setPage(p) { setFilters((f) => ({ ...f, page: p })) }
-  function clearAll() { resetSort(); setUnknownOnly(false); setFilters({ ...CLEARED, page: 0 }); setDebouncedSupplier('') }
+  function clearAll() { resetSort(); setUnknownOnly(false); setFilters({ ...CLEARED, page: 0 }); setDebouncedSupplier(''); setDebouncedClaimSearch('') }
   function toggleLast30() {
     resetSort()
     setFilters((f) => ({ ...f, dateFrom: f.dateFrom ? '' : last30Iso(), dateTo: '', page: 0 }))
@@ -483,7 +493,7 @@ export default function ClaimsTable({ npi = PHYSICIAN_NPI, onActioned, supplierF
 
   const last30Active = !!filters.dateFrom
   const isActive = filters.category !== CLEARED.category || filters.dateFrom || filters.dateTo ||
-    filters.supplier || filters.reviewed !== CLEARED.reviewed
+    filters.supplier || filters.claimSearch || filters.reviewed !== CLEARED.reviewed
 
   function showToast(msg) { setToast(msg); setTimeout(() => setToast(null), 3500) }
 
@@ -590,6 +600,13 @@ export default function ClaimsTable({ npi = PHYSICIAN_NPI, onActioned, supplierF
                    className="w-full pl-8 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-[13px] font-medium text-slate-700 placeholder-slate-400 outline-none focus:border-[#1B3A5C]/40 focus:ring-2 focus:ring-[#1B3A5C]/10 transition-all hover:border-slate-300" />
           </div>
 
+          {/* Claim # search — full width on mobile */}
+          <div className="relative w-full sm:flex-1 sm:min-w-[160px] sm:max-w-[220px]">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"><Icon name="search" size={13} /></span>
+            <input type="text" placeholder="Search claim #…" value={filters.claimSearch} onChange={(e) => setFilter('claimSearch', e.target.value)}
+                   className="w-full pl-8 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-[13px] font-medium text-slate-700 placeholder-slate-400 outline-none focus:border-[#1B3A5C]/40 focus:ring-2 focus:ring-[#1B3A5C]/10 transition-all hover:border-slate-300" />
+          </div>
+
           {/* Right: count + clear + export */}
           <div className="flex items-center gap-2 sm:gap-3 sm:ml-auto shrink-0 w-full sm:w-auto justify-between sm:justify-start">
             {isActive && (
@@ -682,6 +699,7 @@ export default function ClaimsTable({ npi = PHYSICIAN_NPI, onActioned, supplierF
                     <div className="min-w-0">
                       <span className={`text-sm font-semibold ${claim.patient?.startsWith('Unknown') ? 'text-violet-600' : 'text-slate-900'}`}>{claim.patient}</span>
                       <span className="ml-2 text-[11px] text-slate-400 tabular-nums">{fmtDate(claim.date)}</span>
+                      <div className="text-[10px] font-mono text-slate-400 tabular-nums mt-0.5">{claim.ccn}</div>
                     </div>
                     <span className={`text-sm font-semibold tabular-nums flex-shrink-0 ${status.cls}`}>{fmtUSD(claim.amount, 2)}</span>
                   </div>
@@ -763,6 +781,8 @@ export default function ClaimsTable({ npi = PHYSICIAN_NPI, onActioned, supplierF
                   const rowPending = pending && pending.claimId === claim.id
                   return (
                     <tr key={claim.id} className={`transition-colors duration-100 ${rowCls}`}>
+                      {/* Claim # — short CMS-style CCN, not the internal UUID */}
+                      <td className={`${CELL} text-xs font-mono tabular-nums whitespace-nowrap text-[#6B7280]`}>{claim.ccn}</td>
                       {/* Date — gray, context not primary (change 2: no left border) */}
                       <td className={`${CELL} text-xs tabular-nums whitespace-nowrap text-[#6B7280]`}>{fmtDate(claim.date)}</td>
                       {/* Patient Name — gray-900, weight 400 (violet kept for Unknown) */}

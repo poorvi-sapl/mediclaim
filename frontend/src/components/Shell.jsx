@@ -90,7 +90,7 @@ function NotifBell({ count = 0, onClick, title = 'Notifications' }) {
   )
 }
 
-function UserChip({ user, subtitle, onLogout }) {
+function UserChip({ user, subtitle, infoRows, onLogout }) {
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
 
@@ -154,16 +154,17 @@ function UserChip({ user, subtitle, onLogout }) {
             </div>
           </div>
 
-          {/* Info rows */}
+          {/* Info rows — caller may pass explicit rows (e.g. vendor billing contact);
+              otherwise derive NPI / Specialty / Location from the subtitle. */}
           <div className="px-4 py-2">
-            {[
+            {(infoRows || [
               { label: 'NPI',       value: user?.npi || '—' },
               { label: 'Specialty', value: subtitle?.split(' · ')[0] || '—' },
               { label: 'Location',  value: subtitle?.split(' · ')[1] || '—' },
-            ].map(row => (
-              <div key={row.label} className="flex items-center justify-between py-2 border-b border-slate-50 last:border-0">
-                <span className="text-[11px] text-slate-400">{row.label}</span>
-                <span className="text-[12px] font-semibold text-slate-700">{row.value}</span>
+            ]).map(row => (
+              <div key={row.label} className="flex items-start justify-between gap-3 py-2 border-b border-slate-50 last:border-0">
+                <span className="text-[11px] text-slate-400 flex-shrink-0">{row.label}</span>
+                <span className="text-[12px] font-semibold text-slate-700 text-right break-words min-w-0">{row.value || '—'}</span>
               </div>
             ))}
           </div>
@@ -363,6 +364,7 @@ function ProfileMenu({ user, onLogout }) {
 }
 
 export default function Shell({ navItems, activeId, onNavigate, title, user, subtitle,
+                                infoRows,
                                 showSearch = false, searchValue = '', onSearchChange,
                                 onOpenNpi, onOpenSupplier, canGoBack = false, onBack,
                                 breadcrumbs,
@@ -431,7 +433,7 @@ export default function Shell({ navItems, activeId, onNavigate, title, user, sub
             ) : (
               <>
                 <NotifBell count={notifCount} onClick={onBellClick} title={bellTitle} />
-                <UserChip user={user} subtitle={subtitle} onLogout={onLogout} />
+                <UserChip user={user} subtitle={subtitle} infoRows={infoRows} onLogout={onLogout} />
               </>
             )}
           </div>

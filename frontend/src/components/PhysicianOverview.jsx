@@ -163,7 +163,7 @@ export default function PhysicianOverview({ npi }) {
   if (!trend) return null
 
   const trendData = (trend.months || []).map((m, i) => ({ month: m, count: trend.counts?.[i] || 0 }))
-  const pieData = (suppliers?.suppliers || []).map(s => ({ name: s.supplier_name, value: s.claim_count, total_amount: s.total_amount }))
+  const pieData = (suppliers?.suppliers || []).map(s => ({ name: s.vendor_name, value: s.claim_count, total_amount: s.total_amount }))
   const catData = categories?.categories || []
   const flagData = (flagTl?.months || []).map((m, i) => ({ month: m, flagged: flagTl.flagged_counts?.[i] || 0 }))
   const totalFlags = flagData.reduce((sum, d) => sum + d.flagged, 0)

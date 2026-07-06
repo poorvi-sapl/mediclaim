@@ -31,7 +31,7 @@ from ..verification.nppes import check_nppes
 import time as _time
 
 # Where each role lands after a successful login.
-_REDIRECTS = {"physician": "/physician/dashboard", "plan_investigator": "/plan/dashboard"}
+_REDIRECTS = {"physician": "/physician/dashboard", "plan_investigator": "/plan/dashboard", "vendor": "/vendor/portal"}
 
 ALERT_ACTION_TYPES = ("flag_supplier", "unknown_patient", "did_not_order")
 EPOCH = _dt(1970, 1, 1)
@@ -154,7 +154,8 @@ def demo_login(payload: DemoLoginRequest, response: Response, request: Request,
     _rate_limit(request, limit=20)
     mapping = {
         "physician": ("physician@mediclaim.com", "/physician/dashboard"),
-        "payer": ("payer@mediclaim.com", "/plan/dashboard"),
+        "payer":     ("payer@mediclaim.com",     "/plan/dashboard"),
+        "vendor":    ("vendor@mediclaim.com",    "/vendor/portal"),
     }
     if payload.portal not in mapping:
         raise HTTPException(status_code=400, detail={

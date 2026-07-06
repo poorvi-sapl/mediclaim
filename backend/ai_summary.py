@@ -24,7 +24,7 @@ _RULE_PHRASES = [
     ("cross_npi_flag", "used a supplier that bills under many unrelated physician NPIs (a kickback-ring pattern)"),
     ("volume_flag", "showed a sharp spike in claim volume versus their own baseline"),
     ("geo_flag", "had patients located far from the practice address"),
-    ("new_supplier_flag", "had a brand-new, high-value supplier relationship appear suddenly"),
+    ("new_vendor_flag", "had a brand-new, high-value supplier relationship appear suddenly"),
     ("identity_reuse_flag", "billed the same patient under multiple unrelated physician NPIs (identity reuse / phantom billing)"),
     ("hospice_duration_flag", "kept a patient enrolled in hospice far longer than is clinically typical"),
     ("upcoding_flag", "billed amounts far above the norm for the service category (possible upcoding)"),
@@ -44,7 +44,7 @@ def _facts(profile, score) -> dict:
         "physician_flags": score.physician_flag_count or 0,
         "total_claims": score.total_claim_count or 0,
         "total_billed": float(score.total_claim_amount or 0),
-        "top_supplier": score.top_supplier_name or None,
+        "top_supplier": score.top_vendor_name or None,
     }
 
 

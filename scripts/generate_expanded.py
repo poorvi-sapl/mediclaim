@@ -30,7 +30,7 @@ import psycopg2
 from psycopg2.extras import execute_values
 from dotenv import load_dotenv
 import pgeocode
-from datetime import timedelta
+from datetime import date, timedelta
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 ENV_PATH = os.path.join(os.path.dirname(BASE), '.env')
@@ -49,8 +49,22 @@ CODE_POOLS = {
     "drugs":       {"hcpcs": ["J1745", "J0135", "J2505", "J9035", "J1100"]},
     "hospital":    {"cpt":   ["99213", "99214", "99232", "99223", "99285"]},
 }
-AMOUNT_RANGES = {"dme": (300, 1800), "home_health": (1500, 2300), "hospice": (1000, 2800),
+AMOUNT_RANGES = {"dme": (300, 1800), "home_health": (800, 2400), "hospice": (1000, 2800),
                  "drugs": (150, 1300), "hospital": (500, 2400)}
+
+SERVICE_CATEGORIES = ["dme", "home_health", "hospice", "drugs", "hospital"]
+HCPCS_BY_CATEGORY = {
+    "dme":         ["E1390", "K0001", "E0260", "E0143", "E0601", "E1050",
+                    "K0004", "E0110", "E0175", "E0194", "K0739", "E0470"],
+    "home_health": ["G0299", "G0300", "G0151", "T1030", "T1031",
+                    "G0162", "S9123", "G0493", "G0494", "G0495"],
+    "hospice":     ["T2042", "T2043", "T2044", "Q5001", "Q5002",
+                    "Q5003", "T2046", "Q5010", "T2048", "Q5009"],
+    "drugs":       ["J1745", "J0135", "J2505", "J9035", "J1100",
+                    "J0456", "J0178", "J9310", "J0881", "J3490"],
+    "hospital":    ["G0463", "G0461", "G0462", "G0464", "G0466",
+                    "G0467", "G0468", "G0469", "G0470", "G0471"],
+}
 PLAN = "California Medi-Cal"
 DISTANT_ZIPS = ["33101", "10001", "11201", "77002", "98101", "02118", "33139", "60614"]
 # Geo-anomaly patient zips — a spread of distant US metros so flagged patients show
@@ -182,6 +196,18 @@ def gpt_descriptions():
     return pools
 
 
+def random_claim_date():
+    """
+    Spread claims evenly across 18 months:
+    Jan 1 2025 → Jun 17 2026
+    No future dates. ~1,095 claims per month at 19,710 total.
+    """
+    start = date(2025, 1, 1)
+    end = date(2026, 6, 17)
+    delta = (end - start).days  # 532 days
+    return start + timedelta(days=random.randint(0, delta))
+
+
 def main():
     load_dotenv(ENV_PATH)
     with open(os.path.join(BASE, "tiered_npis.json"), encoding="utf-8") as f:
@@ -249,21 +275,12 @@ def main():
         return d
 
     def code_amount(cat):
-        pool = CODE_POOLS[cat]
-        if "hcpcs" in pool:
-            cpt, hcpcs = None, random.choice(pool["hcpcs"])
-        else:
-            cpt, hcpcs = random.choice(pool["cpt"]), None
+        hcpcs = random.choice(HCPCS_BY_CATEGORY[cat])
         lo, hi = AMOUNT_RANGES[cat]
-        return cpt, hcpcs, round(random.uniform(lo, hi), 2)
-
-    def date_for(spike, k, n):
-        # spike physicians: 60% in last 30d, 40% in 31-90d. others: even 0-90d.
-        if spike:
-            day = random.randint(0, 29) if (k / max(n, 1)) < 0.60 else random.randint(31, 90)
-        else:
-            day = random.randint(0, 90)
-        return ref - __import__("datetime").timedelta(days=day)
+        mean = (lo + hi) / 2
+        std = (hi - lo) / 6
+        amt = round(max(lo, min(hi, random.gauss(mean, std))), 2)
+        return None, hcpcs, amt
 
     rows = []
 
@@ -324,7 +341,6 @@ def main():
 
         # Long-tail volume per supplier (primary supplier dominates, others taper off).
         counts = assign_supplier_volumes(vol, len(sup_list), i)
-        cats = category_sequence(p, sum(counts))
         djit = random.Random(i * 7919)   # deterministic date jitter
         primary_idx = max(range(len(counts)), key=lambda x: counts[x])
         ck = 0
@@ -343,13 +359,18 @@ def main():
                 lo_d, hi_d = start, min(90, start + window)
             per_pat = max(1, c // 6)
             for j in range(c):
-                cat = cats[ck % len(cats)]
+                cat = djit.choice(SERVICE_CATEGORIES)
                 if spike:
                     # preserve the volume_spike signal: ~60% of claims in the last 30 days
                     day = djit.randint(0, 29) if djit.random() < 0.60 else djit.randint(31, 90)
+                    date = ref - timedelta(days=day)
+                elif cat == "hospice":
+                    # Keep hospice within 179 days so no patient's span exceeds
+                    # the 180-day abnormal_hospice_duration threshold spuriously.
+                    day = djit.randint(0, 179)
+                    date = ref - timedelta(days=day)
                 else:
-                    day = djit.randint(lo_d, hi_d)
-                date = ref - timedelta(days=day)
+                    date = random_claim_date()
                 # Patient stays within one supplier block (no cross-supplier same patient/date
                 # -> no spurious duplicate_billing). Tier-3 dup pairs are planted below.
                 pid = f"pat-{i:03d}-s{s}-{(j // per_pat):04d}"
@@ -407,22 +428,26 @@ def main():
 
         # ---- IMPOSSIBLE DAY ----
         # T3: 45 claims on one date (~6 patients). Extra T2: same pattern, clean supplier.
+        # Date is placed 90-94 days before ref (outside the 30-day recent window) so the
+        # planted impossible_day pattern doesn't spuriously inflate the volume_spike ratio.
         if tier == 3 or i in EXTRA_IMP:
-            iday = ref - timedelta(days=7 + (i % 5))  # stagger dates per physician
+            iday = ref - timedelta(days=90 + (i % 5))  # stagger dates per physician
             for k in range(45):
                 emit(npi, sup_plant, "dme", iday, f"pat-{i:03d}-IMP{k % 6}", home_zip, o_plant, phys_state,
                      hcpcs=random.choice(CODE_POOLS["dme"]["hcpcs"]), amount=round(random.uniform(300, 1200), 2))
 
         # ---- RAPID CYCLING ----
         # T3: 30 distinct patients on one date. Extra T2: same pattern, different date offset.
+        # Date placed 100-106 days before ref to keep it out of the 30-day recent window.
         if tier == 3 or i in EXTRA_RAP:
-            rday = ref - timedelta(days=17 + (i % 7))
+            rday = ref - timedelta(days=100 + (i % 7))
             for k in range(30):
                 emit(npi, sup_plant, "dme", rday, f"pat-{i:03d}-RAP{k}", home_zip, o_plant, phys_state,
                      hcpcs=random.choice(CODE_POOLS["dme"]["hcpcs"]), amount=round(random.uniform(300, 1200), 2))
 
         # ---- MODIFIER ABUSE ----
         # T3 + extra T2: same-patient/date pairs with nearly-identical descriptions.
+        # Date placed 60-71 days before ref to avoid inflating the 30-day recent rate.
         if tier == 3 or i in EXTRA_MOD:
             MOD_PAIRS = [
                 ("Home health aide support visit", "Home health aide assistance visit"),
@@ -434,7 +459,7 @@ def main():
             for k in range(n_mod):
                 d1, d2 = MOD_PAIRS[k % len(MOD_PAIRS)]
                 pid = f"pat-{i:03d}-MOD{k}"
-                mdate = ref - timedelta(days=22 + k)
+                mdate = ref - timedelta(days=60 + k)
                 cpt = random.choice(CODE_POOLS["home_health"]["cpt"])
                 emit(npi, sup_plant, "home_health", mdate, pid, home_zip, o_plant, phys_state,
                      cpt=cpt, amount=round(1850 + k, 2), desc=d1)

@@ -15,7 +15,7 @@ GAP_DAYS = 180
 
 def rule_deceased_patient(db, settings) -> list:
     rows = (
-        db.query(Claim.id, Claim.npi, Claim.supplier_id, Claim.patient_id,
+        db.query(Claim.id, Claim.npi, Claim.vendor_id, Claim.patient_id,
                  Claim.date_of_service)
         .order_by(Claim.patient_id, Claim.date_of_service)
         .all()

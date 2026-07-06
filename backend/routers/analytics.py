@@ -39,7 +39,7 @@ SYSTEM_PROMPT = (
 
 
 class AnalyticsFilters(BaseModel):
-    supplier_id: Optional[str] = None
+    vendor_id: Optional[str] = None
     npi: Optional[str] = None
     date_from: Optional[str] = None
     date_to: Optional[str] = None
@@ -58,8 +58,8 @@ class AnalyticsQueryRequest(BaseModel):
 def _apply_claim_filters(q, filters: Optional[AnalyticsFilters]):
     if not filters:
         return q
-    if filters.supplier_id:
-        q = q.filter(Claim.supplier_id == filters.supplier_id)
+    if filters.vendor_id:
+        q = q.filter(Claim.vendor_id == filters.vendor_id)
     if filters.date_from:
         q = q.filter(Claim.date_of_service >= filters.date_from)
     if filters.date_to:
@@ -80,12 +80,12 @@ def _build_physician_context(db: Session, npi: str, filters: Optional[AnalyticsF
 
     supplier_rows = (
         db.query(
-            Claim.supplier_name,
+            Claim.vendor_name,
             func.count(Claim.id).label("cnt"),
             func.sum(Claim.claim_amount).label("amt"),
         )
         .filter(Claim.npi == npi)
-        .group_by(Claim.supplier_name)
+        .group_by(Claim.vendor_name)
         .order_by(func.count(Claim.id).desc())
         .limit(10)
         .all()
@@ -140,7 +140,7 @@ def _build_physician_context(db: Session, npi: str, filters: Optional[AnalyticsF
         "Claims by supplier (top 10):",
     ]
     for r in supplier_rows:
-        lines.append(f"  {r.supplier_name}: {r.cnt} claims, ${float(r.amt or 0):,.2f}")
+        lines.append(f"  {r.vendor_name}: {r.cnt} claims, ${float(r.amt or 0):,.2f}")
 
     lines += ["", "Claims by month (last 12, newest first):"]
     for r in monthly_rows:
@@ -484,19 +484,19 @@ def physician_claims_trend(npi: str = Query(...), db: Session = Depends(get_db))
 def physician_claims_by_supplier(npi: str = Query(...), db: Session = Depends(get_db)):
     rows = (
         db.query(
-            Claim.supplier_name,
+            Claim.vendor_name,
             func.count(Claim.id).label("cnt"),
             func.sum(Claim.claim_amount).label("amt"),
         )
         .filter(Claim.npi == npi)
-        .group_by(Claim.supplier_name)
+        .group_by(Claim.vendor_name)
         .order_by(func.count(Claim.id).desc())
         .limit(6).all()
     )
     return {
         "suppliers": [
             {
-                "supplier_name": r.supplier_name,
+                "vendor_name": r.vendor_name,
                 "claim_count": int(r.cnt),
                 "total_amount": round(float(r.amt or 0), 2),
             }
@@ -522,12 +522,12 @@ def physician_flagged_vs_clean(npi: str = Query(...), db: Session = Depends(get_
 def physician_top_suppliers_by_amount(npi: str = Query(...), db: Session = Depends(get_db)):
     rows = (
         db.query(
-            Claim.supplier_name,
+            Claim.vendor_name,
             func.sum(Claim.claim_amount).label("amt"),
             func.count(Claim.id).label("cnt"),
         )
         .filter(Claim.npi == npi)
-        .group_by(Claim.supplier_name)
+        .group_by(Claim.vendor_name)
         .order_by(func.sum(Claim.claim_amount).desc())
         .limit(6).all()
     )
@@ -536,7 +536,7 @@ def physician_top_suppliers_by_amount(npi: str = Query(...), db: Session = Depen
     return {
         "suppliers": [
             {
-                "supplier_name": _trunc(r.supplier_name),
+                "vendor_name": _trunc(r.vendor_name),
                 "total_amount": round(float(r.amt or 0), 2),
                 "claim_count": int(r.cnt),
             }

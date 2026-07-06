@@ -41,20 +41,21 @@ class Settings(BaseSettings):
     volume_spike_multiplier: float = 2.0
     geographic_anomaly_miles: float = 30.0
     cross_npi_threshold: int = 3
-    new_supplier_days_lookback: int = 30
-    new_supplier_amount_threshold: float = 500.00
+    new_vendor_days_lookback: int = 30
+    new_vendor_amount_threshold: float = 500.00
     weight_volume_spike: int = 25
     weight_geo_anomaly: int = 15
-    weight_cross_npi: int = 30
+    weight_cross_npi: int = 10
     weight_oig_hit: int = 35
-    weight_new_supplier: int = 10
+    weight_new_vendor: int = 6
     weight_per_physician_flag: int = 5
     weight_did_not_order: int = 10
-    weight_duplicate_billing: int = 20
+    weight_duplicate_billing: int = 10
     weight_identity_reuse: int = 20
     weight_hospice_duration: int = 15
     weight_upcoding: int = 20
     weight_unbundling: int = 15
+    weight_ghost_billing: int = 20
     # thresholds for the new rules
     identity_reuse_min_npis: int = 3
     hospice_duration_days: int = 180
@@ -63,6 +64,11 @@ class Settings(BaseSettings):
     unbundling_min_codes: int = 3
     max_physician_flag_contribution: int = 20
     sse_keepalive_seconds: int = 15
+    # --- NPI Watch notification loop ---
+    base_url: str = "http://localhost:4001"
+    email_enabled: bool = False          # set True + add Azure creds to go live
+    azure_communication_connection_string: str = ""
+    from_email: str = "noreply@claimlens.com"
     # --- risk score shaping (blended severity curve + continuous signals) ---
     # Rule/action "risk points" are mapped through a smooth saturating curve into
     # [0, score_severity_max]; continuous signals (volume, $, breadth, % flagged)
@@ -70,7 +76,7 @@ class Settings(BaseSettings):
     # instead of a saturating sum that pins offenders at exactly 100.
     score_severity_max: float = 80.0
     score_continuous_max: float = 20.0
-    score_curve_k: float = 50.0          # larger K = gentler curve / more spread
+    score_curve_k: float = 75.0          # larger K = gentler curve / more spread
     score_w_volume: float = 0.30         # continuous-component weights (sum to 1.0)
     score_w_amount: float = 0.30
     score_w_breadth: float = 0.20        # distinct suppliers (NPI) / distinct NPIs (supplier)

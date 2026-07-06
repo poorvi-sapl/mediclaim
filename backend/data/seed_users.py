@@ -19,7 +19,7 @@ DEMO_USERS = [
         "old_email": "physician@claimlens.com",
         "password": "demo1234",
         "role": "physician",
-        "npi": "1003104118",
+        "npi": "1234567890",
         "full_name": "Dr. James Wilson",
     },
     {

@@ -37,7 +37,7 @@ async def alert_stream(db: Session = Depends(get_db)):
                 "action_type": action.action_type,
                 "physician_name": profile.physician_name if profile else action.npi,
                 "npi": action.npi,
-                "supplier_name": action.supplier_name,
+                "vendor_name": action.vendor_name,
                 "patient_name": action.patient_name,
                 "claim_amount": float(action.claim_amount),
                 "timestamp": action.created_at.isoformat(),

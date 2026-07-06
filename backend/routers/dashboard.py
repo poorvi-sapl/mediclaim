@@ -1,4 +1,4 @@
-from datetime import datetime, date, time
+from datetime import datetime, date, time, timezone
 from typing import Optional
 
 import uuid as _uuid
@@ -10,7 +10,8 @@ from sqlalchemy.orm import Session
 
 from backend.database import get_db
 from backend.config import get_settings
-from backend.models import NpiRiskScore, NpiProfile, Claim, Action, ActionStatusLog, RulesFlag, User
+from backend.models import NpiRiskScore, NpiProfile, Claim, Action, ActionStatusLog, RulesFlag, User, DisputeCase, SupplierProfile, ClaimNotification, Physician
+from backend.rules.trigger_engine import escalate_overdue_disputes
 from backend.schemas import (
     PlanSummaryResponse, NpiRiskRow, NpiRiskPageResponse,
     NpiDetailResponse, SupplierWatchlistRow, SupplierPageResponse,
@@ -55,7 +56,7 @@ def _build_action_detail(db: Session, a) -> PlanActionDetail:
     ) for l in logs]
     return PlanActionDetail(
         action_id=str(a.id), npi=a.npi, physician_name=physician_name,
-        supplier_name=a.supplier_name, supplier_id=a.supplier_id,
+        vendor_name=a.vendor_name, vendor_id=a.vendor_id,
         claim_id=str(a.claim_id), action_type=a.action_type,
         amount=float(a.claim_amount), created_at=a.created_at,
         plan_status=a.plan_status or "pending", case_ref=_case_ref(a), history=history,
@@ -165,12 +166,12 @@ def get_npi_risk_list(
             total_claim_count=score.total_claim_count,
             total_claim_amount=float(score.total_claim_amount or 0),
             physician_flag_count=score.physician_flag_count,
-            top_supplier_name=score.top_supplier_name,
+            top_vendor_name=score.top_vendor_name,
             volume_flag=score.volume_flag,
             geo_flag=score.geo_flag,
             cross_npi_flag=score.cross_npi_flag,
             oig_flag=score.oig_flag,
-            new_supplier_flag=score.new_supplier_flag,
+            new_vendor_flag=score.new_vendor_flag,
             identity_reuse_flag=getattr(score, "identity_reuse_flag", False),
             hospice_duration_flag=getattr(score, "hospice_duration_flag", False),
             upcoding_flag=getattr(score, "upcoding_flag", False),
@@ -228,8 +229,8 @@ def get_npi_detail(npi: str, db: Session = Depends(get_db)):
             breakdown.append({"factor": "Cross-NPI supplier", "points": settings.weight_cross_npi, "rule": "cross_npi_supplier"})
         if score.oig_flag:
             breakdown.append({"factor": "OIG LEIE hit", "points": settings.weight_oig_hit, "rule": "oig_leie_hit"})
-        if score.new_supplier_flag:
-            breakdown.append({"factor": "New high-value supplier", "points": settings.weight_new_supplier, "rule": "new_high_value_supplier"})
+        if score.new_vendor_flag:
+            breakdown.append({"factor": "New high-value supplier", "points": settings.weight_new_vendor, "rule": "new_high_value_supplier"})
         if getattr(score, "identity_reuse_flag", False):
             breakdown.append({"factor": "Patient identity reuse", "points": settings.weight_identity_reuse, "rule": "identity_reuse"})
         if getattr(score, "hospice_duration_flag", False):
@@ -275,11 +276,11 @@ def get_npi_detail(npi: str, db: Session = Depends(get_db)):
             "geo_flag": score.geo_flag,
             "cross_npi_flag": score.cross_npi_flag,
             "oig_flag": score.oig_flag,
-            "new_supplier_flag": score.new_supplier_flag,
+            "new_vendor_flag": score.new_vendor_flag,
             "physician_flag_count": score.physician_flag_count,
             "total_claim_count": score.total_claim_count,
             "total_claim_amount": float(score.total_claim_amount or 0),
-            "top_supplier_name": score.top_supplier_name,
+            "top_vendor_name": score.top_vendor_name,
             "score_breakdown": breakdown,
             "last_calculated": score.last_calculated.isoformat()
                 if score.last_calculated else None,
@@ -298,8 +299,8 @@ def get_npi_detail(npi: str, db: Session = Depends(get_db)):
         "id": str(a.id),
         "action_type": a.action_type,
         "note": a.note,
-        "supplier_id": a.supplier_id,
-        "supplier_name": a.supplier_name,
+        "vendor_id": a.vendor_id,
+        "vendor_name": a.vendor_name,
         "patient_name": a.patient_name,
         "claim_amount": float(a.claim_amount),
         "created_at": a.created_at.isoformat() if a.created_at else None,
@@ -409,7 +410,7 @@ def rule_evidence(npi: str, rule_name: str, db: Session = Depends(get_db)):
         "claim_id": str(c.id),
         "patient_name": c.patient_name,
         "date_of_service": c.date_of_service.isoformat() if c.date_of_service else None,
-        "supplier_name": c.supplier_name,
+        "vendor_name": c.vendor_name,
         "service_description": c.service_description,
         "service_category": c.service_category,
         "claim_amount": float(c.claim_amount),
@@ -425,6 +426,45 @@ def rule_evidence(npi: str, rule_name: str, db: Session = Depends(get_db)):
         "explanation": explanation, "count": len(claims), "claims": claims,
         "physician_name": profile.physician_name if profile else None,
         "practice_lat": p_lat, "practice_lng": p_lng,
+    }
+
+
+# ---------------------------------------------------------------------------
+# POST /plan/npi/{npi}/run-fraud-check
+# ---------------------------------------------------------------------------
+@router.post("/plan/npi/{npi}/run-fraud-check")
+def run_npi_fraud_check(npi: str, db: Session = Depends(get_db)):
+    from rapidfuzz import fuzz
+    from backend.models import PhysicianBill
+    from backend.sse import broadcast_alert as _broadcast
+
+    bills = db.query(PhysicianBill).filter(PhysicianBill.npi == npi).all()
+    claims = db.query(Claim).filter(Claim.npi == npi).all()
+
+    ghost_claims = []
+    for claim in claims:
+        candidates = [
+            b for b in bills
+            if abs((b.service_date - claim.date_of_service).days) <= 3
+        ]
+        matched = any(fuzz.ratio(claim.patient_name, b.patient_name) >= 85 for b in candidates)
+        if not matched:
+            claim.verification_status = "ghost_billing_suspected"
+            ghost_claims.append(claim)
+
+    ghost_count = len(ghost_claims)
+    if ghost_claims:
+        db.commit()
+
+    if ghost_count > 0:
+        _broadcast({"type": "ghost_billing", "npi": npi, "count": ghost_count}, recipient="physician")
+
+    physician_name = db.query(NpiProfile.physician_name).filter(NpiProfile.npi == npi).scalar()
+    return {
+        "npi": npi,
+        "physician_name": physician_name,
+        "ghost_count": ghost_count,
+        "checked_claims": len(claims),
     }
 
 
@@ -459,15 +499,15 @@ def get_supplier_watchlist(
     first_seen_map = {}
     if supplier_ids:
         for sid, first_dt in (
-            db.query(Claim.supplier_id, func.min(Claim.date_of_service))
-            .filter(Claim.supplier_id.in_(supplier_ids))
-            .group_by(Claim.supplier_id).all()
+            db.query(Claim.vendor_id, func.min(Claim.date_of_service))
+            .filter(Claim.vendor_id.in_(supplier_ids))
+            .group_by(Claim.vendor_id).all()
         ):
             first_seen_map[sid] = first_dt
 
     items = [SupplierWatchlistRow(
-        supplier_id=r.entity_id,
-        supplier_name=r.entity_name,
+        vendor_id=r.entity_id,
+        vendor_name=r.entity_name,
         oig_flag=r.oig_flag,
         distinct_npi_count=r.distinct_npi_count,
         physician_flag_count=r.physician_flag_count,
@@ -497,7 +537,7 @@ def get_supplier_physicians(supplier_id: str, db: Session = Depends(get_db)):
             func.min(Claim.date_of_service).label("first_claim"),
             func.max(Claim.date_of_service).label("last_claim"),
         )
-        .filter(Claim.supplier_id == supplier_id)
+        .filter(Claim.vendor_id == supplier_id)
         .group_by(Claim.npi)
         .order_by(func.count(Claim.id).desc())
         .all()
@@ -513,20 +553,20 @@ def get_supplier_physicians(supplier_id: str, db: Session = Depends(get_db)):
 
         flag_count = db.query(func.count(Action.id)).filter(
             Action.npi == row.npi,
-            Action.supplier_id == supplier_id,
+            Action.vendor_id == supplier_id,
             Action.action_type.in_(FLAG_ACTIONS),
         ).scalar() or 0
 
         denial_count = db.query(func.count(Action.id)).filter(
             Action.npi == row.npi,
-            Action.supplier_id == supplier_id,
+            Action.vendor_id == supplier_id,
             Action.action_type == "did_not_order",
         ).scalar() or 0
 
-        # Rule flags fired on this physician's claims with THIS supplier specifically.
+        # Rule flags fired on this physician's claims with THIS vendor specifically.
         rule_flag_count = db.query(func.count(RulesFlag.id)).filter(
             RulesFlag.npi == row.npi,
-            RulesFlag.supplier_id == supplier_id,
+            RulesFlag.vendor_id == supplier_id,
         ).scalar() or 0
 
         result.append({
@@ -563,14 +603,14 @@ def _action_to_alert(a, physician_name) -> AlertEvent:
         action_type=a.action_type,
         physician_name=physician_name or a.npi,
         npi=a.npi,
-        supplier_name=a.supplier_name,
+        vendor_name=a.vendor_name,
         patient_name=a.patient_name,
         claim_amount=float(a.claim_amount),
         timestamp=a.created_at.isoformat() if a.created_at else "",
         escalation=is_escalation,
         escalation_label="PHYSICIAN DENIAL" if is_escalation else None,
         plan_status=a.plan_status or "pending",
-        supplier_id=a.supplier_id,
+        vendor_id=a.vendor_id,
     )
 
 
@@ -586,7 +626,7 @@ def get_alerts_history(
     types = FLAG_ACTIONS if supplier_id else (*FLAG_ACTIONS, "confirm", "dispute")
     base = db.query(Action).filter(Action.action_type.in_(types))
     if supplier_id:
-        base = base.filter(Action.supplier_id == supplier_id)
+        base = base.filter(Action.vendor_id == supplier_id)
     total = base.count()
     actions = (
         base.order_by(Action.created_at.desc())
@@ -655,3 +695,77 @@ def update_action_status(action_id: str, body: PlanStatusUpdate, request: Reques
     db.commit()
     db.refresh(a)
     return _build_action_detail(db, a)
+
+
+# ---------------------------------------------------------------------------
+# GET /plan/disputes — compliance view of all open / non-responsive vendor disputes
+# ---------------------------------------------------------------------------
+
+_OPEN_STATUSES     = ["OPEN", "NON_RESPONSIVE"]
+_RESOLVED_STATUSES = ["RESPONDED_TO_MEDICARE", "RESOLVED_BY_PHYSICIAN", "CLOSED", "REFERRED_OIG"]
+
+
+@router.get("/plan/disputes")
+def get_plan_disputes(status: str = Query("open"), db: Session = Depends(get_db)):
+    if status not in ("open", "resolved", "all"):
+        raise HTTPException(status_code=422, detail={
+            "error": "status must be one of: open, resolved, all", "code": "INVALID_STATUS"})
+
+    escalate_overdue_disputes(db)
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+
+    query = (
+        db.query(DisputeCase, SupplierProfile.supplier_name, ClaimNotification)
+        .outerjoin(SupplierProfile, SupplierProfile.npi == DisputeCase.vendor_npi)
+        .join(ClaimNotification, ClaimNotification.notification_id == DisputeCase.notification_id)
+    )
+    if status == "open":
+        query = query.filter(DisputeCase.status.in_(_OPEN_STATUSES))
+    elif status == "resolved":
+        query = query.filter(DisputeCase.status.in_(_RESOLVED_STATUSES))
+    rows = query.order_by(DisputeCase.opened_at.desc()).all()
+
+    physician_npis = {case.physician_npi for case, _, _ in rows}
+    physicians_by_npi = {
+        p.npi: p for p in db.query(Physician).filter(Physician.npi.in_(physician_npis)).all()
+    } if physician_npis else {}
+
+    result = []
+    for case, vendor_name, notif in rows:
+        days = (case.response_due_date - now).days if case.response_due_date else 0
+        phys = physicians_by_npi.get(case.physician_npi)
+        result.append({
+            "case_id":                      case.case_id,
+            "claim_number":                 notif.claim_ccn or notif.claim_number,
+            "physician_npi":                case.physician_npi,
+            "vendor_npi":                   case.vendor_npi,
+            "vendor_name":                  vendor_name,
+            "dispute_type":                 case.dispute_type,
+            "status":                       case.status,
+            "opened_at":                    case.opened_at.isoformat() if case.opened_at else None,
+            "billing_provider_notified_at": case.billing_provider_notified_at.isoformat() if case.billing_provider_notified_at else None,
+            "response_due_date":            case.response_due_date.isoformat() if case.response_due_date else None,
+            "days_remaining":               days,
+            "deadline_passed":              days < 0,
+            "physician_notes":              case.physician_notes,
+            "provider_response_type":       case.provider_response_type,
+            "vendor_response":              case.vendor_response,
+            "vendor_responded_at":          case.vendor_responded_at.isoformat() if case.vendor_responded_at else None,
+            "vendor_docs":                  case.vendor_docs or [],
+            "closed_at":                    case.closed_at.isoformat() if case.closed_at else None,
+            "resolution_notes":             case.resolution_notes,
+            "escalation_unlocked":          case.escalation_unlocked,
+            "claim": {
+                "patient_name_partial": notif.patient_name_partial,
+                "dos_from":             str(notif.dos_from) if notif.dos_from else None,
+                "dos_to":               str(notif.dos_to)   if notif.dos_to   else None,
+                "service_description":  notif.service_description,
+                "hcpcs_codes":          notif.hcpcs_codes,
+                "amount_billed":        float(notif.amount_billed) if notif.amount_billed else None,
+                "amount_paid":          float(notif.amount_paid)   if notif.amount_paid   else None,
+                "physician_npi_role":   notif.physician_npi_role,
+                "physician_name":       f"{phys.first_name} {phys.last_name}".strip() if phys and (phys.first_name or phys.last_name) else None,
+                "physician_practice":   phys.practice_name if phys else None,
+            },
+        })
+    return {"disputes": result, "total": len(result)}

@@ -12,7 +12,13 @@ export const PHYSICIAN_NPI = '1234567890'
 
 // Map an HTTP status + backend detail to a clean, user-facing message.
 // Never surfaces raw status codes, stack traces, or error objects to the UI.
+// Two backend conventions exist: FastAPI's HTTPException wraps errors as
+// {detail: {error: "human text", code: "..."}} (error = human-readable), while
+// most hand-built JSONResponse errors (vendor.py, npi_watch.py, ...) return
+// {error: "machine_code", message: "human text"} directly (error = machine code).
+// message wins when present so the specific reason isn't silently dropped.
 function friendlyMessage(status, detail) {
+  if (detail && detail.message) return detail.message
   if (detail && detail.error) return detail.error
   if (status === 422) return 'Some of the information provided was invalid.'
   if (status === 404) return 'The requested record could not be found.'
@@ -39,8 +45,11 @@ async function request(path, options) {
     throw err
   }
   if (!res.ok) {
-    let detail
-    try { detail = (await res.json()).detail } catch { /* ignore */ }
+    let body
+    try { body = await res.json() } catch { /* ignore */ }
+    // HTTPException wraps as {detail: {...}}; plain JSONResponse errors ARE the
+    // detail object already — fall back to the body itself when there's no wrapper.
+    const detail = body && typeof body === 'object' && 'detail' in body ? body.detail : body
     if (res.status === 401 && authErrorHandler && !path.startsWith('/auth/')) {
       authErrorHandler()
     }
@@ -159,6 +168,51 @@ export async function verifyUei(uei) {
   return request(`/auth/verify-uei?uei=${encodeURIComponent(uei)}`)
 }
 
+// ─── Vendor portal ──────────────────────────────────────────────────────────
+export async function getVendorStats() {
+  return request('/api/v1/vendor/portal/stats')
+}
+export async function getVendorClaims() {
+  return request('/api/v1/vendor/portal/claims')
+}
+export async function getVendorDisputes() {
+  return request('/api/v1/vendor/portal/disputes')
+}
+export async function submitVendorResponse(caseId, responseType, vendorResponse, docs = []) {
+  const fd = new FormData()
+  fd.append('response_type', responseType)
+  fd.append('vendor_response', vendorResponse)
+  docs.forEach((f) => fd.append('docs', f))
+  return request(`/api/v1/vendor/portal/disputes/${caseId}/respond`, { method: 'POST', body: fd })
+}
+
+// ─── Physician NPI Watch ─────────────────────────────────────────────────────
+export async function getNpiWatchNotifications() {
+  return request('/api/v1/physician/npi-watch/notifications')
+}
+export async function getNpiWatchStats() {
+  return request('/api/v1/physician/npi-watch/stats')
+}
+export async function confirmDisputeResolution(caseId, confirmed) {
+  return request(`/api/v1/physician/npi-watch/disputes/${caseId}/confirm`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ confirmed }),
+  })
+}
+export async function decideDisputeClaim(caseId, actionType, note = '') {
+  return request(`/api/v1/physician/npi-watch/disputes/${caseId}/decide`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action_type: actionType, note }),
+  })
+}
+
+// ─── Compliance: plan disputes ───────────────────────────────────────────────
+export async function getPlanDisputes(status = 'open') {
+  return get(`/plan/disputes?status=${status}`)
+}
+
 // Document upload (multipart). Requires a session cookie.
 export async function uploadDocument(file, docType) {
   const fd = new FormData()
@@ -245,13 +299,14 @@ function mapClaim(c) {
   const desc = c.flag_descriptions || []
   return {
     id: c.id,
+    ccn: c.ccn,
     date: c.date_of_service,
     patient: c.patient_name,
     patientZip: c.patient_zip || '',
     description: c.service_description,
     code: c.hcpcs_code || c.cpt_code || '',
     category: catLabel(c.service_category),
-    supplier: c.supplier_name,
+    supplier: c.vendor_name,
     supplierNpi: c.supplier_npi || '',
     amount: Number(c.claim_amount),
     reviewed: c.reviewed,
@@ -325,6 +380,7 @@ export async function getClaimsPage(npi = PHYSICIAN_NPI, f = {}) {
   if (f.reviewed === 'unreviewed') p.set('reviewed', 'false')
   else if (f.reviewed === 'reviewed') p.set('reviewed', 'true')
   if (f.supplierSearch) p.set('supplier_search', f.supplierSearch)
+  if (f.claimSearch) p.set('claim_search', f.claimSearch)
 
   const data = await get(`/physician/${npi}/claims?${p.toString()}`)
   return {
@@ -347,8 +403,8 @@ export async function getFlaggedSuppliers(npi = PHYSICIAN_NPI) {
     pending: 'Pending', under_review: 'Under Review', acknowledged: 'Acknowledged',
   }
   return data.items.map((s, i) => ({
-    id: s.supplier_id || i,
-    name: s.supplier_name,
+    id: s.vendor_id || i,
+    name: s.vendor_name,
     claimsCount: s.claim_count,
     totalAmount: Number(s.total_amount),
     firstFlagged: (s.flagged_at || s.first_flagged_at || '').slice(0, 10),
@@ -383,16 +439,16 @@ function mapNpiRow(r, i) {
     totalClaims: r.total_claim_count,
     totalAmount: Number(r.total_claim_amount),
     physicianFlags: r.physician_flag_count,
-    topSupplier: r.top_supplier_name || '—',
+    topSupplier: r.top_vendor_name || '—',
     rulesFiredCount: [r.volume_flag, r.geo_flag, r.cross_npi_flag, r.oig_flag,
-                      r.new_supplier_flag, r.identity_reuse_flag, r.hospice_duration_flag,
+                      r.new_vendor_flag, r.identity_reuse_flag, r.hospice_duration_flag,
                       r.upcoding_flag, r.unbundling_flag].filter(Boolean).length,
     rulesFired: [
       r.oig_flag && RULE_META.oig_leie_hit,
       r.cross_npi_flag && RULE_META.cross_npi_supplier,
       r.volume_flag && RULE_META.volume_spike,
       r.geo_flag && RULE_META.geographic_anomaly,
-      r.new_supplier_flag && RULE_META.new_high_value_supplier,
+      r.new_vendor_flag && RULE_META.new_high_value_supplier,
       r.identity_reuse_flag && RULE_META.identity_reuse,
       r.hospice_duration_flag && RULE_META.abnormal_hospice_duration,
       r.upcoding_flag && RULE_META.upcoding,
@@ -447,7 +503,7 @@ export async function getRuleEvidence(npi, rule) {
       id: c.claim_id,
       patient: c.patient_name,
       date: c.date_of_service,
-      supplier: c.supplier_name,
+      supplier: c.vendor_name,
       description: c.service_description,
       category: catLabel(c.service_category),
       amount: Number(c.claim_amount),
@@ -485,14 +541,14 @@ export async function getNpiDetail(npi) {
     claims: (d.claims?.items || []).map((c) => ({
       id: c.id, date: c.date_of_service, patient: c.patient_name,
       description: c.service_description, code: c.hcpcs_code || c.cpt_code || '',
-      category: catLabel(c.service_category), supplier: c.supplier_name,
+      category: catLabel(c.service_category), supplier: c.vendor_name,
       amount: Number(c.claim_amount),
       flags: (c.flags || []).map((f) => RULE_TO_FLAG[f]).filter(Boolean),
     })),
     actions: (d.physician_actions || []).map((a, i) => ({
       id: a.id || i,
       action: ACTION_FROM_BACKEND[a.action_type] || 'confirmed',
-      patient: a.patient_name, supplier: a.supplier_name,
+      patient: a.patient_name, supplier: a.vendor_name,
       note: a.note || '', ts: a.created_at,
     })),
   }
@@ -503,8 +559,8 @@ export async function getSuppliers() {
   const band = (score) => score > 80 ? 'Critical' : score > 60 ? 'High'
     : score > 30 ? 'Medium' : 'Low'
   return data.items.map((s, i) => ({
-    id: s.supplier_id || i,
-    name: s.supplier_name,
+    id: s.vendor_id || i,
+    name: s.vendor_name,
     distinctNPIs: s.distinct_npi_count ?? 0,
     physicianFlags: s.physician_flag_count,
     totalAmount: Number(s.total_claim_amount),
@@ -541,9 +597,9 @@ function mapAlert(a) {
     action: ACTION_FROM_BACKEND[a.action_type] || a.action_type,
     physicianName: a.physician_name,
     npi: a.npi,
-    supplierName: a.supplier_name,
-    supplierId: a.supplier_id,
-    supplierNpi: a.supplier_npi || a.supplier_id,
+    supplierName: a.vendor_name,
+    supplierId: a.vendor_id,
+    supplierNpi: a.vendor_npi || a.vendor_id,
     patientName: a.patient_name,
     amount: Number(a.claim_amount),
     claimId: a.id,
@@ -567,8 +623,8 @@ function mapActionDetail(d) {
     actionId: d.action_id,
     npi: d.npi,
     physicianName: d.physician_name,
-    supplierName: d.supplier_name,
-    supplierId: d.supplier_id,
+    supplierName: d.vendor_name,
+    supplierId: d.vendor_id,
     claimId: d.claim_id,
     actionType: d.action_type,
     action: ACTION_FROM_BACKEND[d.action_type] || d.action_type,
@@ -623,13 +679,14 @@ export function subscribeAlerts(onAlert, opts = {}) {
         action: ACTION_FROM_BACKEND[a.action_type] || a.action_type,
         physicianName: a.physician_name,
         npi: a.npi,
-        supplierName: a.supplier_name,
-        supplierNpi: a.supplier_npi,
+        supplierName: a.vendor_name,
+        supplierNpi: a.vendor_npi,
         patientName: a.patient_name,
         amount: Number(a.claim_amount),
         claimId: a.id,
         escalation: a.escalation,
         escalationLabel: a.escalation_label,
+        recipient: a.recipient,
         ts: a.timestamp ? toUtcDate(a.timestamp) : new Date(),
       })
     } catch { /* ignore keep-alive / non-JSON */ }

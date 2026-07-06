@@ -27,7 +27,7 @@ def rule_rapid_cycling(db, settings) -> list:
 
     results = []
     rows = (
-        db.query(Claim.id, Claim.npi, Claim.supplier_id, Claim.date_of_service)
+        db.query(Claim.id, Claim.npi, Claim.vendor_id, Claim.date_of_service)
         .filter(Claim.npi.in_({npi for npi, _ in distinct_patients}))
         .all()
     )
