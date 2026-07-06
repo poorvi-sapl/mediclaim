@@ -22,6 +22,7 @@ const ICONS = {
   bolt: <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>,
   chevronRight: <polyline points="9 18 15 12 9 6"/>,
   chevronDown:  <polyline points="6 9 12 15 18 9"/>,
+  refresh: <><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></>,
 }
 
 export function Icon({ name, size = 18, stroke = 1.9, ...props }) {
