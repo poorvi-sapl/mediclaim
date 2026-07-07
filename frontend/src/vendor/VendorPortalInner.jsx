@@ -299,6 +299,20 @@ function statusBucket(status) {
   return status === 'OPEN' || status === 'NON_RESPONSIVE' ? status : 'RESPONDED'
 }
 
+// Only shown once "Responded" is picked — splits that bucket by which path the
+// vendor took: straight to Medicare, or resolved with physician (including the
+// PENDING_PHYSICIAN_CONFIRMATION cases still awaiting the physician's sign-off).
+const RESPONSE_TYPE_OPTIONS = [
+  { id: 'ALL',       label: 'All Responses' },
+  { id: 'MEDICARE',  label: 'Responded to Medicare' },
+  { id: 'PHYSICIAN', label: 'Responded to Physician' },
+]
+function responseTypeBucket(status) {
+  if (status === 'RESPONDED_TO_MEDICARE') return 'MEDICARE'
+  if (status === 'RESOLVED_BY_PHYSICIAN' || status === 'PENDING_PHYSICIAN_CONFIRMATION') return 'PHYSICIAN'
+  return null
+}
+
 const DISPUTE_SORT_OPTIONS = [
   { id: 'NONE',      label: 'Default Order' },
   { id: 'DAYS_ASC',  label: 'Days Left: Low to High' },
@@ -307,13 +321,17 @@ const DISPUTE_SORT_OPTIONS = [
 
 const filterSelectCls = 'px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-[12px] font-semibold text-slate-700 outline-none focus:border-[#1a3d7c]/40 focus:ring-2 focus:ring-[#1a3d7c]/10'
 
-function DisputesScreen({ disputes, loading, typeFilter, setTypeFilter, statusFilter, setStatusFilter, sortOrder, setSortOrder, onSelect }) {
+function DisputesScreen({ disputes, loading, typeFilter, setTypeFilter, statusFilter, setStatusFilter, responseTypeFilter, setResponseTypeFilter, sortOrder, setSortOrder, search, setSearch, onSelect }) {
   if (loading) return <div className="flex items-center justify-center h-64"><Spinner /></div>
 
   const filtered = disputes.filter((d) => {
     const matchType = typeFilter === 'ALL' || d.dispute_type === typeFilter
     const matchStatus = statusFilter === 'ALL' || statusBucket(d.status) === statusFilter
-    return matchType && matchStatus
+    const matchResponseType = statusFilter !== 'RESPONDED' || responseTypeFilter === 'ALL' || responseTypeBucket(d.status) === responseTypeFilter
+    const matchSearch = !search
+      || d.claim_number?.toLowerCase().includes(search.toLowerCase())
+      || d.physician_notes?.toLowerCase().includes(search.toLowerCase())
+    return matchType && matchStatus && matchResponseType && matchSearch
   })
 
   if (sortOrder === 'DAYS_ASC') {
@@ -338,9 +356,24 @@ function DisputesScreen({ disputes, loading, typeFilter, setTypeFilter, statusFi
             <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className={filterSelectCls}>
               {DISPUTE_STATUS_OPTIONS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
             </select>
+            {statusFilter === 'RESPONDED' && (
+              <select value={responseTypeFilter} onChange={(e) => setResponseTypeFilter(e.target.value)} className={filterSelectCls}>
+                {RESPONSE_TYPE_OPTIONS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+              </select>
+            )}
             <select value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} className={filterSelectCls}>
               {DISPUTE_SORT_OPTIONS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
             </select>
+            <div className="relative ml-auto w-full sm:w-auto sm:min-w-[220px]">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"><Icon name="search" size={13} /></span>
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search claim # or notes…"
+                className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-slate-200 bg-white text-[12px] font-medium text-slate-700 placeholder-slate-400 outline-none focus:border-[#1a3d7c]/40 focus:ring-2 focus:ring-[#1a3d7c]/10"
+              />
+            </div>
           </div>
 
           {filtered.length === 0 ? (
@@ -394,6 +427,103 @@ function DisputesScreen({ disputes, loading, typeFilter, setTypeFilter, statusFi
   )
 }
 
+// Chronological history of a dispute case from the vendor's side — what the
+// physician reported, when the vendor was notified, what they responded with
+// (plus docs), and how the physician's confirmation loop played out. Mirrors
+// the physician portal's own PhysicianDisputeTimeline (App.jsx) for parity.
+function VendorDisputeTimeline({ dispute: d }) {
+  const past = [
+    { at: d.opened_at, label: d.dispute_type === 'FRAUD_REPORT' ? 'Physician reported this as fraud' : 'Physician disputed this claim', note: d.physician_notes },
+    d.billing_provider_notified_at && { at: d.billing_provider_notified_at, label: 'You were notified — 15 days to respond' },
+    d.vendor_responded_at && {
+      at: d.vendor_responded_at,
+      label: d.provider_response_type === 'RESPONDED_TO_MEDICARE' ? 'You responded to Medicare' : 'You resolved this directly with the physician',
+      detail: d.vendor_response,
+      docs: d.vendor_docs,
+    },
+    d.status === 'RESOLVED_BY_PHYSICIAN' && { at: d.closed_at || d.vendor_responded_at, label: 'Physician confirmed this was resolved' },
+    !d.vendor_responded_at && (d.status === 'NON_RESPONSIVE' || d.deadline_passed) && { at: d.response_due_date, label: 'Response window closed — escalated to compliance' },
+    !d.vendor_responded_at && !d.deadline_passed && !['OPEN', 'NON_RESPONSIVE'].includes(d.status) && { at: d.closed_at, label: d.status?.replace(/_/g, ' ') },
+  ].filter(Boolean).sort((a, b) => new Date(a.at) - new Date(b.at))
+
+  const pending =
+    d.status === 'PENDING_PHYSICIAN_CONFIRMATION' ? 'confirming'
+    : d.status === 'OPEN' && !d.escalation_unlocked && !d.deadline_passed ? 'awaiting'
+    : null
+
+  return (
+    <div className="space-y-3">
+      {past.map((t, i) => (
+        <div key={i} className="flex gap-3">
+          <div className="flex flex-col items-center flex-shrink-0 pt-0.5">
+            <div className="w-2 h-2 rounded-full bg-[#1a3d7c]" />
+            {(i < past.length - 1 || pending || (d.status === 'OPEN' && d.escalation_unlocked)) && <div className="w-px flex-1 bg-slate-200 mt-1" />}
+          </div>
+          <div className="pb-3 min-w-0">
+            <div className="flex items-baseline gap-2 flex-wrap">
+              <span className="text-[12px] font-semibold text-slate-800">{t.label}</span>
+              <span className="text-[11px] text-slate-400">{fmtDate(t.at)}</span>
+            </div>
+            {t.note && <p className="text-[12px] text-slate-500 italic mt-0.5">"{t.note}"</p>}
+            {t.detail && <p className="text-[12px] text-slate-600 mt-0.5">"{t.detail}"</p>}
+            {t.docs?.length > 0 && (
+              <div className="flex flex-wrap gap-2 mt-1.5">
+                {t.docs.map((doc) => (
+                  <a key={doc.stored_name} href={`${API_BASE}/api/v1/vendor/disputes/${d.case_id}/docs/${doc.stored_name}`}
+                     target="_blank" rel="noreferrer"
+                     className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-100 text-[11px] font-medium text-slate-600 hover:bg-slate-200 transition-colors">
+                    <Icon name="doc" size={11} /> {doc.filename} <span className="text-slate-400">({fmtFileSize(doc.size)})</span>
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      ))}
+
+      {pending === 'confirming' && (
+        <div className="flex gap-3">
+          <div className="flex flex-col items-center flex-shrink-0 pt-0.5">
+            <div className="w-2 h-2 rounded-full bg-[#1a3d7c] ring-4 ring-[#1a3d7c]/15" />
+          </div>
+          <div className="min-w-0">
+            <span className="text-[12px] font-semibold text-navy">Awaiting physician confirmation</span>
+            <p className="text-[12px] text-slate-500 mt-0.5">
+              {d.physician_confirmation_due_date ? `They have until ${fmtDate(d.physician_confirmation_due_date)} to confirm or reject this.` : 'Waiting on the physician to confirm this is resolved.'}
+              {' '}If they don't confirm it, this case reopens and you'll be able to respond to Medicare directly instead.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {pending === 'awaiting' && (
+        <div className="flex gap-3">
+          <div className="flex flex-col items-center flex-shrink-0 pt-0.5">
+            <div className="w-2 h-2 rounded-full bg-slate-300" />
+          </div>
+          <span className="text-[12px] font-medium text-slate-400">
+            Awaiting your response{d.days_remaining != null ? ` · ${d.days_remaining}d left` : ''}
+          </span>
+        </div>
+      )}
+
+      {d.status === 'OPEN' && d.escalation_unlocked && (
+        <div className="flex gap-3">
+          <div className="flex flex-col items-center flex-shrink-0 pt-0.5">
+            <div className="w-2 h-2 rounded-full bg-rose-500" />
+          </div>
+          <div className="min-w-0">
+            <span className="text-[12px] font-semibold text-rose-700">Physician didn't confirm — case reopened</span>
+            <p className="text-[12px] text-slate-500 mt-0.5">
+              You can now respond to Medicare directly instead, or try resolving with the physician again.
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Dispute detail + response form ──────────────────────────────────────────
 function fmtFileSize(bytes) {
   if (bytes == null) return ''
@@ -436,26 +566,14 @@ function DisputeDetailScreen({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-[12px]">
-          {[
-            ['Opened',           fmtDate(dispute.opened_at)],
-            ['Response Due',     fmtDate(dispute.response_due_date)],
-            ['Notified',         dispute.billing_provider_notified_at ? fmtDate(dispute.billing_provider_notified_at) : '—'],
-            ['Responded',        dispute.vendor_responded_at ? fmtDate(dispute.vendor_responded_at) : 'Not yet'],
-          ].map(([label, value]) => (
-            <div key={label}>
-              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">{label}</div>
-              <div className="font-medium text-slate-700">{value}</div>
-            </div>
-          ))}
-        </div>
+      </div>
 
-        {dispute.physician_notes && (
-          <div className="bg-slate-50 rounded-lg px-4 py-3">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Physician Notes</div>
-            <p className="text-[13px] text-slate-700 italic">"{dispute.physician_notes}"</p>
-          </div>
-        )}
+      {/* Full history of the case, not just the current status — what the physician
+          reported, when you were notified, what you responded with (and any docs),
+          and how it was resolved. */}
+      <div className="mc-card p-5">
+        <h3 className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-3">Timeline</h3>
+        <VendorDisputeTimeline dispute={dispute} />
       </div>
 
       {/* Claim details — same info the vendor sees for any claim in My Claims, so
@@ -496,68 +614,6 @@ function DisputeDetailScreen({
           </div>
           <p className="text-[12px] text-rose-700">
             The physician reviewed your "Resolve with the physician" response below and did not confirm it resolved the dispute. The case has reopened — you can now respond to Medicare directly instead, or try resolving with the physician again.
-          </p>
-        </div>
-      )}
-
-      {/* Vendor actually submitted a response */}
-      {dispute.vendor_responded_at && (
-        <div className="mc-card p-5 bg-emerald-50 border-emerald-200 space-y-2">
-          <div className="flex items-center gap-2">
-            <Icon name="check" size={16} className="text-emerald-600" />
-            <span className="text-[13px] font-bold text-emerald-800">
-              {dispute.status === 'OPEN' && dispute.escalation_unlocked ? 'Your previous response' : 'Response recorded'}
-            </span>
-          </div>
-          <p className="text-[12px] text-emerald-700">
-            Status: <strong>{dispute.status?.replace(/_/g, ' ')}</strong> · Responded {fmtDate(dispute.vendor_responded_at)}
-          </p>
-          {dispute.status === 'PENDING_PHYSICIAN_CONFIRMATION' && (
-            <p className="text-[12px] text-emerald-700">
-              Awaiting physician confirmation
-              {dispute.physician_confirmation_due_date ? ` — they have until ${fmtDate(dispute.physician_confirmation_due_date)} to confirm or reject this.` : '.'}
-              {' '}If they don't confirm it, this case reopens and you'll be able to respond to Medicare directly instead.
-            </p>
-          )}
-          {dispute.vendor_response && (
-            <p className="text-[12px] text-emerald-800 italic">"{dispute.vendor_response}"</p>
-          )}
-          {dispute.vendor_docs?.length > 0 && (
-            <div className="flex flex-wrap gap-2 pt-1">
-              {dispute.vendor_docs.map((doc) => (
-                <a
-                  key={doc.stored_name}
-                  href={`${API_BASE}/api/v1/vendor/disputes/${dispute.case_id}/docs/${doc.stored_name}`}
-                  target="_blank" rel="noreferrer"
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white ring-1 ring-emerald-200 text-[11px] font-semibold text-emerald-800 hover:bg-emerald-50 transition-colors"
-                >
-                  <Icon name="doc" size={12} /> {doc.filename} <span className="text-emerald-500 font-normal">({fmtFileSize(doc.size)})</span>
-                </a>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Never responded and the window has closed — missed OPEN cases show this while still
-          OPEN-but-overdue; NON_RESPONSIVE means the deadline job already flipped the status. */}
-      {!dispute.vendor_responded_at && (dispute.status === 'NON_RESPONSIVE' || dispute.deadline_passed) && (
-        <div className="mc-card p-5 bg-red-50 border-red-200">
-          <div className="flex items-center gap-2">
-            <Icon name="clock" size={16} className="text-red-600" />
-            <span className="text-[13px] font-bold text-red-800">Response window closed</span>
-          </div>
-          <p className="text-[12px] text-red-700 mt-1">
-            The 15-day response window passed without a response. This case has been escalated to compliance for review.
-          </p>
-        </div>
-      )}
-
-      {/* Compliance closed/escalated the case without ever getting a vendor response */}
-      {!dispute.vendor_responded_at && !dispute.deadline_passed && !['OPEN', 'NON_RESPONSIVE'].includes(dispute.status) && (
-        <div className="mc-card p-5 bg-slate-50 border-slate-200">
-          <p className="text-[12px] text-slate-600">
-            Status: <strong>{dispute.status?.replace(/_/g, ' ')}</strong>
           </p>
         </div>
       )}
@@ -700,9 +756,11 @@ export default function VendorPortalInner() {
 
   // Lifted (not local to DisputesScreen) so the filters/sort survive navigating into
   // a dispute's detail view and back — DisputesScreen unmounts while screen !== 'disputes'.
-  const [disputeTypeFilter,   setDisputeTypeFilter]   = useState('ALL')
-  const [disputeStatusFilter, setDisputeStatusFilter] = useState('ALL')
-  const [disputeSortOrder,    setDisputeSortOrder]    = useState('NONE')
+  const [disputeTypeFilter,     setDisputeTypeFilter]     = useState('ALL')
+  const [disputeStatusFilter,   setDisputeStatusFilter]   = useState('ALL')
+  const [disputeResponseType,   setDisputeResponseType]   = useState('ALL')
+  const [disputeSortOrder,      setDisputeSortOrder]      = useState('NONE')
+  const [disputeSearch,         setDisputeSearch]         = useState('')
 
   const [responseType,      setResponseType]      = useState(null)
   const [vendorResponseText, setVendorResponseText] = useState('')
@@ -871,8 +929,12 @@ export default function VendorPortalInner() {
           setTypeFilter={setDisputeTypeFilter}
           statusFilter={disputeStatusFilter}
           setStatusFilter={setDisputeStatusFilter}
+          responseTypeFilter={disputeResponseType}
+          setResponseTypeFilter={setDisputeResponseType}
           sortOrder={disputeSortOrder}
           setSortOrder={setDisputeSortOrder}
+          search={disputeSearch}
+          setSearch={setDisputeSearch}
           onSelect={(d) => {
             setSelectedDispute(d)
             setResponseType(null)

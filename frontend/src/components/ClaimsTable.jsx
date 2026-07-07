@@ -706,6 +706,7 @@ export default function ClaimsTable({ npi = PHYSICIAN_NPI, onActioned, supplierF
                   <button onClick={() => applySupplier(claim.supplier)} title={claim.supplier}
                           className={`text-xs text-left truncate block w-full mb-1.5 ${supplierTierCls(claim)}`}>
                     {claim.supplier}
+                    {claim.supplierNpi && <span className="ml-1.5 font-mono text-[10px] text-slate-400">NPI {claim.supplierNpi}</span>}
                   </button>
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-1.5 min-w-0">
@@ -794,6 +795,9 @@ export default function ClaimsTable({ npi = PHYSICIAN_NPI, onActioned, supplierF
                                 style={{ maxWidth: '190px' }}>
                           {claim.supplier}
                         </button>
+                        {claim.supplierNpi && (
+                          <div className="font-mono text-[10px] text-slate-400 truncate" style={{ maxWidth: '190px' }}>NPI {claim.supplierNpi}</div>
+                        )}
                       </td>
                       {/* Amount — gray-900, weight 500, tabular */}
                       <td className={`${CELL} text-right tabular-nums font-medium text-[#111827]`}>{fmtUSD(claim.amount, 2)}</td>

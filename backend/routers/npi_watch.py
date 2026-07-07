@@ -91,6 +91,7 @@ def get_notifications(request: Request, db: Session = Depends(get_db)):
             "billing_provider_notified_at": d.billing_provider_notified_at.isoformat() if d.billing_provider_notified_at else None,
             "vendor_responded_at":    d.vendor_responded_at.isoformat() if d.vendor_responded_at else None,
             "response_due_date":      d.response_due_date.isoformat() if d.response_due_date else None,
+            "closed_at":              d.closed_at.isoformat() if d.closed_at else None,
             "days_remaining":         days_remaining,
             "deadline_passed":        days_remaining is not None and days_remaining < 0,
             "escalation_unlocked":    d.escalation_unlocked,

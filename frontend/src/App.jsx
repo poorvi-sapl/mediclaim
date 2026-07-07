@@ -479,33 +479,15 @@ function DisputeDetailScreenPhysician({ dispute: n, confirmingCaseId, onConfirm,
           ))}
         </div>
 
-        {d && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-[12px] pt-3 border-t border-slate-50">
-            {[
-              ['Disputed On', fmtDate(d.opened_at)],
-              ['Response Due', fmtDate(d.response_due_date)],
-              ['Vendor Notified', d.billing_provider_notified_at ? fmtDate(d.billing_provider_notified_at) : '—'],
-              ['Vendor Responded', d.vendor_responded_at ? fmtDate(d.vendor_responded_at) : 'Not yet'],
-            ].map(([label, value]) => (
-              <div key={label}>
-                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">{label}</div>
-                <div className="font-medium text-slate-700">{value}</div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {d?.physician_notes && (
-          <div className="bg-slate-50 rounded-lg px-4 py-3">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Your Original Notes</div>
-            <p className="text-[13px] text-slate-700 italic">"{d.physician_notes}"</p>
-          </div>
-        )}
       </div>
 
       <div className="mc-card p-5">
-        <h3 className="text-[13px] font-bold text-slate-900 mb-3">Vendor Response</h3>
-        <DisputeStatusPanel d={d} busy={busy} onConfirm={onConfirm} />
+        <h3 className="text-[13px] font-bold text-slate-900 mb-3">Timeline</h3>
+        {d ? (
+          <PhysicianDisputeTimeline d={d} busy={busy} onConfirm={onConfirm} />
+        ) : (
+          <span className="text-[12px] font-medium text-slate-400">Awaiting vendor notification</span>
+        )}
       </div>
 
       {d && VENDOR_RESPONDED_STATUSES.includes(d.status) && (
@@ -516,6 +498,98 @@ function DisputeDetailScreenPhysician({ dispute: n, confirmingCaseId, onConfirm,
           decideResult={decideResult}
           onDecide={onDecide}
         />
+      )}
+    </div>
+  )
+}
+
+// Chronological history of a single dispute case, from the physician's side —
+// every step that happened (reported → vendor notified → vendor responded,
+// with their notes/docs → your confirmation decision), not just the current
+// status snapshot. Mirrors DisputeDetailModal's timeline (payer/compliance view).
+function PhysicianDisputeTimeline({ d, busy, onConfirm }) {
+  const past = [
+    { at: d.opened_at, label: d.dispute_type === 'FRAUD_REPORT' ? 'You reported this as fraud' : 'You disputed this claim', note: d.physician_notes },
+    d.billing_provider_notified_at && { at: d.billing_provider_notified_at, label: 'Vendor notified — 15 days to respond' },
+    d.vendor_responded_at && {
+      at: d.vendor_responded_at,
+      label: d.provider_response_type === 'RESPONDED_TO_MEDICARE' ? 'Vendor responded to Medicare' : 'Vendor resolved this with you directly',
+      detail: d.vendor_response,
+      docs: d.docs,
+    },
+    d.status === 'RESOLVED_BY_PHYSICIAN' && { at: d.closed_at || d.vendor_responded_at, label: 'You confirmed this was resolved' },
+    d.status === 'NON_RESPONSIVE' && { at: d.response_due_date, label: 'Vendor did not respond in time — escalated to compliance' },
+  ].filter(Boolean).sort((a, b) => new Date(a.at) - new Date(b.at))
+
+  // Live/pending steps have no timestamp yet — rendered after the dated history.
+  const pending =
+    d.status === 'PENDING_PHYSICIAN_CONFIRMATION' ? 'confirm'
+    : d.status === 'OPEN' && !d.deadline_passed      ? 'awaiting'
+    : null
+
+  return (
+    <div className="space-y-3">
+      {past.map((t, i) => (
+        <div key={i} className="flex gap-3">
+          <div className="flex flex-col items-center flex-shrink-0 pt-0.5">
+            <div className="w-2 h-2 rounded-full bg-navy" />
+            {(i < past.length - 1 || pending) && <div className="w-px flex-1 bg-slate-200 mt-1" />}
+          </div>
+          <div className="pb-3 min-w-0">
+            <div className="flex items-baseline gap-2 flex-wrap">
+              <span className="text-[12px] font-semibold text-slate-800">{t.label}</span>
+              <span className="text-[11px] text-slate-400">{fmtDate(t.at)}</span>
+            </div>
+            {t.note && <p className="text-[12px] text-slate-500 italic mt-0.5">"{t.note}"</p>}
+            {t.detail && <p className="text-[12px] text-slate-600 mt-0.5">"{t.detail}"</p>}
+            {t.docs?.length > 0 && (
+              <div className="flex flex-wrap gap-2 mt-1.5">
+                {t.docs.map((doc) => (
+                  <a key={doc.stored_name} href={doc.download_url} target="_blank" rel="noreferrer"
+                     className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-100 text-[11px] font-medium text-slate-600 hover:bg-slate-200 transition-colors">
+                    <Icon name="doc" size={11} /> {doc.filename}
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      ))}
+
+      {pending === 'confirm' && (
+        <div className="flex gap-3">
+          <div className="flex flex-col items-center flex-shrink-0 pt-0.5">
+            <div className="w-2 h-2 rounded-full bg-navy ring-4 ring-navy/15" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-baseline gap-2 flex-wrap">
+              <span className="text-[12px] font-semibold text-navy">Your confirmation needed</span>
+              {d.physician_confirmation_due_date && <span className="text-[11px] text-slate-400">by {fmtDate(d.physician_confirmation_due_date)}</span>}
+            </div>
+            <p className="text-[12px] text-slate-500 mt-0.5">Did the vendor's response above actually resolve this dispute?</p>
+            <div className="flex gap-2 mt-2">
+              <button onClick={() => onConfirm(d.case_id, true)} disabled={busy}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors disabled:opacity-50">
+                ✓ Confirm Resolved
+              </button>
+              <button onClick={() => onConfirm(d.case_id, false)} disabled={busy}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-bold bg-rose-600 hover:bg-rose-700 text-white transition-colors disabled:opacity-50">
+                ✗ Not Resolved
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pending === 'awaiting' && (
+        <div className="flex gap-3">
+          <div className="flex flex-col items-center flex-shrink-0 pt-0.5">
+            <div className="w-2 h-2 rounded-full bg-slate-300" />
+          </div>
+          <span className="text-[12px] font-medium text-slate-400">
+            Awaiting vendor response{d.days_remaining != null ? ` · ${d.days_remaining}d left` : ''}
+          </span>
+        </div>
       )}
     </div>
   )

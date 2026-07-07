@@ -459,6 +459,7 @@ def portal_disputes(request: Request, db: Session = Depends(get_db)):
             "provider_response_type":        case.provider_response_type,
             "vendor_docs":                   case.vendor_docs or [],
             "billing_provider_notified_at":  case.billing_provider_notified_at.isoformat() if case.billing_provider_notified_at else None,
+            "closed_at":                     case.closed_at.isoformat() if case.closed_at else None,
             "escalation_unlocked":           case.escalation_unlocked,
             "physician_confirmation_due_date": case.physician_confirmation_due_date.isoformat() if case.physician_confirmation_due_date else None,
             "claim": {
