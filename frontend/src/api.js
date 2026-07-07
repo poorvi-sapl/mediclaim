@@ -693,3 +693,19 @@ export function subscribeAlerts(onAlert, opts = {}) {
   }
   return es
 }
+
+// Generic dispute-lifecycle push — physician/vendor portals use this to know
+// when to refetch (a vendor responded, a physician confirmed/rejected, a new
+// dispute was opened), without needing the alert-toast shape subscribeAlerts
+// above expects. Payload is a bare signal (case_id/status/event) — callers
+// just refetch their existing list, they don't reconstruct state from it.
+export function subscribeDisputeStream(path, onEvent, opts = {}) {
+  const es = new EventSource(`${API_BASE}${path}`, { withCredentials: true })
+  es.onopen = () => opts.onOpen?.()
+  es.onerror = () => opts.onError?.()
+  es.onmessage = (ev) => {
+    if (!ev.data) return
+    try { onEvent(JSON.parse(ev.data)) } catch { /* ignore keep-alive / non-JSON */ }
+  }
+  return es
+}

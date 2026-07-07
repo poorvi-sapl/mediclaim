@@ -29,7 +29,7 @@ import PhysicianOverview from './components/PhysicianOverview'
 import PhysicianAlerts from './components/PhysicianAlerts'
 import GhostBillingToast from './components/GhostBillingToast'
 import { StatCardGrid, PhysicianHeader, ReviewBanner } from './components/SummaryCard'
-import { PHYSICIAN_NPI, getPhysician, getFlaggedSuppliers, getNotificationsCount, markNotificationsSeen, getNpiWatchNotifications, getNpiWatchStats, getPlanDisputes, confirmDisputeResolution, decideDisputeClaim, API_BASE } from './api'
+import { PHYSICIAN_NPI, getPhysician, getFlaggedSuppliers, getNotificationsCount, markNotificationsSeen, getNpiWatchNotifications, getNpiWatchStats, getPlanDisputes, confirmDisputeResolution, decideDisputeClaim, subscribeDisputeStream, API_BASE } from './api'
 
 const PHYS_NAV = [
   { id: 'summary', label: 'My Dashboard', icon: 'dashboard' },
@@ -74,6 +74,7 @@ function PhysicianPortalInner() {
   const [disputeFilter, setDisputeFilter] = useState('ALL')  // ALL | OPEN | RESOLVED — set by clicking the KPI tiles or the status dropdown
   const [disputeTypeFilter, setDisputeTypeFilter] = useState('ALL')  // ALL | DISPUTE | FRAUD_REPORT
   const [disputeSortOrder, setDisputeSortOrder] = useState('NONE')   // NONE | DAYS_ASC | DAYS_DESC
+  const [disputeSearch, setDisputeSearch] = useState('')
 
   // Navigate forward, recording the current view so the header back button can restore it.
   function navTo(s, filter = null) {
@@ -113,9 +114,21 @@ function PhysicianPortalInner() {
   }
   useEffect(() => { if (screen === 'alerts') loadAlerts() }, [screen])
 
-  // Refresh on entering the detail screen too — otherwise it just shows whatever
-  // was in npiAlerts when the list was last fetched, which goes stale the moment
-  // the vendor responds in a separate session (no live push/websocket here).
+  // Live push — a vendor responding (to us or Medicare), or a case reopening,
+  // refreshes the feed immediately instead of only on next screen entry.
+  useEffect(() => {
+    const es = subscribeDisputeStream('/api/v1/physician/npi-watch/alerts/stream', () => {
+      Promise.all([getNpiWatchNotifications(), getNpiWatchStats()]).then(([a, s]) => {
+        setNpiAlerts(a.notifications); setNpiStats(s)
+        setSelectedDispute((prev) => (prev ? a.notifications.find((n) => n.notification_id === prev.notification_id) || prev : prev))
+      }).catch(() => {})
+    })
+    return () => es.close()
+  }, [])
+
+  // Also refresh on entering the detail screen directly — the live-push effect
+  // above only fires once mounted, so this covers the gap between mount and
+  // the first SSE event.
   useEffect(() => {
     if (screen !== 'disputeDetail') return
     let cancelled = false
@@ -256,12 +269,22 @@ function PhysicianPortalInner() {
                   <option value="DAYS_ASC">Days Left: Low to High</option>
                   <option value="DAYS_DESC">Days Left: High to Low</option>
                 </select>
-                {(disputeFilter !== 'ALL' || disputeTypeFilter !== 'ALL' || disputeSortOrder !== 'NONE') && (
-                  <button onClick={() => { setDisputeFilter('ALL'); setDisputeTypeFilter('ALL'); setDisputeSortOrder('NONE') }}
+                {(disputeFilter !== 'ALL' || disputeTypeFilter !== 'ALL' || disputeSortOrder !== 'NONE' || disputeSearch) && (
+                  <button onClick={() => { setDisputeFilter('ALL'); setDisputeTypeFilter('ALL'); setDisputeSortOrder('NONE'); setDisputeSearch('') }}
                           className="text-[12px] font-semibold text-slate-500 hover:text-rose-500 transition-colors flex items-center gap-1">
                     <Icon name="x" size={11} stroke={2.5} /> Clear all
                   </button>
                 )}
+                <div className="relative ml-auto w-full sm:w-auto sm:min-w-[220px]">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"><Icon name="search" size={13} /></span>
+                  <input
+                    type="text"
+                    value={disputeSearch}
+                    onChange={(e) => setDisputeSearch(e.target.value)}
+                    placeholder="Search claim #, vendor, or NPI…"
+                    className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-slate-200 bg-white text-[12px] font-medium text-slate-700 placeholder-slate-400 outline-none focus:border-navy/40 focus:ring-2 focus:ring-navy/10"
+                  />
+                </div>
               </div>
             )}
             {(() => {
@@ -272,7 +295,14 @@ function PhysicianPortalInner() {
                 const matchStatus = disputeFilter === 'ALL'
                   || (disputeFilter === 'OPEN' && OPEN_STATUSES.includes(n.dispute?.status))
                   || (disputeFilter === 'RESOLVED' && RESOLVED_STATUSES.includes(n.dispute?.status))
-                return matchType && matchStatus
+                const q = disputeSearch.trim().toLowerCase()
+                const matchSearch = !q
+                  || n.claim_number?.toLowerCase().includes(q)
+                  || n.vendor_name?.toLowerCase().includes(q)
+                  || n.vendor_npi?.toLowerCase().includes(q)
+                  || n.patient_name_partial?.toLowerCase().includes(q)
+                  || n.dispute?.physician_notes?.toLowerCase().includes(q)
+                return matchType && matchStatus && matchSearch
               })
               if (disputeSortOrder === 'DAYS_ASC') {
                 filtered.sort((a, b) => (a.dispute?.days_remaining ?? 0) - (b.dispute?.days_remaining ?? 0))
@@ -511,12 +541,15 @@ function PhysicianDisputeTimeline({ d, busy, onConfirm }) {
   const past = [
     { at: d.opened_at, label: d.dispute_type === 'FRAUD_REPORT' ? 'You reported this as fraud' : 'You disputed this claim', note: d.physician_notes },
     d.billing_provider_notified_at && { at: d.billing_provider_notified_at, label: 'Vendor notified — 15 days to respond' },
-    d.vendor_responded_at && {
-      at: d.vendor_responded_at,
-      label: d.provider_response_type === 'RESPONDED_TO_MEDICARE' ? 'Vendor responded to Medicare' : 'Vendor resolved this with you directly',
-      detail: d.vendor_response,
-      docs: d.docs,
-    },
+    // "Responded to Medicare" is between the vendor and Medicare — their note/docs
+    // for that submission aren't shown here, just the fact that it happened. Only
+    // the "resolved with you directly" path shows the vendor's note/docs, since
+    // those are what the physician actually needs to judge before confirming.
+    d.vendor_responded_at && (
+      d.provider_response_type === 'RESPONDED_TO_MEDICARE'
+        ? { at: d.vendor_responded_at, label: 'Vendor responded to Medicare' }
+        : { at: d.vendor_responded_at, label: 'Vendor resolved this with you directly', detail: d.vendor_response, docs: d.docs }
+    ),
     d.status === 'RESOLVED_BY_PHYSICIAN' && { at: d.closed_at || d.vendor_responded_at, label: 'You confirmed this was resolved' },
     d.status === 'NON_RESPONSIVE' && { at: d.response_due_date, label: 'Vendor did not respond in time — escalated to compliance' },
   ].filter(Boolean).sort((a, b) => new Date(a.at) - new Date(b.at))
@@ -599,7 +632,9 @@ function PhysicianDisputeTimeline({ d, busy, onConfirm }) {
 // shown once the vendor has actually responded, so there's something concrete
 // to react to. Posts a normal Action against the claim; doesn't touch the
 // dispute case's own status (that stays as history of the vendor exchange).
-const VENDOR_RESPONDED_STATUSES = ['RESOLVED_BY_PHYSICIAN', 'RESPONDED_TO_MEDICARE', 'NON_RESPONSIVE']
+// Excludes RESPONDED_TO_MEDICARE — once the vendor pushes it to Medicare, that's
+// out of the physician's hands; there's no decision left for them to make here.
+const VENDOR_RESPONDED_STATUSES = ['RESOLVED_BY_PHYSICIAN', 'NON_RESPONSIVE']
 const REVIEW_ACTIONS = [
   { type: 'confirm',        label: 'Confirm',         desc: 'The claim is legitimate — this resolves it for good.', cls: 'bg-emerald-50/70 text-emerald-600 ring-emerald-200 hover:bg-emerald-100' },
   { type: 'dispute',        label: 'Dispute',         desc: "Still not right — you don't accept the vendor's explanation.", cls: 'bg-rose-50/70 text-rose-500 ring-rose-200 hover:bg-rose-100' },
@@ -681,6 +716,16 @@ function PlanPortalInner() {
     refresh()
     const t = setInterval(refresh, 20000)
     return () => clearInterval(t)
+  }, [])
+
+  // Live push — any dispute-case change (vendor responded, physician confirmed/
+  // rejected, new dispute opened) bumps disputesRefreshKey so the effect below
+  // refetches immediately instead of waiting for the next tab click.
+  useEffect(() => {
+    const es = subscribeDisputeStream('/plan/alerts/stream', (evt) => {
+      if (evt.type === 'dispute_updated') setDisputesRefreshKey((k) => k + 1)
+    })
+    return () => es.close()
   }, [])
 
   // disputesRefreshKey bumps on every tab click (even re-clicking the active tab) so the

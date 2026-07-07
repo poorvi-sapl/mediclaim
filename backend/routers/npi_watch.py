@@ -141,6 +141,7 @@ def get_notifications(request: Request, db: Session = Depends(get_db)):
             "notification_id":      r.notification_id,
             "claim_number":         r.claim_ccn or r.claim_number,
             "vendor_name":          r.vendor_name,
+            "vendor_npi":           r.vendor_npi,
             "vendor_type":          r.vendor_type,
             "patient_name_partial": r.patient_name_partial,
             "dos_from":             str(r.dos_from) if r.dos_from else None,

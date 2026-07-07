@@ -9,6 +9,7 @@ import {
   getVendorClaims,
   getVendorDisputes,
   submitVendorResponse,
+  subscribeDisputeStream,
 } from '../api'
 
 const VENDOR_NAV = [
@@ -331,6 +332,7 @@ function DisputesScreen({ disputes, loading, typeFilter, setTypeFilter, statusFi
     const matchSearch = !search
       || d.claim_number?.toLowerCase().includes(search.toLowerCase())
       || d.physician_notes?.toLowerCase().includes(search.toLowerCase())
+      || d.claim?.physician_name?.toLowerCase().includes(search.toLowerCase())
     return matchType && matchStatus && matchResponseType && matchSearch
   })
 
@@ -370,7 +372,7 @@ function DisputesScreen({ disputes, loading, typeFilter, setTypeFilter, statusFi
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search claim # or notes…"
+                placeholder="Search claim #, physician, or notes…"
                 className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-slate-200 bg-white text-[12px] font-medium text-slate-700 placeholder-slate-400 outline-none focus:border-[#1a3d7c]/40 focus:ring-2 focus:ring-[#1a3d7c]/10"
               />
             </div>
@@ -801,9 +803,24 @@ export default function VendorPortalInner() {
     return () => { cancelled = true }
   }, [])
 
-  // Refresh on entering the detail screen — otherwise it just shows whatever was in
-  // `disputes` when the list was last fetched, which goes stale the moment the
-  // physician confirms/rejects/decides in a separate session (no live push here).
+  // Live push — a physician disputing a new claim, or confirming/rejecting a
+  // resolution, refreshes stats/claims/disputes immediately.
+  useEffect(() => {
+    const es = subscribeDisputeStream('/api/v1/vendor/portal/alerts/stream', () => {
+      Promise.all([getVendorStats(), getVendorClaims(), getVendorDisputes()]).then(([s, c, d]) => {
+        setStats(s)
+        setClaims(c.claims || [])
+        const fresh = d.disputes || []
+        setDisputes(fresh)
+        setSelectedDispute((prev) => (prev ? fresh.find((x) => x.case_id === prev.case_id) || prev : prev))
+      }).catch(() => {})
+    })
+    return () => es.close()
+  }, [])
+
+  // Also refresh on entering the detail screen directly (e.g. a deep link) —
+  // the live-push effect above only fires once mounted, so this covers the
+  // gap between mount and the first SSE event.
   useEffect(() => {
     if (screen !== 'disputeDetail') return
     let cancelled = false
