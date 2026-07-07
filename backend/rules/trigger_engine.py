@@ -38,8 +38,34 @@ from ..config import get_settings
 from ..models import Physician, Claim, ClaimNotification, DisputeCase, NpiProfile, SupplierProfile
 from ..utils.tokens import generate_response_token
 from ..utils.email import send_vendor_dispute_email
+from ..sse import broadcast_alert
 
 log = logging.getLogger("rules.trigger_engine")
+
+
+def broadcast_dispute_event(case: DisputeCase, event_type: str) -> None:
+    """Live-push a dispute-case change to every portal that cares about it: the
+    vendor, the physician, and the compliance/payer dashboard. Used at every
+    DisputeCase state transition (created, vendor responded, physician
+    confirmed/rejected) so open screens update without a manual refresh.
+    Recipients are scoped by NPI (physician:<npi> / vendor:<npi>) except the
+    payer dashboard, which sees every case. Best-effort — SSE delivery must
+    never break the underlying dispute mutation it's reporting on."""
+    try:
+        payload = {
+            "type":            "dispute_updated",
+            "event":           event_type,
+            "case_id":         case.case_id,
+            "notification_id": case.notification_id,
+            "status":          case.status,
+        }
+        broadcast_alert(payload, recipient="plan")
+        if case.vendor_npi:
+            broadcast_alert(payload, recipient=f"vendor:{case.vendor_npi}")
+        if case.physician_npi:
+            broadcast_alert(payload, recipient=f"physician:{case.physician_npi}")
+    except Exception:
+        log.exception(f"broadcast_dispute_event failed for case {case.case_id}")
 
 
 def escalate_overdue_disputes(db: Session) -> int:
@@ -199,6 +225,7 @@ def respond_to_notification(
 
     if dispute_case is not None:
         db.refresh(dispute_case)
+        broadcast_dispute_event(dispute_case, "dispute_created")
         settings = get_settings()
         vendor = (
             db.query(SupplierProfile)
@@ -374,6 +401,7 @@ def notify_vendor_from_claim_action(
         db.commit()
         db.refresh(notification)
         db.refresh(dispute_case)
+        broadcast_dispute_event(dispute_case, "dispute_created")
 
         settings = get_settings()
         vendor = db.query(SupplierProfile).filter(SupplierProfile.npi == claim.vendor_npi).first()

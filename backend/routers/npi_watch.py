@@ -5,11 +5,13 @@ GET /api/v1/physician/npi-watch/notifications — notification feed for logged-i
 GET /api/v1/physician/npi-watch/stats         — summary counts
 """
 
+import asyncio
+import json
 import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from jose import JWTError
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -19,8 +21,9 @@ from backend.models import Claim, ClaimNotification, DisputeCase, User
 from backend.schemas import ActionRequest
 from backend.auth import decode_token, extract_token, is_blacklisted
 from backend.config import get_settings
-from backend.rules.trigger_engine import escalate_overdue_disputes, escalate_unconfirmed_physician_resolutions
+from backend.rules.trigger_engine import escalate_overdue_disputes, escalate_unconfirmed_physician_resolutions, broadcast_dispute_event
 from backend.routers.actions import create_action
+from backend.sse import broker
 
 router = APIRouter(prefix="/api/v1/physician/npi-watch", tags=["npi_watch"])
 log = logging.getLogger("routers.npi_watch")
@@ -40,6 +43,37 @@ def _require_physician(request: Request, db: Session) -> User:
     if user.role != "physician":
         raise HTTPException(status_code=403, detail={"error": "Physician access required", "code": "FORBIDDEN_ROLE"})
     return user
+
+
+@router.get("/alerts/stream")
+async def dispute_alert_stream(request: Request, db: Session = Depends(get_db)):
+    """Live push for this physician's own dispute cases — a vendor responding
+    (to them or to Medicare) shows up without a manual refresh. Pure signal,
+    no payload beyond identifying the case; the frontend just refetches on
+    receipt (same data it already loads on mount)."""
+    user = _require_physician(request, db)
+    recipient = f"physician:{user.npi}"
+
+    async def event_generator():
+        queue = await broker.subscribe()
+        try:
+            while True:
+                try:
+                    message = await asyncio.wait_for(queue.get(), timeout=15.0)
+                    if message.get("recipient") == recipient:
+                        yield f"data: {json.dumps(message)}\n\n"
+                except asyncio.TimeoutError:
+                    yield ": keep-alive\n\n"
+        except asyncio.CancelledError:
+            pass
+        finally:
+            await broker.unsubscribe(queue)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.get("/notifications")
@@ -209,6 +243,7 @@ def confirm_dispute_resolution(case_id: int, body: DisputeConfirmationRequest, r
 
     db.commit()
     db.refresh(case)
+    broadcast_dispute_event(case, "physician_confirmed" if body.confirmed else "physician_rejected")
 
     return {"success": True, "status": case.status}
 

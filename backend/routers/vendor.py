@@ -12,13 +12,15 @@ Session-auth (vendor must be logged in):
   POST /api/v1/vendor/portal/disputes/{case_id}/respond
 """
 
+import asyncio
+import json
 import logging
 import os
 from datetime import datetime, timedelta, timezone
 from typing import List
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from jose import JWTError
 from sqlalchemy.orm import Session
 
@@ -27,8 +29,9 @@ from backend.config import get_settings
 from backend.models import ClaimNotification, DisputeCase, Physician, SupplierProfile, User
 from backend.auth import decode_token, extract_token, is_blacklisted
 from backend.utils.tokens import decode_vendor_dispute_token
-from backend.rules.trigger_engine import escalate_overdue_disputes, escalate_unconfirmed_physician_resolutions
+from backend.rules.trigger_engine import escalate_overdue_disputes, escalate_unconfirmed_physician_resolutions, broadcast_dispute_event
 from backend.routers.documents import MAX_BYTES, ALLOWED
+from backend.sse import broker
 
 # A vendor's first response to a dispute may only try to resolve it with the
 # physician — "Responded to Medicare" only unlocks after the physician rejects
@@ -57,6 +60,37 @@ def _require_vendor(request: Request, db: Session) -> User:
     if user.role != "vendor":
         raise HTTPException(status_code=403, detail={"error": "Vendor access required", "code": "FORBIDDEN_ROLE"})
     return user
+
+
+@router.get("/portal/alerts/stream")
+async def dispute_alert_stream(request: Request, db: Session = Depends(get_db)):
+    """Live push for this vendor's own dispute cases — a physician disputing a
+    new claim, or confirming/rejecting a resolution, shows up without a manual
+    refresh. Pure signal, no payload beyond identifying the case; the frontend
+    just refetches on receipt (same data it already loads on mount)."""
+    user = _require_vendor(request, db)
+    recipient = f"vendor:{user.npi}"
+
+    async def event_generator():
+        queue = await broker.subscribe()
+        try:
+            while True:
+                try:
+                    message = await asyncio.wait_for(queue.get(), timeout=15.0)
+                    if message.get("recipient") == recipient:
+                        yield f"data: {json.dumps(message)}\n\n"
+                except asyncio.TimeoutError:
+                    yield ": keep-alive\n\n"
+        except asyncio.CancelledError:
+            pass
+        finally:
+            await broker.unsubscribe(queue)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -349,6 +383,7 @@ async def vendor_respond(
         case.vendor_docs = (case.vendor_docs or []) + saved_docs
     db.commit()
     db.refresh(case)
+    broadcast_dispute_event(case, "vendor_responded")
 
     return {
         "success": True,
@@ -589,6 +624,7 @@ async def portal_respond(
         case.vendor_docs = (case.vendor_docs or []) + saved_docs
     db.commit()
     db.refresh(case)
+    broadcast_dispute_event(case, "vendor_responded")
 
     return {
         "success": True,
