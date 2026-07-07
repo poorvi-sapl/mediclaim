@@ -5,10 +5,17 @@ Distribution:
   4 DME          — synthetic NPIs 1999000002, 1999000004, 1999000012, 1999000014
   3 HOME_HEALTH  — synthetic NPIs 1999000001, 1999000003, 1999000005
   3 HOSPICE      — synthetic 1999000008, 1999000015 + real 1003290032
-  1 demo         — vendor@mediclaim.com, NPI 1999000002 (first DME)
+  1 demo         — vendor@mediclaim.com, NPI 1999000008 (1Accurate Hospice)
 
-Run from project root:
+DEMO_NPI must match VENDOR_NPI in seed_demo_vendor_notifications.py — that
+script is what actually populates claim_notifications/dispute_cases for the
+demo vendor to show. Pointing this at a supplier with no notifications (e.g.
+any of the other synthetic NPIs, which never get seeded activity) makes the
+vendor portal load fine but show zero claims/disputes everywhere.
+
+Run from project root (order matters — this before seed_demo_vendor_notifications):
   python -m backend.data.seed_vendor_users
+  python -m backend.data.seed_demo_vendor_notifications
 """
 
 import os
@@ -35,8 +42,9 @@ VENDOR_NPIS = [
     "1003290032",  # HOSPICE (real)
 ]
 
-DEMO_NPI   = "1999000002"   # first DME supplier
-DEMO_EMAIL = "vendor@mediclaim.com"
+DEMO_NPI      = "1999000008"   # 1Accurate Hospice — the vendor seed_demo_vendor_notifications.py populates
+DEMO_EMAIL    = "vendor@mediclaim.com"
+DEMO_PASSWORD = "demo1234"      # matches physician@mediclaim.com / payer@mediclaim.com's password
 
 
 def _hash(password: str) -> str:
@@ -90,20 +98,28 @@ def main():
         )
         seeded.append((supplier_name, contact_email, npi, supplier_type))
 
-    # Demo row — vendor@mediclaim.com
-    demo_supplier = suppliers.get(DEMO_NPI)
-    demo_name     = demo_supplier[4] if demo_supplier else "Demo Vendor User"
+    # Demo row — vendor@mediclaim.com. Uses its own password (matching the
+    # physician/payer demo accounts) and DO UPDATE so re-running this script
+    # self-heals any machine where it was previously seeded against the wrong
+    # (empty) NPI, instead of silently leaving a stale row in place.
+    demo_supplier  = suppliers.get(DEMO_NPI)
+    demo_name      = demo_supplier[4] if demo_supplier else "Demo Vendor User"
+    demo_type      = demo_supplier[2] if demo_supplier else "HOSPICE"
+    demo_pw_hash   = _hash(DEMO_PASSWORD)
     cur.execute(
         """
         INSERT INTO users
           (id, email, password_hash, role, full_name, npi, created_at)
         VALUES
           (gen_random_uuid(), %s, %s, 'vendor', %s, %s, NOW())
-        ON CONFLICT (email) DO NOTHING
+        ON CONFLICT (email) DO UPDATE SET
+          npi = EXCLUDED.npi,
+          full_name = EXCLUDED.full_name,
+          password_hash = EXCLUDED.password_hash
         """,
-        (DEMO_EMAIL, pw_hash, demo_name, DEMO_NPI),
+        (DEMO_EMAIL, demo_pw_hash, demo_name, DEMO_NPI),
     )
-    seeded.append(("Demo Vendor", DEMO_EMAIL, DEMO_NPI, "DME"))
+    seeded.append(("Demo Vendor", DEMO_EMAIL, DEMO_NPI, demo_type))
 
     conn.commit()
     conn.close()

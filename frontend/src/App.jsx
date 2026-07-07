@@ -628,13 +628,14 @@ function PhysicianDisputeTimeline({ d, busy, onConfirm }) {
   )
 }
 
-// Mirrors the same 5 actions from My Claims (ClaimsTable.jsx's ACTIONS array) —
-// shown once the vendor has actually responded, so there's something concrete
-// to react to. Posts a normal Action against the claim; doesn't touch the
-// dispute case's own status (that stays as history of the vendor exchange).
-// Excludes RESPONDED_TO_MEDICARE — once the vendor pushes it to Medicare, that's
-// out of the physician's hands; there's no decision left for them to make here.
-const VENDOR_RESPONDED_STATUSES = ['RESOLVED_BY_PHYSICIAN', 'NON_RESPONSIVE']
+// Mirrors the same 5 actions from My Claims (ClaimsTable.jsx's ACTIONS array).
+// Only shown for NON_RESPONSIVE, where the vendor never responded and nothing
+// has actually been decided yet — the physician still needs to make an
+// independent call. Excluded for RESPONDED_TO_MEDICARE (out of the physician's
+// hands once escalated) and RESOLVED_BY_PHYSICIAN (the Confirm/Reject buttons
+// in the timeline above already ARE the physician's decision on this — a
+// second "Confirm" here would just be asking the same question twice).
+const VENDOR_RESPONDED_STATUSES = ['NON_RESPONSIVE']
 const REVIEW_ACTIONS = [
   { type: 'confirm',        label: 'Confirm',         desc: 'The claim is legitimate — this resolves it for good.', cls: 'bg-emerald-50/70 text-emerald-600 ring-emerald-200 hover:bg-emerald-100' },
   { type: 'dispute',        label: 'Dispute',         desc: "Still not right — you don't accept the vendor's explanation.", cls: 'bg-rose-50/70 text-rose-500 ring-rose-200 hover:bg-rose-100' },
@@ -709,6 +710,7 @@ function PlanPortalInner() {
   const [disputesRefreshKey, setDisputesRefreshKey] = useState(0)
   const [disputeTypeFilter, setDisputeTypeFilter] = useState('ALL')  // ALL | DISPUTE | FRAUD_REPORT
   const [disputeSortOrder, setDisputeSortOrder] = useState('NONE')   // NONE | DAYS_ASC | DAYS_DESC
+  const [disputeSearch, setDisputeSearch] = useState('')   // filters the NPI Disputes list — distinct from the top-nav NPI/supplier lookup
   const [selectedDispute, setSelectedDispute] = useState(null)
 
   useEffect(() => {
@@ -931,12 +933,22 @@ function PlanPortalInner() {
                 <option value="DAYS_ASC">Days Left: Low to High</option>
                 <option value="DAYS_DESC">Days Left: High to Low</option>
               </select>
-              {(disputeTypeFilter !== 'ALL' || disputeSortOrder !== 'NONE') && (
-                <button onClick={() => { setDisputeTypeFilter('ALL'); setDisputeSortOrder('NONE') }}
+              {(disputeTypeFilter !== 'ALL' || disputeSortOrder !== 'NONE' || disputeSearch) && (
+                <button onClick={() => { setDisputeTypeFilter('ALL'); setDisputeSortOrder('NONE'); setDisputeSearch('') }}
                         className="text-[12px] font-semibold text-slate-500 hover:text-rose-500 transition-colors flex items-center gap-1">
                   <Icon name="x" size={11} stroke={2.5} /> Clear
                 </button>
               )}
+              <div className="relative ml-auto w-full sm:w-auto sm:min-w-[240px]">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"><Icon name="search" size={13} /></span>
+                <input
+                  type="text"
+                  value={disputeSearch}
+                  onChange={(e) => setDisputeSearch(e.target.value)}
+                  placeholder="Search claim #, vendor, NPI…"
+                  className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-slate-200 bg-white text-[12px] font-medium text-slate-700 placeholder-slate-400 outline-none focus:border-navy/40 focus:ring-2 focus:ring-navy/10"
+                />
+              </div>
             </div>
           )}
 
@@ -947,7 +959,17 @@ function PlanPortalInner() {
           ) : planDisputes.length === 0 ? (
             <div className="mc-card px-6 py-8 text-center text-slate-400 text-sm">No disputes match this filter.</div>
           ) : (() => {
-            const filteredDisputes = planDisputes.filter((d) => disputeTypeFilter === 'ALL' || d.dispute_type === disputeTypeFilter)
+            const q = disputeSearch.trim().toLowerCase()
+            const filteredDisputes = planDisputes.filter((d) => {
+              const matchType = disputeTypeFilter === 'ALL' || d.dispute_type === disputeTypeFilter
+              const matchSearch = !q
+                || d.claim_number?.toLowerCase().includes(q)
+                || d.vendor_name?.toLowerCase().includes(q)
+                || d.vendor_npi?.toLowerCase().includes(q)
+                || d.physician_npi?.toLowerCase().includes(q)
+                || d.physician_notes?.toLowerCase().includes(q)
+              return matchType && matchSearch
+            })
             if (disputeSortOrder === 'DAYS_ASC') {
               filteredDisputes.sort((a, b) => (a.days_remaining ?? 0) - (b.days_remaining ?? 0))
             } else if (disputeSortOrder === 'DAYS_DESC') {
