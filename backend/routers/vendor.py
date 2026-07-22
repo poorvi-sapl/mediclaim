@@ -26,10 +26,10 @@ from sqlalchemy.orm import Session
 
 from backend.database import get_db
 from backend.config import get_settings
-from backend.models import ClaimNotification, DisputeCase, Physician, SupplierProfile, User
+from backend.models import ClaimNotification, DisputeCase, DisputeCaseEvent, SupplierProfile, User
 from backend.auth import decode_token, extract_token, is_blacklisted
 from backend.utils.tokens import decode_vendor_dispute_token
-from backend.rules.trigger_engine import escalate_overdue_disputes, escalate_unconfirmed_physician_resolutions, broadcast_dispute_event
+from backend.rules.trigger_engine import escalate_overdue_disputes, escalate_unconfirmed_physician_resolutions, broadcast_dispute_event, record_dispute_event, serialize_dispute_events
 from backend.routers.documents import MAX_BYTES, ALLOWED
 from backend.sse import broker
 
@@ -163,6 +163,20 @@ async def _save_dispute_docs(case_id: int, files: List[UploadFile]) -> list:
     return saved
 
 
+# The vendor is deliberately type-blind: their copy of a case never says WHY
+# documents are required (dispute vs fraud report vs deceased patient) or what
+# the physician wrote — only that a payer review needs documentation. The full
+# story stays on the physician and payer portals. These helpers scrub every
+# vendor-facing payload accordingly.
+def _vendor_safe_events(events: list) -> list:
+    """Strip physician-authored notes from the vendor's copy of the case
+    timeline; the vendor's own responses and system events keep theirs."""
+    return [
+        {**e, "note": None} if e.get("actor") == "PHYSICIAN" else e
+        for e in events
+    ]
+
+
 # ---------------------------------------------------------------------------
 # GET /api/v1/vendor/disputes/{case_id}
 # ---------------------------------------------------------------------------
@@ -198,12 +212,12 @@ def get_vendor_dispute(
 
     return {
         "case_id":               case.case_id,
-        "dispute_type":          case.dispute_type,
+        "dispute_type":          None,   # type-blind for vendors (see _vendor_safe_events)
         "status":                case.status,
         "response_due_date":     case.response_due_date.isoformat() if case.response_due_date else None,
         "days_remaining":        days,
         "deadline_passed":       deadline_passed,
-        "physician_notes":       case.physician_notes,
+        "physician_notes":       None,   # never shown to the vendor
         "vendor_responded_at":   case.vendor_responded_at.isoformat() if case.vendor_responded_at else None,
         "provider_response_type": case.provider_response_type,
         "vendor_response":       case.vendor_response,
@@ -220,7 +234,6 @@ def get_vendor_dispute(
             "service_description": notif.service_description if notif else None,
             "hcpcs_codes":         notif.hcpcs_codes if notif else None,
             "amount_billed":       float(notif.amount_billed) if notif and notif.amount_billed else None,
-            "physician_npi_role":  notif.physician_npi_role if notif else None,
         },
     }
 
@@ -283,50 +296,31 @@ def download_dispute_doc(
 # POST /api/v1/vendor/disputes/{case_id}/respond
 # ---------------------------------------------------------------------------
 
-_VALID_RESPONSE_TYPES = {"RESPONDED_TO_MEDICARE", "RESOLVED_WITH_PHYSICIAN"}
-
-# RESOLVED_WITH_PHYSICIAN is not final on submit anymore — it goes to
-# PENDING_PHYSICIAN_CONFIRMATION and only becomes RESOLVED_BY_PHYSICIAN once the
-# physician confirms it (see npi_watch.py's confirm endpoint).
-_RESPONSE_TYPE_TO_STATUS = {
-    "RESPONDED_TO_MEDICARE":   "RESPONDED_TO_MEDICARE",
-    "RESOLVED_WITH_PHYSICIAN": "PENDING_PHYSICIAN_CONFIRMATION",
-}
-
-# "RESOLVED_WITH_PHYSICIAN" is not a valid provider_response_type per the DB
-# constraint — the case status already captures it.
-_RESPONSE_TYPE_TO_PROVIDER_TYPE = {
-    "RESPONDED_TO_MEDICARE":   "RESPONDED_TO_MEDICARE",
-    "RESOLVED_WITH_PHYSICIAN": None,
-}
-
-
-def _validate_response_type(case: DisputeCase, response_type: str):
-    """Returns a JSONResponse error, or None if the response_type is allowed for
-    this case's current escalation state."""
-    if response_type not in _VALID_RESPONSE_TYPES:
-        return JSONResponse(
-            status_code=422,
-            content={"error": "invalid_response_type",
-                     "message": f"response_type must be one of: {sorted(_VALID_RESPONSE_TYPES)}"},
-        )
-    if response_type == "RESPONDED_TO_MEDICARE" and not case.escalation_unlocked:
-        return JSONResponse(
-            status_code=403,
-            content={
-                "error": "escalation_locked",
-                "message": "Try resolving this with the physician first. \"Responded to Medicare\" "
-                           "unlocks only if the physician doesn't confirm the resolution.",
-            },
-        )
-    return None
+# The vendor's only response is uploading proof-of-work documents — there is no
+# "resolve vs Medicare" choice anymore. On submit the case moves to
+# PENDING_PHYSICIAN_REVIEW; the physician then approves (case resolved) or
+# declines (case referred to the payer). See npi_watch.py's confirm endpoint.
+def _apply_vendor_docs(case: DisputeCase, vendor_response: str, saved_docs: list, db):
+    """Shared body for both vendor respond endpoints — records the uploaded docs
+    and moves the case to PENDING_PHYSICIAN_REVIEW."""
+    case.vendor_response        = vendor_response
+    case.provider_response_type = None
+    case.vendor_responded_at    = datetime.utcnow()
+    case.status                 = "PENDING_PHYSICIAN_REVIEW"
+    if saved_docs:
+        case.vendor_docs = (case.vendor_docs or []) + saved_docs
+    record_dispute_event(db, case, "VENDOR_RESPONDED", "VENDOR",
+                          note=vendor_response, docs=saved_docs or None)
+    db.commit()
+    db.refresh(case)
+    broadcast_dispute_event(case, "vendor_responded")
 
 
 @router.post("/disputes/{case_id}/respond")
 async def vendor_respond(
     case_id: int,
     token: str = Query(..., description="Signed vendor dispute token"),
-    response_type:   str           = Form(...),
+    response_type:   str           = Form(""),   # accepted for backward-compat, ignored
     vendor_response: str           = Form(""),
     docs:            List[UploadFile] = File(default=[]),
     db: Session = Depends(get_db),
@@ -334,8 +328,6 @@ async def vendor_respond(
     payload, err = _decode_or_error(token)
     if err:
         return err
-
-    escalate_unconfirmed_physician_resolutions(db)
 
     case = db.query(DisputeCase).filter(DisputeCase.case_id == case_id).first()
     if not case:
@@ -363,38 +355,18 @@ async def vendor_respond(
             },
         )
 
-    type_err = _validate_response_type(case, response_type)
-    if type_err:
-        return type_err
-
     try:
         saved_docs = await _save_dispute_docs(case_id, docs)
     except ValueError as exc:
         return JSONResponse(status_code=400, content={"error": "bad_file", "message": str(exc)})
 
-    new_status = _RESPONSE_TYPE_TO_STATUS[response_type]
-    case.vendor_response        = vendor_response
-    case.provider_response_type = _RESPONSE_TYPE_TO_PROVIDER_TYPE[response_type]
-    case.vendor_responded_at    = datetime.utcnow()
-    case.status                 = new_status
-    if new_status == "PENDING_PHYSICIAN_CONFIRMATION":
-        case.physician_confirmation_due_date = datetime.utcnow() + timedelta(days=PHYSICIAN_CONFIRMATION_WINDOW_DAYS)
-    if saved_docs:
-        case.vendor_docs = (case.vendor_docs or []) + saved_docs
-    db.commit()
-    db.refresh(case)
-    broadcast_dispute_event(case, "vendor_responded")
+    _apply_vendor_docs(case, vendor_response, saved_docs, db)
 
     return {
         "success": True,
         "status":  case.status,
         "docs":    case.vendor_docs or [],
-        "message": (
-            "Your response has been recorded. The physician has "
-            f"{PHYSICIAN_CONFIRMATION_WINDOW_DAYS} days to confirm it's resolved."
-            if new_status == "PENDING_PHYSICIAN_CONFIRMATION"
-            else "Your response has been recorded."
-        ),
+        "message": "Your documents have been submitted. The physician will review them.",
     }
 
 
@@ -426,8 +398,6 @@ def portal_claims(request: Request, db: Session = Depends(get_db)):
         {
             "notification_id":      r.notification_id,
             "claim_number":         r.claim_ccn or r.claim_number,
-            "physician_npi":        r.physician_npi,
-            "physician_npi_role":   r.physician_npi_role,
             "patient_name_partial": r.patient_name_partial,
             "dos_from":             str(r.dos_from)  if r.dos_from  else None,
             "dos_to":               str(r.dos_to)    if r.dos_to    else None,
@@ -462,6 +432,7 @@ def portal_disputes(request: Request, db: Session = Depends(get_db)):
     user = _require_vendor(request, db)
     escalate_overdue_disputes(db)
     escalate_unconfirmed_physician_resolutions(db)
+    base = get_settings().base_url.rstrip("/")
     cases = (
         db.query(DisputeCase, ClaimNotification)
         .join(ClaimNotification, DisputeCase.notification_id == ClaimNotification.notification_id)
@@ -470,25 +441,19 @@ def portal_disputes(request: Request, db: Session = Depends(get_db)):
         .all()
     )
 
-    physician_npis = {case.physician_npi for case, _ in cases}
-    physicians_by_npi = {
-        p.npi: p for p in db.query(Physician).filter(Physician.npi.in_(physician_npis)).all()
-    } if physician_npis else {}
-
     result = []
     for case, notif in cases:
         days = _days_remaining(case.response_due_date)
-        phys = physicians_by_npi.get(case.physician_npi)
         result.append({
             "case_id":                       case.case_id,
             "claim_number":                  notif.claim_ccn or notif.claim_number,
-            "dispute_type":                  case.dispute_type,
+            "dispute_type":                  None,   # type-blind for vendors (see _vendor_safe_events)
             "status":                        case.status,
             "opened_at":                     case.opened_at.isoformat() if case.opened_at else None,
             "response_due_date":             case.response_due_date.isoformat() if case.response_due_date else None,
             "days_remaining":                days,
             "deadline_passed":               days < 0,
-            "physician_notes":               case.physician_notes,
+            "physician_notes":               None,   # never shown to the vendor
             "vendor_response":               case.vendor_response,
             "vendor_responded_at":           case.vendor_responded_at.isoformat() if case.vendor_responded_at else None,
             "provider_response_type":        case.provider_response_type,
@@ -497,6 +462,9 @@ def portal_disputes(request: Request, db: Session = Depends(get_db)):
             "closed_at":                     case.closed_at.isoformat() if case.closed_at else None,
             "escalation_unlocked":           case.escalation_unlocked,
             "physician_confirmation_due_date": case.physician_confirmation_due_date.isoformat() if case.physician_confirmation_due_date else None,
+            "events":                        _vendor_safe_events(serialize_dispute_events(db, case.case_id, base)),
+            # No physician identity is ever sent to the vendor — no name, NPI,
+            # role, or practice. The vendor only sees the claim itself.
             "claim": {
                 "claim_number":         notif.claim_ccn or notif.claim_number,
                 "patient_name_partial": notif.patient_name_partial,
@@ -506,10 +474,6 @@ def portal_disputes(request: Request, db: Session = Depends(get_db)):
                 "hcpcs_codes":          notif.hcpcs_codes,
                 "amount_billed":        float(notif.amount_billed) if notif.amount_billed else None,
                 "amount_paid":          float(notif.amount_paid)   if notif.amount_paid   else None,
-                "physician_npi_role":   notif.physician_npi_role,
-                "physician_npi":        case.physician_npi,
-                "physician_name":       f"{phys.first_name} {phys.last_name}".strip() if phys and (phys.first_name or phys.last_name) else None,
-                "physician_practice":   phys.practice_name if phys else None,
             },
         })
     return {"disputes": result}
@@ -565,7 +529,84 @@ def portal_stats(request: Request, db: Session = Depends(get_db)):
         "vendor_state":     profile.state if profile else None,
         "contact_name":     profile.contact_name if profile else None,
         "contact_email":    profile.contact_email if profile else None,
+        "contact_phone":    profile.contact_phone if profile else None,
     }
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/vendor/portal/notifications
+# ---------------------------------------------------------------------------
+
+# Mirrors auth.py's _VENDOR_DISPUTE_EVENTS — exactly three kinds of activity
+# reach the vendor's bell: (1) a case opened against one of their claims,
+# (2) their own response landing / the response window expiring unanswered,
+# (3) the physician's approve/decline verdict on their response.
+_VENDOR_NOTIFICATION_EVENTS = ("DISPUTE_OPENED", "VENDOR_RESPONDED", "PHYSICIAN_CONFIRMED", "PHYSICIAN_REJECTED", "NON_RESPONSIVE")
+
+_NOTIFICATION_TITLES = {
+    "VENDOR_RESPONDED":      "Documents submitted — under review",
+    "PHYSICIAN_CONFIRMED":   "Your response was approved — case closed",
+    "PHYSICIAN_REJECTED":    "Your response was declined",
+    "NON_RESPONSIVE":        "Response window closed — no documents received",
+}
+
+# Drives the bell item's icon/tone on the frontend.
+_NOTIFICATION_KINDS = {
+    "DISPUTE_OPENED":        "requested",
+    "VENDOR_RESPONDED":      "responded",
+    "PHYSICIAN_CONFIRMED":   "approved",
+    "PHYSICIAN_REJECTED":    "declined",
+    "NON_RESPONSIVE":        "overdue",
+}
+
+
+@router.get("/portal/notifications")
+def portal_notifications(request: Request, db: Session = Depends(get_db)):
+    """Recent activity for the bell dropdown — the same dispute-event log and
+    last_alert_seen_at read/unread cursor that already drive the badge count
+    (auth.py's /notifications/count), just shaped into a displayable list
+    instead of a bare number."""
+    user = _require_vendor(request, db)
+    since = user.last_alert_seen_at or datetime(1970, 1, 1)
+
+    rows = (
+        db.query(DisputeCaseEvent, DisputeCase, ClaimNotification)
+        .join(DisputeCase, DisputeCase.case_id == DisputeCaseEvent.case_id)
+        .join(ClaimNotification, ClaimNotification.notification_id == DisputeCase.notification_id)
+        .filter(
+            DisputeCase.vendor_npi == user.npi,
+            DisputeCaseEvent.event_type.in_(_VENDOR_NOTIFICATION_EVENTS),
+        )
+        .order_by(DisputeCaseEvent.created_at.desc())
+        .limit(30)
+        .all()
+    )
+
+    notifications = []
+    for event, case, notif in rows:
+        claim_number = notif.claim_ccn or notif.claim_number
+        # Deliberately type-blind: the vendor is never told whether the case is
+        # a dispute or a fraud report — only that documents are required.
+        # event.note is likewise excluded: on DISPUTE_OPENED it holds the
+        # physician's internal reason and on PHYSICIAN_REJECTED their rejection
+        # note — both are physician/payer-only, never shown to the vendor.
+        if event.event_type == "DISPUTE_OPENED":
+            title = "Documents requested on a claim"
+        else:
+            title = _NOTIFICATION_TITLES[event.event_type]
+        notifications.append({
+            "id":           event.event_id,
+            "category":     "claims",
+            "kind":         _NOTIFICATION_KINDS.get(event.event_type, "requested"),
+            "title":        title,
+            "description":  f"Claim {claim_number}",
+            "created_at":   event.created_at.isoformat(),
+            "case_id":      case.case_id,
+            "claim_number": claim_number,
+            "read":         event.created_at <= since,
+        })
+
+    return {"notifications": notifications}
 
 
 # ---------------------------------------------------------------------------
@@ -576,13 +617,12 @@ def portal_stats(request: Request, db: Session = Depends(get_db)):
 async def portal_respond(
     case_id: int,
     request: Request,
-    response_type:   str           = Form(...),
+    response_type:   str           = Form(""),   # accepted for backward-compat, ignored
     vendor_response: str           = Form(""),
     docs:            List[UploadFile] = File(default=[]),
     db: Session = Depends(get_db),
 ):
     user = _require_vendor(request, db)
-    escalate_unconfirmed_physician_resolutions(db)
 
     case = db.query(DisputeCase).filter(DisputeCase.case_id == case_id).first()
     if not case:
@@ -604,36 +644,16 @@ async def portal_respond(
             content={"error": "deadline_passed", "message": "The 15-day response window has closed."},
         )
 
-    type_err = _validate_response_type(case, response_type)
-    if type_err:
-        return type_err
-
     try:
         saved_docs = await _save_dispute_docs(case_id, docs)
     except ValueError as exc:
         return JSONResponse(status_code=400, content={"error": "bad_file", "message": str(exc)})
 
-    new_status = _RESPONSE_TYPE_TO_STATUS[response_type]
-    case.vendor_response        = vendor_response
-    case.provider_response_type = _RESPONSE_TYPE_TO_PROVIDER_TYPE[response_type]
-    case.vendor_responded_at    = datetime.utcnow()
-    case.status                 = new_status
-    if new_status == "PENDING_PHYSICIAN_CONFIRMATION":
-        case.physician_confirmation_due_date = datetime.utcnow() + timedelta(days=PHYSICIAN_CONFIRMATION_WINDOW_DAYS)
-    if saved_docs:
-        case.vendor_docs = (case.vendor_docs or []) + saved_docs
-    db.commit()
-    db.refresh(case)
-    broadcast_dispute_event(case, "vendor_responded")
+    _apply_vendor_docs(case, vendor_response, saved_docs, db)
 
     return {
         "success": True,
         "status":  case.status,
         "docs":    case.vendor_docs or [],
-        "message": (
-            "Your response has been recorded. The physician has "
-            f"{PHYSICIAN_CONFIRMATION_WINDOW_DAYS} days to confirm it's resolved."
-            if new_status == "PENDING_PHYSICIAN_CONFIRMATION"
-            else "Your response has been recorded."
-        ),
+        "message": "Your documents have been submitted. The physician will review them.",
     }

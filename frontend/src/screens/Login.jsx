@@ -8,6 +8,18 @@ import illustration from './illustration-family-life.png'
 
 const SHOW_DEMO_CREDS = import.meta.env.DEV
 
+// Set by Protected (App.jsx) when an unauthenticated hit on a deep link (e.g.
+// a vendor's emailed "Upload documentation" link, /vendor/portal?case=...)
+// bounces here — takes priority over the normal post-login destination so the
+// vendor lands back where they meant to go instead of the plain dashboard.
+function consumePostLoginRedirect() {
+  try {
+    const dest = sessionStorage.getItem('post_login_redirect')
+    if (dest) sessionStorage.removeItem('post_login_redirect')
+    return dest
+  } catch { return null }
+}
+
 function Spinner() {
   return (
     <svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none">
@@ -56,7 +68,7 @@ export default function Login() {
         navigate('/otp/login', { replace: true })
         return
       }
-      navigate(res.redirect || DASHBOARD_PATH[res.role] || DASHBOARD_PATH['physician'], { replace: true })
+      navigate(consumePostLoginRedirect() || res.redirect || DASHBOARD_PATH[res.role] || DASHBOARD_PATH['physician'], { replace: true })
     } catch (err) {
       setError(err.status === 401
         ? 'Invalid email or password. Please try again.'
@@ -213,7 +225,7 @@ export default function Login() {
               {[
                 { portal: 'physician', emoji: '🩺', title: 'Physician Portal', desc: "See claims filed under your NPI, flag fraud, and dispute orders you didn't place." },
                 { portal: 'payer',    emoji: '🏥', title: 'Payer Portal',     desc: 'Investigate fraud, view NPI risk scores, and monitor live alerts across physicians.' },
-                { portal: 'vendor',   emoji: '🏢', title: 'Vendor Portal',    desc: 'DME supplier / Home Health / Hospice — view claims, respond to disputes.' },
+                { portal: 'vendor',   emoji: '🏢', title: 'Vendor Portal',    desc: 'DME vendor / Home Health / Hospice — view claims, respond to disputes.' },
               ].map(({ portal, emoji, title, desc }) => (
                 <div key={portal} className="border border-slate-200 rounded-xl p-5 flex flex-col hover:border-[#1a3d7c]/30 hover:shadow-md transition-all">
                   <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-xl mb-3">{emoji}</div>

@@ -53,9 +53,9 @@
 
   .th {
     @apply text-left px-5 py-3 text-[12px] font-bold uppercase tracking-[0.07em];
-    color: rgba(30, 58, 95, 0.72);
+    color: rgba(30, 58, 95, 0.9);
   }
-  .td { @apply px-5 py-4 text-sm text-slate-600; }
+  .td { @apply px-5 py-4 text-sm text-slate-700; }
 
   /* Sidebar nav link */
   .nav-link {
@@ -65,18 +65,64 @@
   .nav-link-active { @apply bg-white text-ink shadow-sm; }
 
   .pill {
-    @apply inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[11px] font-bold ring-1 ring-inset whitespace-nowrap;
+    @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap;
   }
-  .pill-critical { @apply bg-rose-50 text-rose-600 ring-rose-200; }
-  .pill-high     { @apply bg-orange-50 text-orange-600 ring-orange-200; }
-  .pill-medium   { @apply bg-amber-50 text-amber-600 ring-amber-200; }
-  .pill-low      { @apply bg-emerald-50 text-emerald-600 ring-emerald-200; }
+  .pill-critical { background: #F7EBEA; color: #8A423D; box-shadow: 0 0 0 1px #EBD3D1 inset; }
+  .pill-high     { background: #F7EBEA; color: #A6453F; box-shadow: 0 0 0 1px #EBD3D1 inset; }
+  .pill-medium   { background: #FBF3E4; color: #8A6A34; box-shadow: 0 0 0 1px #F0E0BE inset; }
+  .pill-low      { background: #E9F3ED; color: #2E6B4F; box-shadow: 0 0 0 1px #D5E9DD inset; }
+  /* Solid variant — the "Fraud detected" chip from the reference: filled red, white text */
+  .pill-solid-critical { background: linear-gradient(180deg, #B95951, #9A3F39); color: #fff; box-shadow: 0 1px 3px rgba(166,69,63,.35); }
 
   .btn-navy {
     @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white transition-colors;
     background-color: #1B3A5C;
   }
   .btn-navy:hover { background-color: #15304c; }
+
+  /* Vendor portal button — glossy pill, navy gradient instead of black:
+     inner highlight along the top edge for the "glass" look, soft outer glow
+     in the brand navy, active-state press. Used for every actionable button
+     in the vendor portal (primary + secondary share this shape/finish; only
+     the base gradient differs). */
+  .btn-vendor {
+    @apply inline-flex items-center justify-center gap-2 rounded-full font-bold text-vendorCream transition-all duration-150 whitespace-nowrap disabled:opacity-45 disabled:cursor-not-allowed;
+    background: linear-gradient(180deg, #3E5879 0%, #213555 100%);
+    box-shadow:
+      0 6px 18px -6px rgba(33, 53, 85, 0.55),
+      inset 0 1px 0 rgba(255, 255, 255, 0.22),
+      inset 0 -1px 2px rgba(0, 0, 0, 0.18);
+  }
+  .btn-vendor:hover:not(:disabled) {
+    background: linear-gradient(180deg, #4a6890 0%, #2a4166 100%);
+    box-shadow:
+      0 8px 22px -6px rgba(33, 53, 85, 0.65),
+      inset 0 1px 0 rgba(255, 255, 255, 0.28),
+      inset 0 -1px 2px rgba(0, 0, 0, 0.18);
+  }
+  .btn-vendor:active:not(:disabled) { transform: scale(0.97); }
+
+  /* Secondary/quieter tone — same glossy pill shape, steel-blue instead of navy,
+     for actions that shouldn't compete with the primary one next to it. */
+  .btn-vendor-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-full font-bold text-vendorCream transition-all duration-150 whitespace-nowrap disabled:opacity-45 disabled:cursor-not-allowed;
+    background: linear-gradient(180deg, #587090 0%, #3E5879 100%);
+    box-shadow:
+      0 6px 18px -6px rgba(62, 88, 121, 0.5),
+      inset 0 1px 0 rgba(255, 255, 255, 0.2),
+      inset 0 -1px 2px rgba(0, 0, 0, 0.15);
+  }
+  .btn-vendor-secondary:hover:not(:disabled) {
+    background: linear-gradient(180deg, #6a83a3 0%, #4a6890 100%);
+  }
+  .btn-vendor-secondary:active:not(:disabled) { transform: scale(0.97); }
+
+  /* Outline pill — for the lightest-weight actions (e.g. a small icon-only
+     button), matching the same rounded/glossy family without a filled bg. */
+  .btn-vendor-outline {
+    @apply inline-flex items-center justify-center gap-2 rounded-full font-bold text-vendorNavy bg-vendorCream ring-1 ring-vendorBeige transition-all duration-150 whitespace-nowrap disabled:opacity-45 disabled:cursor-not-allowed hover:bg-vendorBeige/40;
+  }
+  .btn-vendor-outline:active:not(:disabled) { transform: scale(0.97); }
 
   .live-dot { position: relative; }
   .live-dot::before {
@@ -127,3 +173,328 @@
     animation: spin 0.8s linear infinite;
   }
 }
+
+/* ============================================================================
+   PHYSICIAN "MY CLAIMS" TABLE — adapted-glass buttons + category tags
+   Global (not scoped to .vendor-theme, since the physician portal doesn't
+   carry that class) but using the same gradient/shadow recipe as the vendor
+   portal's .gbtn/.gbtn-primary buttons, with the exact numbers this table
+   calls for. Literal hex values rather than var(--n-300) etc. since those
+   custom properties are themselves scoped to .vendor-theme.
+   ========================================================================= */
+.view-btn {
+  display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; cursor: pointer;
+  background: linear-gradient(180deg, #fff, #F6F8FB);
+  border: 1px solid #C7D0DE;
+  color: #2B3A52;
+  box-shadow: inset 0 1px 0 #fff, 0 1px 2px rgba(10,31,61,.04);
+  border-radius: 7px;
+  padding: 3px 8px;
+  font-weight: 600;
+  font-size: 10.5px;
+  transition: border-color .15s ease;
+}
+.view-btn:hover { border-color: #93A0B3; }
+
+.take-action-btn {
+  display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; cursor: pointer;
+  background: linear-gradient(180deg, #12335E, #0A1F3D);
+  border: 1px solid #0A1F3D;
+  color: #fff;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.18), 0 2px 6px rgba(10,31,61,.25);
+  border-radius: 7px;
+  padding: 3px 8px;
+  font-weight: 600;
+  font-size: 10.5px;
+  transition: transform .1s ease, box-shadow .15s ease;
+}
+.take-action-btn:hover { box-shadow: inset 0 1px 0 rgba(255,255,255,.18), 0 3px 8px rgba(10,31,61,.3); }
+.take-action-btn:active { transform: scale(.98); }
+
+/* Service Category tags — same "light-glass badge" recipe as the vendor
+   portal's .vbadge (pill shape, gradient tint, colored border, small icon),
+   just unscoped and with literal hex values so it works outside .vendor-theme. */
+.cat-tag {
+  display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
+  font-size: 11.5px; font-weight: 600; padding: 4px 10px 4px 8px; border-radius: 100px;
+  border: 1px solid transparent;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.6);
+}
+.cat-tag svg { width: 11px; height: 11px; flex-shrink: 0; }
+.cat-dme         { background: linear-gradient(180deg, #EDF3F8, #E9F0F6); color: #35607D; border-color: #D2E1EB; }
+.cat-home-health { background: linear-gradient(180deg, #EEF6F1, #E9F3ED); color: #2E6B4F; border-color: #D5E9DD; }
+.cat-hospital    { background: linear-gradient(180deg, #EDF3F6, #EAF1F5); color: #2E6B8F; border-color: #D1E2E8; }
+.cat-drugs       { background: linear-gradient(180deg, #FDF6E9, #FBF3E4); color: #8A6A34; border-color: #F0E0BE; }
+.cat-other       { background: linear-gradient(180deg, #F5F6F8, #F1F4F9); color: #647089; border-color: #E1E6EE; }
+
+/* ============================================================================
+   PHYSICIAN DISPUTE DETAIL — mirrors the vendor portal's own Dispute Detail
+   screen (badges, flip-clock countdown, case-history boxes) so both sides of
+   the same case read as the same product. Unscoped + literal hex values for
+   the same reason as the other physician-side blocks above.
+   ========================================================================= */
+.pbadge{ display:inline-flex; align-items:center; gap:4px; font-size:10.5px; font-weight:600; padding:3px 9px; border-radius:100px; border:1px solid transparent;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.6); white-space:nowrap; line-height:1.4; }
+.pbadge svg{ width:10px; height:10px; flex-shrink:0; }
+.pbadge.success{ background:linear-gradient(180deg,#EEF6F1,#E9F3ED); color:#2E6B4F; }
+.pbadge.warning{ background:linear-gradient(180deg,#FDF6E9,#FBF3E4); color:#8A6A34; }
+.pbadge.error{ background:linear-gradient(180deg,#FAEFEE,#F7EBEA); color:#8A423D; }
+.pbadge.info{ background:linear-gradient(180deg,#EDF3F8,#E9F0F6); color:#35607D; }
+.pbadge.neutral{ background:linear-gradient(180deg,#F5F6F8,#F1F4F9); color:#647089; }
+.pbadge.solid{ background:linear-gradient(180deg,#B95951,#9A3F39); color:#fff; box-shadow:inset 0 1px 0 rgba(255,255,255,.25); }
+
+/* Column-header filter dropdown — physician-side unscoped equivalent of the
+   vendor portal's .vselect-panel/.voption family (FilterTh in VendorPortalInner.jsx). */
+.pselect-panel{ position:absolute; z-index:30; top:calc(100% + 8px); right:0; min-width:190px; width:max-content; max-height:280px; overflow-y:auto; background:#fff; border:1px solid #E1E6EE; border-radius:12px; box-shadow:0 12px 32px rgba(15,23,42,.14); padding:6px; }
+.poptions{ position:relative; }
+.phover-indicator{ position:absolute; left:0; right:0; height:0; border-radius:8px; background:#F5F6F8; opacity:0; pointer-events:none; transition:top .18s cubic-bezier(.2,.8,.2,1), height .18s cubic-bezier(.2,.8,.2,1), opacity .12s ease; }
+.poption{ position:relative; z-index:1; display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 11px; border-radius:8px; font-size:12.5px; font-weight:500; text-transform:none; letter-spacing:normal; cursor:pointer; white-space:nowrap; color:#374151; }
+.poption-left{ display:flex; align-items:center; }
+.poption .pdot{ width:7px; height:7px; border-radius:50%; margin-right:8px; flex-shrink:0; display:inline-block; }
+.poption .pcheck{ width:14px; height:14px; stroke:#1B3A5C; fill:none; stroke-width:2.4; opacity:0; flex-shrink:0; }
+.poption.selected{ font-weight:700; color:#0A1F3D; } .poption.selected .pcheck{ opacity:1; }
+
+/* Flip-clock countdown digits — same recipe as the vendor's DigitGroup. */
+.pcountdown-digit{ display:flex; align-items:center; justify-content:center; border-radius:6px; font-weight:700; font-variant-numeric:tabular-nums;
+  width:20px; height:26px; font-size:14px; font-family:'JetBrains Mono',monospace; color:#fff; }
+
+/* Glossy pill buttons for Confirm/Reject — same gradient/shadow recipe as
+   the vendor portal's .gbtn-success/.gbtn-danger. */
+.pgbtn{ font-weight:600; font-size:13.5px; border-radius:10px; padding:9px 16px; cursor:pointer;
+  display:inline-flex; align-items:center; justify-content:center; gap:7px; transition:box-shadow .15s ease, transform .1s ease; border:1px solid transparent; color:#fff; }
+.pgbtn:active:not(:disabled){ transform:scale(.98); }
+.pgbtn:disabled{ opacity:.5; cursor:not-allowed; }
+.pgbtn-sm{ padding:6px 12px; font-size:12.5px; border-radius:8px; }
+.pgbtn-success{ background:linear-gradient(180deg,#5CAE8A,#3A7D5C); border-color:#2E6B4F; box-shadow:inset 0 1px 0 rgba(255,255,255,.2), 0 8px 18px rgba(58,125,92,.25); }
+.pgbtn-danger{ background:linear-gradient(180deg,#C4655D,#A6453F); border-color:#8A3B35; box-shadow:inset 0 1px 0 rgba(255,255,255,.2), 0 8px 18px rgba(166,69,63,.25); }
+
+/* Case timeline — icon marker + connecting line, each step in a light-gray
+   rounded box. Mirrors the vendor's .ctl-* classes, plus a colored icon
+   badge per step (.pctl-icon) instead of a plain dot. */
+.pctl-item{ display:flex; gap:14px; margin-bottom:14px; }
+.pctl-item:last-child{ margin-bottom:0; }
+.pctl-marker-col{ display:flex; flex-direction:column; align-items:center; width:30px; flex-shrink:0; }
+.pctl-dot{ width:12px; height:12px; border-radius:50%; border:2px solid #C7D0DE; background:#fff; flex-shrink:0; }
+.pctl-dot.done{ background:#5B84C4; border-color:#5B84C4; }
+.pctl-dot.success{ background:#3A7D5C; border-color:#3A7D5C; }
+.pctl-dot.attention{ background:#0A1F3D; border-color:#0A1F3D; }
+.pctl-icon{ width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.pctl-icon svg{ width:14px; height:14px; }
+.pctl-line{ width:2px; flex:1; background:#E1E6EE; margin-top:4px; }
+.pctl-date{ font-size:10.5px; font-weight:600; color:#93A0B3; margin-bottom:6px; }
+.pctl-box{ flex:1; background:#F7F9FC; border:1px solid #F1F4F9; border-radius:10px; padding:12px 14px; min-width:0; }
+.pctl-title{ font-weight:700; font-size:13px; color:#0A1F3D; }
+.pctl-quote{ font-size:12px; color:#647089; font-style:italic; margin-top:4px; }
+.pctl-box.pending{ background:#FBF3E4; border-color:#F0E0BE; }
+.pctl-box.pending .pctl-title{ color:#8A6A34; font-weight:600; }
+.pctl-box.success{ background:#E9F3ED; border-color:#D5E9DD; }
+.pctl-box.success .pctl-title{ color:#2E6B4F; }
+.pctl-box.attention{ background:#F1F4F9; border-color:#E1E6EE; }
+
+/* ============================================================================
+   VENDOR PORTAL THEME — "Scientific Blue" (from the moodboard)
+   Scoped entirely under .vendor-theme so it can't leak into or collide with
+   the physician/payer portals, which keep their own existing look. Ported as
+   close to verbatim from the moodboard as the class names allow — gradients,
+   shadow layering, and the animation timings are copied exactly rather than
+   re-approximated in Tailwind utilities, so the fine detail survives.
+   ========================================================================= */
+.vendor-theme{
+  --navy-900:#0A1F3D; --navy-800:#12335E; --blue-600:#3E5F94; --slate-blue:#5B84C4; --sky:#6FB4E6;
+  --pale-blue:#AFC3E8; --palest-blue:#DCE6F7;
+  --success:#3A7D5C; --warning:#D1A85C; --error:#A6453F; --info:#5A9BC9; --ai:#2E6B8F;
+  --success-bg:#E9F3ED; --warning-bg:#FBF3E4; --error-bg:#F7EBEA; --info-bg:#E9F0F6; --ai-bg:#EAF1F5;
+  --success-tx:#2E6B4F; --warning-tx:#8A6A34; --error-tx:#8A423D; --info-tx:#35607D; --ai-tx:#2E6B8F;
+  --n-900:#0B1626; --n-800:#17233A; --n-700:#2B3A52; --n-600:#46586F; --n-500:#647089; --n-400:#93A0B3;
+  --n-300:#C7D0DE; --n-200:#E1E6EE; --n-100:#F1F4F9; --n-50:#F7F9FC; --surface:#FFFFFF;
+  --font-display:'Manrope',sans-serif; --font-body:'Inter',sans-serif; --font-mono:'JetBrains Mono',monospace;
+  --shadow-sm:0 1px 2px rgba(10,31,61,.05), 0 1px 1px rgba(10,31,61,.03);
+  --shadow-md:0 8px 20px rgba(10,31,61,.07), 0 1px 2px rgba(10,31,61,.04);
+  --shadow-lg:0 16px 40px rgba(10,31,61,.12), 0 2px 8px rgba(10,31,61,.05);
+  font-family: var(--font-body);
+  color: var(--n-800);
+}
+.vendor-theme h1, .vendor-theme h2, .vendor-theme h3, .vendor-theme h4 { font-family: var(--font-display); color: var(--navy-900); }
+.vendor-theme .vt-mono { font-family: var(--font-mono); }
+/* Moodboard's dashboard header sits directly on the page background — no
+   separate white bar/border/shadow behind the title — so drop Shell's
+   generic solid-white header treatment for the vendor portal only. */
+.vendor-theme header { background: transparent; border-bottom: none; box-shadow: none; }
+
+/* ===== Glass buttons (locked, universal) ===== */
+.vendor-theme .gbtn{ font-family:var(--font-body); font-weight:600; font-size:13.5px; border-radius:10px; padding:9px 16px; cursor:pointer;
+  display:inline-flex; align-items:center; justify-content:center; gap:7px; transition:box-shadow .15s ease, transform .1s ease; border:1px solid var(--n-300);
+  background:linear-gradient(180deg,#fff,#F6F8FB); color:var(--n-700); box-shadow:inset 0 1px 0 #fff, 0 1px 2px rgba(10,31,61,.04); }
+.vendor-theme .gbtn:hover:not(:disabled){ border-color:var(--n-400); }
+.vendor-theme .gbtn:active:not(:disabled){ transform:scale(.98); }
+.vendor-theme .gbtn:disabled{ opacity:.5; cursor:not-allowed; }
+.vendor-theme .gbtn-primary{ background:linear-gradient(180deg,var(--navy-800),var(--navy-900)); border-color:var(--navy-900); color:#fff;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.18), 0 8px 18px rgba(10,31,61,.28); }
+.vendor-theme .gbtn-ai{ background:linear-gradient(180deg,#3E7FA6,var(--ai)); border-color:#2A5F80; color:#fff;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.25), 0 8px 18px rgba(46,107,143,.28); }
+.vendor-theme .gbtn-danger{ background:linear-gradient(180deg,#C4655D,var(--error)); border-color:#8A3B35; color:#fff;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.2), 0 8px 18px rgba(166,69,63,.25); }
+.vendor-theme .gbtn-success{ background:linear-gradient(180deg,#5CAE8A,var(--success)); border-color:#2E6B4F; color:#fff;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.2), 0 8px 18px rgba(58,125,92,.25); }
+.vendor-theme .gbtn-info{ background:linear-gradient(180deg,#6FA8CE,var(--info)); border-color:#3D6E8F; color:#fff;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.22), 0 8px 18px rgba(90,155,201,.28); }
+.vendor-theme .gbtn-warning{ background:linear-gradient(180deg,#DDBE84,var(--warning)); border-color:#8A6A34; color:#fff;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.22), 0 8px 18px rgba(209,168,92,.28); }
+.vendor-theme .gbtn-ghost{ background:linear-gradient(180deg,#fff,#F6F8FB); border-color:var(--n-300); color:var(--n-700); }
+.vendor-theme .gbtn-sm{ padding:4px 10px; font-size:11.5px; border-radius:7px; }
+.vendor-theme .gbtn-lg{ padding:12px 22px; font-size:14.5px; border-radius:12px; }
+.vendor-theme .gicon-btn{ width:36px; height:36px; border-radius:9px; border:1px solid var(--n-300); background:linear-gradient(180deg,#fff,#F6F8FB);
+  display:inline-flex; align-items:center; justify-content:center; color:var(--n-600); cursor:pointer; box-shadow:inset 0 1px 0 #fff, 0 1px 2px rgba(10,31,61,.04); flex-shrink:0; }
+.vendor-theme .gicon-btn:hover{ border-color:var(--n-400); }
+.vendor-theme .gicon-btn:active{ transform:scale(.96); }
+.vendor-theme .badge-dot{ position:absolute; top:-4px; right:-4px; min-width:16px; height:16px; border-radius:8px; background:var(--error); color:#fff; font-size:9.5px; font-weight:700; display:flex; align-items:center; justify-content:center; padding:0 3px; border:2px solid #fff; }
+.vendor-theme .profile-chip{ display:flex; align-items:center; gap:10px; }
+.vendor-theme .profile-avatar{ width:38px; height:38px; border-radius:50%; background:var(--navy-900); color:#fff; font-weight:700; font-size:13px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.vendor-theme .profile-name{ font-size:13px; font-weight:700; color:var(--navy-900); }
+.vendor-theme .profile-sub{ font-size:11px; color:var(--n-500); }
+
+/* ===== Notification bell + dropdown (live-notifications-demo moodboard) ===== */
+.vendor-theme .gicon-btn.ring svg{ animation: npring .5s ease; }
+@keyframes npring{ 0%,100%{transform:rotate(0);} 20%{transform:rotate(-12deg);} 40%{transform:rotate(10deg);} 60%{transform:rotate(-8deg);} 80%{transform:rotate(6deg);} }
+.vendor-theme .badge-dot.pop{ animation: npbadgepop .3s cubic-bezier(.34,1.56,.64,1); }
+@keyframes npbadgepop{ 0%{transform:scale(1);} 50%{transform:scale(1.3);} 100%{transform:scale(1);} }
+.vendor-theme .np-panel{ position:absolute; right:0; top:calc(100% + 10px); width:360px; max-width:calc(100vw - 32px); background:#fff; border:1px solid var(--n-200); border-radius:16px; box-shadow:0 16px 36px rgba(10,31,61,.12), 0 2px 8px rgba(10,31,61,.05); z-index:50; overflow:hidden; }
+.vendor-theme .np-head{ display:flex; align-items:center; justify-content:space-between; padding:14px 16px 12px; border-bottom:1px solid var(--n-100); }
+.vendor-theme .np-head-title{ display:flex; align-items:center; gap:8px; font-size:14px; font-weight:700; color:var(--navy-900); }
+.vendor-theme .np-live-dot{ width:7px; height:7px; border-radius:50%; background:var(--success); animation:nppulse 1.6s infinite; flex-shrink:0; }
+@keyframes nppulse{ 0%,100%{opacity:1;} 50%{opacity:.3;} }
+.vendor-theme .np-mark-read{ font-size:11.5px; font-weight:600; color:var(--slate-blue); cursor:pointer; background:none; border:0; padding:0; }
+.vendor-theme .np-mark-read:disabled{ color:var(--n-300); cursor:default; }
+.vendor-theme .np-tabs{ display:flex; gap:4px; padding:10px 12px; }
+.vendor-theme .np-tab{ padding:5px 11px; border-radius:8px; font-size:12px; font-weight:600; color:var(--n-500); cursor:pointer; background:none; border:0; }
+.vendor-theme .np-tab.active{ background:var(--n-100); color:var(--navy-900); }
+.vendor-theme .np-list{ max-height:340px; overflow-y:auto; padding:2px 8px 10px; }
+.vendor-theme .np-item{ display:flex; gap:10px; padding:10px 8px; border-radius:10px; cursor:pointer; text-align:left; width:100%; background:none; border:0; }
+.vendor-theme .np-item:hover{ background:var(--n-50); }
+.vendor-theme .np-item.unread{ background:#EEF2F8; }
+.vendor-theme .np-item.new{ animation: npslidein .35s ease; }
+@keyframes npslidein{ from{ transform:translateY(-10px); opacity:0; } to{ transform:translateY(0); opacity:1; } }
+.vendor-theme .np-item-icon{ width:32px; height:32px; border-radius:9px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.vendor-theme .np-item-body{ flex:1; min-width:0; }
+.vendor-theme .np-item-top{ display:flex; justify-content:space-between; gap:8px; }
+.vendor-theme .np-item-title{ font-size:12.5px; font-weight:600; color:var(--navy-900); }
+.vendor-theme .np-item-time{ font-size:10.5px; color:var(--n-400); white-space:nowrap; flex-shrink:0; }
+.vendor-theme .np-item-desc{ font-size:11.5px; color:var(--n-500); margin-top:2px; line-height:1.4; }
+.vendor-theme .np-empty{ padding:30px 16px; text-align:center; font-size:12.5px; color:var(--n-400); }
+
+/* ===== Light-glass badges (locked) ===== */
+.vendor-theme .vbadge{ display:inline-flex; align-items:center; gap:4px; font-size:10.5px; font-weight:600; padding:3px 9px; border-radius:100px; border:1px solid transparent;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.6); white-space:nowrap; line-height:1.4; }
+.vendor-theme .vbadge svg{ width:10px; height:10px; flex-shrink:0; }
+.vendor-theme .vbadge.success{ background:linear-gradient(180deg,#EEF6F1,var(--success-bg)); color:var(--success-tx); }
+.vendor-theme .vbadge.warning{ background:linear-gradient(180deg,#FDF6E9,var(--warning-bg)); color:var(--warning-tx); }
+.vendor-theme .vbadge.error{ background:linear-gradient(180deg,#FAEFEE,var(--error-bg)); color:var(--error-tx); }
+.vendor-theme .vbadge.info{ background:linear-gradient(180deg,#EDF3F8,var(--info-bg)); color:var(--info-tx); }
+.vendor-theme .vbadge.ai{ background:linear-gradient(180deg,#EDF3F6,var(--ai-bg)); color:var(--ai-tx); }
+.vendor-theme .vbadge.neutral{ background:linear-gradient(180deg,#F5F6F8,var(--n-100)); color:var(--n-500); }
+.vendor-theme .vbadge.solid{ background:linear-gradient(180deg,#B95951,#9A3F39); color:#fff; box-shadow:inset 0 1px 0 rgba(255,255,255,.25); }
+
+/* ===== Filter pills — colored glass tint at rest (same tone as the status
+   badge it filters), inverts to white + colored border/text once selected.
+   Opposite of a normal toggle button on purpose: color signals "this is the
+   Confirmed filter" at all times, white just marks "and it's the active one." ===== */
+.vendor-theme .vfilter{ display:inline-flex; align-items:center; gap:6px; padding:8px 16px; border-radius:100px; font-weight:700; font-size:13px;
+  cursor:pointer; border:1px solid transparent; transition:background .15s ease, border-color .15s ease, box-shadow .15s ease; box-shadow:inset 0 1px 0 rgba(255,255,255,.5); }
+.vendor-theme .vfilter.neutral{ background:linear-gradient(180deg,#F5F6F8,var(--n-100)); color:var(--n-600); border-color:var(--n-200); }
+.vendor-theme .vfilter.info{ background:linear-gradient(180deg,#EDF3F8,var(--info-bg)); color:var(--info-tx); border-color:#D2E1EB; }
+.vendor-theme .vfilter.warning{ background:linear-gradient(180deg,#FDF6E9,var(--warning-bg)); color:var(--warning-tx); border-color:#F0E0BE; }
+.vendor-theme .vfilter.error{ background:linear-gradient(180deg,#FAEFEE,var(--error-bg)); color:var(--error-tx); border-color:#EBD3D1; }
+.vendor-theme .vfilter.active{ background:#fff; box-shadow:0 4px 12px rgba(10,31,61,.14), inset 0 1px 0 #fff; }
+.vendor-theme .vfilter.neutral.active{ color:var(--navy-900); border-color:var(--n-300); }
+.vendor-theme .vfilter.info.active{ color:var(--info-tx); border-color:var(--info); }
+.vendor-theme .vfilter.warning.active{ color:var(--warning-tx); border-color:var(--warning); }
+.vendor-theme .vfilter.error.active{ color:var(--error-tx); border-color:var(--error); }
+
+/* ===== Form fields ===== */
+.vendor-theme .vfield{ font-family:var(--font-body); font-size:12.5px; padding:7px 12px; border-radius:100px; border:1px solid var(--n-300); background:#fff; color:var(--n-800); width:100%; outline:none; }
+.vendor-theme .vfield:focus{ border-color:var(--blue-600); box-shadow:0 0 0 3px var(--palest-blue); }
+.vendor-theme .vflabel{ font-size:12px; font-weight:600; color:var(--n-600); margin-bottom:6px; display:block; }
+
+/* ===== Dropdown — magnetic hover indicator (used by table column filters) ===== */
+.vendor-theme .vselect-panel{ position:absolute; z-index:30; top:calc(100% + 8px); left:0; min-width:100%; width:max-content; background:#fff; border:1px solid var(--n-200); border-radius:12px; box-shadow:var(--shadow-lg); padding:6px; }
+.vendor-theme .voptions{ position:relative; }
+.vendor-theme .vhover-indicator{ position:absolute; left:0; right:0; height:0; border-radius:8px; background:var(--n-100); opacity:0; pointer-events:none; transition:top .18s cubic-bezier(.2,.8,.2,1), height .18s cubic-bezier(.2,.8,.2,1), opacity .12s ease; }
+.vendor-theme .voption{ position:relative; z-index:1; display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 12px; border-radius:8px; font-size:14px; cursor:pointer; white-space:nowrap; color:var(--n-700); }
+.vendor-theme .voption-left{ display:flex; align-items:center; }
+.vendor-theme .voption .vdot{ width:7px; height:7px; border-radius:50%; margin-right:9px; flex-shrink:0; display:inline-block; }
+.vendor-theme .voption .vcheck{ width:15px; height:15px; stroke:var(--slate-blue); fill:none; stroke-width:2.4; opacity:0; flex-shrink:0; }
+.vendor-theme .voption.selected{ font-weight:600; color:var(--navy-900); } .vendor-theme .voption.selected .vcheck{ opacity:1; }
+
+/* ===== KPI cards ===== */
+.vendor-theme .kpi{ position:relative; overflow:hidden; background:#fff; border:1px solid var(--n-200); border-radius:18px; padding:20px 22px 22px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.7), var(--shadow-sm); }
+.vendor-theme .kpi-glow{ position:absolute; top:-34px; right:-34px; width:96px; height:96px; border-radius:50%; }
+.vendor-theme .kpi-badge{ position:absolute; top:12px; right:12px; width:32px; height:32px; border-radius:50%; background:#fff; display:flex; align-items:center; justify-content:center; box-shadow:0 1px 2px rgba(10,31,61,.08); }
+.vendor-theme .kpi-label{ position:relative; font-size:12.5px; font-weight:600; color:var(--n-500); }
+.vendor-theme .kpi-value{ position:relative; font-family:var(--font-display); font-weight:800; font-size:28px; color:var(--navy-900); letter-spacing:-.02em; margin-top:10px; }
+.vendor-theme .kpi-sub{ position:relative; font-size:12px; color:var(--n-500); margin-top:4px; }
+.vendor-theme .kpi-track{ position:relative; height:4px; border-radius:4px; background:var(--n-100); margin-top:14px; overflow:hidden; }
+.vendor-theme .kpi-fill{ height:100%; border-radius:4px; }
+
+/* ===== Table ===== */
+.vendor-theme .vtcb{ width:17px; height:17px; border-radius:5px; border:1.5px solid var(--n-300); display:flex; align-items:center; justify-content:center; background:#fff; flex-shrink:0; cursor:pointer; }
+.vendor-theme .vtcb svg{ width:10px; height:10px; stroke:#fff; fill:none; stroke-width:3; }
+.vendor-theme .vtcb.on, .vendor-theme .vtcb.mid{ background:var(--blue-600); border-color:var(--blue-600); }
+.vendor-theme .vtcb .vdash{ width:8px; height:2px; background:#fff; border-radius:2px; }
+.vendor-theme table.vclaims{ width:100%; border-collapse:collapse; font-size:13px; }
+.vendor-theme table.vclaims thead th{ text-align:left; padding:8px 14px; font-size:10.5px; font-weight:600; color:var(--n-400); text-transform:uppercase; letter-spacing:.04em; border-bottom:1px solid var(--n-100); background:var(--n-50); }
+.vendor-theme table.vclaims tbody td{ padding:8px 14px; border-bottom:1px solid var(--n-100); }
+.vendor-theme table.vclaims tbody tr:last-child td{ border-bottom:none; }
+.vendor-theme table.vclaims tbody tr:hover{ background:var(--n-50); }
+.vendor-theme table.vclaims tbody tr.vchecked{ background:#EEF2F8; }
+
+/* ===== Case timeline (dispute-detail-pending/responded moodboards) — simple
+   dot + connecting line, not the pulsing-marker style above. ===== */
+.vendor-theme .ctl-item{ display:flex; gap:14px; margin-bottom:14px; }
+.vendor-theme .ctl-item:last-child{ margin-bottom:0; }
+.vendor-theme .ctl-marker-col{ display:flex; flex-direction:column; align-items:center; width:14px; flex-shrink:0; padding-top:4px; }
+.vendor-theme .ctl-dot{ width:12px; height:12px; border-radius:50%; border:2px solid var(--n-300); background:#fff; flex-shrink:0; }
+.vendor-theme .ctl-dot.done{ background:var(--slate-blue); border-color:var(--slate-blue); }
+.vendor-theme .ctl-dot.success{ background:var(--success); border-color:var(--success); }
+.vendor-theme .ctl-dot.attention{ background:var(--navy-900); border-color:var(--navy-900); }
+.vendor-theme .ctl-line{ width:2px; flex:1; background:var(--n-200); margin-top:4px; }
+.vendor-theme .ctl-date{ font-size:10.5px; font-weight:600; color:var(--n-400); margin-bottom:6px; }
+.vendor-theme .ctl-box{ flex:1; background:var(--n-50); border:1px solid var(--n-100); border-radius:10px; padding:12px 14px; min-width:0; }
+.vendor-theme .ctl-title{ font-weight:700; font-size:13px; color:var(--navy-900); }
+.vendor-theme .ctl-quote{ font-size:12px; color:var(--n-500); font-style:italic; margin-top:4px; }
+.vendor-theme .ctl-box.pending{ background:var(--warning-bg); border-color:#F0E0BE; }
+.vendor-theme .ctl-box.pending .ctl-title{ color:var(--warning-tx); font-weight:600; }
+.vendor-theme .ctl-box.success{ background:var(--success-bg); border-color:#D5E9DD; }
+.vendor-theme .ctl-box.success .ctl-title{ color:var(--success-tx); }
+.vendor-theme .ctl-box.attention{ background:var(--n-100); border-color:var(--n-200); }
+
+/* ===== Profile / provider panel ===== */
+.vendor-theme .pp{ background:#fff; border:1px solid var(--n-200); border-radius:18px; overflow:hidden; box-shadow:var(--shadow-md); }
+.vendor-theme .pp-id{ padding:18px 18px 14px; }
+.vendor-theme .pp-avatar{ width:48px; height:48px; border-radius:13px; background:linear-gradient(135deg,var(--slate-blue),var(--navy-900)); color:#fff; display:flex; align-items:center; justify-content:center; font-family:var(--font-display); font-weight:800; font-size:16px; flex-shrink:0; }
+.vendor-theme .pp-contact{ display:flex; gap:9px; margin-top:14px; }
+.vendor-theme .pp-contact-btn{ width:34px; height:34px; border-radius:50%; background:#fff; border:1px solid var(--n-200); display:flex; align-items:center; justify-content:center; flex-shrink:0; color:var(--n-600); transition:border-color .15s ease, color .15s ease; }
+.vendor-theme .pp-contact-btn:hover{ border-color:var(--slate-blue); color:var(--slate-blue); }
+.vendor-theme .pp-stats{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; padding:0 18px 14px; }
+.vendor-theme .pp-stat{ background:var(--n-50); border-radius:10px; padding:10px 6px; text-align:center; }
+.vendor-theme .pp-cta{ display:flex; gap:8px; padding:0 18px 16px; }
+.vendor-theme .pp-group{ padding:6px 10px; }
+.vendor-theme .pp-group + .pp-group{ border-top:1px solid var(--n-100); }
+.vendor-theme .pp-item{ display:flex; align-items:center; gap:10px; padding:9px 10px; border-radius:9px; font-size:13px; font-weight:500; color:var(--n-700); cursor:pointer; }
+.vendor-theme .pp-item:hover{ background:var(--n-50); }
+.vendor-theme .pp-item.danger{ color:var(--error-tx); }
+
+/* ===== Top navbar (replaces the sidebar entirely) ===== */
+.vendor-theme .navbar{ background:#fff; border-bottom:1px solid var(--n-200); padding:12px 28px;
+  display:flex; align-items:center; justify-content:space-between; gap:16px; position:sticky; top:0; z-index:20; flex-shrink:0; }
+.vendor-theme .nav-link{ display:flex; align-items:center; gap:7px; padding:8px 14px; border-radius:999px;
+  font-size:13.5px; font-weight:600; color:var(--n-500); white-space:nowrap; background:none; border:0; cursor:pointer; }
+.vendor-theme .nav-link.active{ background:var(--navy-900); color:#fff; }
+.vendor-theme .nav-link:hover:not(.active){ background:var(--n-50); color:var(--n-700); }
+.vendor-theme .navbar-search{ width:220px; padding:8px 14px 8px 32px; border-radius:999px; border:1px solid transparent;
+  background:var(--n-50); font-size:13px; color:var(--n-700); outline:none; transition:border-color .15s ease, background .15s ease; }
+.vendor-theme .navbar-search::placeholder{ color:var(--n-400); }
+.vendor-theme .navbar-search:focus{ border-color:var(--slate-blue); background:#fff; box-shadow:0 0 0 3px #E4EBF6; }
+
+/* ===== Empty states ===== */
+.vendor-theme .v-empty-icon{ width:44px; height:44px; border-radius:12px; display:flex; align-items:center; justify-content:center; margin:0 auto 14px; }

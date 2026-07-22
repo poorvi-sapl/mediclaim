@@ -16,7 +16,7 @@ from backend.models import Action, Claim, NpiProfile, NpiRiskScore, RulesFlag
 router = APIRouter()
 log = logging.getLogger("analytics")
 
-FLAG_ACTIONS = ("flag_supplier", "unknown_patient", "did_not_order")
+FLAG_ACTIONS = ("flag_supplier", "unknown_patient", "did_not_order", "deceased_patient")
 
 # Simple in-memory context cache — avoids re-running all DB queries on every request
 _ctx_cache: dict = {}
@@ -320,7 +320,7 @@ def _risk_band(score) -> str:
 _RULE_LABELS = {
     "geographic_anomaly": "Geographic Anomaly",
     "oig_leie_hit": "OIG LEIE Hit",
-    "cross_npi_supplier": "Cross-NPI Supplier",
+    "cross_npi_supplier": "Cross-NPI Vendor",
     "volume_spike": "Volume Spike",
     "duplicate_billing": "Duplicate Billing",
     "identity_reuse": "Identity Reuse",
@@ -330,9 +330,9 @@ _RULE_LABELS = {
     "impossible_day": "Impossible Day",
     "rapid_cycling": "Rapid Cycling",
     "modifier_abuse": "Modifier Abuse",
-    "new_high_value_supplier": "New High-Value Supplier",
+    "new_high_value_supplier": "New High-Value Vendor",
     "deceased_patient": "Deceased Patient",
-    "supplier_concentration": "Supplier Concentration",
+    "supplier_concentration": "Vendor Concentration",
 }
 
 
@@ -593,6 +593,43 @@ def physician_flag_timeline(npi: str = Query(...), db: Session = Depends(get_db)
     )
     cnt_dict = {r.month: r.cnt for r in rows}
     return {"months": labels, "flagged_counts": [cnt_dict.get(k, 0) for k in keys]}
+
+
+def _eight_week_window():
+    """Return (start date of the 8-week window, ISO year-week keys, short date
+    labels, and each week's start-date isoformat) — same zero-fill idiom as
+    _six_month_window, just bucketed by ISO week instead of calendar month."""
+    today = date.today()
+    monday_this_week = today - timedelta(days=today.weekday())
+    start = monday_this_week - timedelta(weeks=7)
+    keys, labels, starts = [], [], []
+    for i in range(8):
+        week_start = start + timedelta(weeks=i)
+        keys.append(week_start.strftime("%G-%V"))   # ISO year-week — matches to_char's IYYY-IW
+        labels.append(week_start.strftime("%b %d"))
+        starts.append(week_start.isoformat())
+    return start, keys, labels, starts
+
+
+@router.get("/physician/reviews-trend")
+def physician_reviews_trend(npi: str = Query(...), db: Session = Depends(get_db)):
+    """Claims actually reviewed (any Action recorded) per week, last 8 weeks —
+    backs the physician dashboard's Review Velocity chart. Counts distinct
+    claim_id per week so a claim actioned more than once in the same week
+    (e.g. undone and re-actioned) isn't double-counted, same dedup idiom as
+    the confirmed/flagged counts in claims.py's build_claims_page."""
+    start, keys, labels, starts = _eight_week_window()
+    rows = (
+        db.query(
+            func.to_char(Action.created_at, "IYYY-IW").label("week"),
+            func.count(func.distinct(Action.claim_id)).label("cnt"),
+        )
+        .filter(Action.npi == npi, Action.created_at >= start)
+        .group_by(func.to_char(Action.created_at, "IYYY-IW"))
+        .all()
+    )
+    cnt_dict = {r.week: r.cnt for r in rows}
+    return {"weeks": labels, "week_start": starts, "counts": [cnt_dict.get(k, 0) for k in keys]}
 
 
 @router.post("/query")

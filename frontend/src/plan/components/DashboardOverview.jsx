@@ -6,25 +6,25 @@ import {
 import { API_BASE } from '../../api'
 
 const bandColor = (band) => {
-  if (band === 'high') return '#ef4444'
-  if (band === 'mid') return '#f59e0b'
-  return '#10b981'
+  if (band === 'high') return '#A6453F'
+  if (band === 'mid') return '#D1A85C'
+  return '#3A7D5C'
 }
-const PIE_COLORS = ['#ef4444', '#3b82f6', '#1B3A5C', '#f59e0b']
+const PIE_COLORS = ['#A6453F', '#D1A85C', '#3A7D5C', '#5B84C4']
 
 const RULE_ABBR = {
-  'Cross-NPI Supplier': 'CNS', 'OIG LEIE Hit': 'OLH', 'Volume Spike': 'VS',
+  'Cross-NPI Vendor': 'CNV', 'OIG LEIE Hit': 'OLH', 'Volume Spike': 'VS',
   'Impossible Day': 'ID', 'Rapid Cycling': 'RC', 'Modifier Abuse': 'MA',
-  'Unbundling': 'UB', 'New High-Value Supplier': 'NHVS', 'Geographic Anomaly': 'GA',
+  'Unbundling': 'UB', 'New High-Value Vendor': 'NHVV', 'Geographic Anomaly': 'GA',
   'Upcoding': 'UC', 'Deceased Patient': 'DP', 'Duplicate Billing': 'DB',
 }
 
 function PillTick({ x, y, payload }) {
   return (
     <g transform={`translate(${x},${y})`}>
-      <rect x={-22} y={5} width={44} height={17} rx={8.5} fill="#EEF2F7" />
+      <rect x={-22} y={5} width={44} height={17} rx={8.5} fill="#E9F0F6" />
       <text x={0} y={14} textAnchor="middle" dominantBaseline="middle"
-        fontSize={8} fontWeight={700} fill="#1B3A5C">
+        fontSize={8} fontWeight={700} fill="#0A1F3D">
         {payload.value}
       </text>
     </g>
@@ -147,7 +147,7 @@ export default function DashboardOverview() {
               <Bar dataKey="count" radius={[4, 4, 0, 0]} maxBarSize={28}>
                 {ruleData.map((entry, i) => {
                   const maxCount = ruleData[0]?.count || 1
-                  return <Cell key={i} fill="#1B3A5C" fillOpacity={Math.max(0.12, entry.count / maxCount)} />
+                  return <Cell key={i} fill="#0A1F3D" fillOpacity={Math.max(0.12, entry.count / maxCount)} />
                 })}
               </Bar>
             </BarChart>
@@ -159,10 +159,10 @@ export default function DashboardOverview() {
           <div className="space-y-0.5 max-h-[220px] sm:max-h-[260px] overflow-y-auto">
             {npiData.map((n, i) => {
               const bs = n.band === 'high'
-                ? { badge: 'bg-red-50 text-red-600 ring-red-200/60',           label: 'High Risk' }
+                ? { badge: 'bg-[#F7EBEA] text-[#A6453F] ring-[#EBD3D1]',       label: 'High Risk' }
                 : n.band === 'mid'
-                ? { badge: 'bg-amber-50 text-amber-700 ring-amber-200/60',     label: 'Mid Risk'  }
-                : { badge: 'bg-[#EEF2F7] text-[#1B3A5C] ring-[#1B3A5C]/10',  label: 'Low Risk'  }
+                ? { badge: 'bg-[#FBF3E4] text-[#8A6A34] ring-[#F0E0BE]',       label: 'Mid Risk'  }
+                : { badge: 'bg-[#E9F0F6] text-[#0A1F3D] ring-[#0A1F3D]/10',  label: 'Low Risk'  }
               return (
                 <div key={i} className="flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-gray-50 transition-colors">
                   <div className="min-w-0 flex-1">
@@ -211,10 +211,10 @@ export default function DashboardOverview() {
                   <span style={{ color: '#6b7280', fontSize: 11 }}>{value}</span>
                 )}
               />
-              <Line type="monotone" dataKey="total" name="Total Claims" stroke="#0d1f35" strokeWidth={2}
-                dot={{ r: 3, fill: '#0d1f35', strokeWidth: 0 }} activeDot={{ r: 5 }} />
-              <Line type="monotone" dataKey="flagged" name="Fraud Rules Hit" stroke="#ef4444" strokeWidth={2}
-                strokeDasharray="5 4" dot={{ r: 3, fill: '#ef4444', strokeWidth: 0 }} activeDot={{ r: 5 }} />
+              <Line type="monotone" dataKey="total" name="Total Claims" stroke="#0A1F3D" strokeWidth={2}
+                dot={{ r: 3, fill: '#0A1F3D', strokeWidth: 0 }} activeDot={{ r: 5 }} />
+              <Line type="monotone" dataKey="flagged" name="Fraud Rules Hit" stroke="#A6453F" strokeWidth={2}
+                strokeDasharray="5 4" dot={{ r: 3, fill: '#A6453F', strokeWidth: 0 }} activeDot={{ r: 5 }} />
             </LineChart>
           </ResponsiveContainer>
         </ChartCard>

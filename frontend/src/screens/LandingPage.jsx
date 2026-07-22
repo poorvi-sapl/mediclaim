@@ -2,9 +2,17 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Shield, ChevronRight, TrendingUp, Zap, Users, TrendingDown, Activity, Eye, Check } from 'lucide-react';
 import { useAuth, DASHBOARD_PATH } from '../context/AuthContext';
+import NavHeader from '../components/NavHeader';
 import heroImage from './Hero.png';
 import imageCard from './image-card.png';
 import healthcareImage from './healthcare.png';
+
+const NAV_LINKS = [
+  { href: '#features', label: 'Features' },
+  { href: '#how', label: 'How It Works' },
+  { href: '#plans', label: 'For Health Plans' },
+  { href: '#faq', label: 'FAQ' },
+];
 
 const stats = [
   { value: '10K+', label: 'NPIs Monitored' },
@@ -17,12 +25,12 @@ const steps = [
   {
     num: '01',
     title: 'Physician Reviews Claims',
-    desc: 'Doctors log in to see every claim filed under their NPI. They take one of five actions per claim: Confirm, Dispute, Flag Supplier, Unknown Patient, or Did Not Order.'
+    desc: 'Doctors log in to see every claim filed under their NPI. They take one of five actions per claim: Confirm, Dispute, Flag Vendor, Unknown Patient, or Did Not Order.'
   },
   {
     num: '02',
     title: 'Real-time Alert Fires',
-    desc: 'The moment a physician flags a supplier or reports an unknown patient, a live alert streams via Server-Sent Events to the Plan dashboard — under one second latency.'
+    desc: 'The moment a physician flags a vendor or reports an unknown patient, a live alert streams via Server-Sent Events to the Plan dashboard — under one second latency.'
   },
   {
     num: '03',
@@ -32,25 +40,25 @@ const steps = [
   {
     num: '04',
     title: 'Risk Scores Update',
-    desc: 'The rules engine recalculates scores using 10+ weighted patterns — OIG hits, cross-NPI suppliers, volume spikes, geographic anomalies, and more. High-risk NPIs surface automatically.'
+    desc: 'The rules engine recalculates scores using 10+ weighted patterns — OIG hits, cross-NPI vendors, volume spikes, geographic anomalies, and more. High-risk NPIs surface automatically.'
   },
 ];
 
 const featuresList = [
-  { title: 'Rules-Based Risk Scoring', desc: '10+ weighted fraud patterns: OIG LEIE hits, cross-NPI suppliers, geographic anomalies, volume spikes, duplicate billing, unbundling, impossible days, rapid patient cycling, and more.' },
+  { title: 'Rules-Based Risk Scoring', desc: '10+ weighted fraud patterns: OIG LEIE hits, cross-NPI vendors, geographic anomalies, volume spikes, duplicate billing, unbundling, impossible days, rapid patient cycling, and more.' },
   { title: 'Live Activity Feed', desc: 'SSE-powered feed streams every physician action in real time — Confirmed, Disputed, Flagged, Unknown Patient, or Denied. Filter by action type, sort by amount or time.' },
-  { title: '5-Action Physician Loop', desc: 'Confirm, Dispute, Flag Supplier, Unknown Patient, Did Not Order. Each action feeds the risk engine and surfaces directly in the Plan investigator dashboard.' },
-  { title: 'NPI Risk Leaderboard', desc: 'Color-coded 0–100 risk scores across all monitored NPIs. Filter by specialty, state, or fraud pattern. Drill into any NPI for full claim and rule history.' },
-  { title: 'Claims Monitoring', desc: 'Full claim table with service categories (Home Health, Hospice, DME, Drugs, Hospital), patient names, supplier, amount, and review status. Filter, sort, and act in one view.' },
-  { title: 'Supplier Watchlist', desc: 'Track suppliers billing across multiple NPIs. See OIG flag status, distinct NPI count, physician reports, total billed, and risk level (Critical → Low) at a glance.' },
+  { title: '5-Action Physician Loop', desc: 'Confirm, Dispute, Flag Vendor, Unknown Patient, Did Not Order. Each action feeds the risk engine and surfaces directly in the Plan investigator dashboard.' },
+  { title: 'Physician Risk Leaderboard', desc: 'Color-coded 0–100 risk scores across all monitored NPIs. Filter by specialty, state, or fraud pattern. Drill into any NPI for full claim and rule history.' },
+  { title: 'Claims Monitoring', desc: 'Full claim table with service categories (Home Health, Hospice, DME, Drugs, Hospital), patient names, vendor, amount, and review status. Filter, sort, and act in one view.' },
+  { title: 'Vendor Watchlist', desc: 'Track vendors billing across multiple NPIs. See OIG flag status, distinct NPI count, physician reports, total billed, and risk level (Critical → Low) at a glance.' },
 ];
 
 const faqsList = [
-  { q: 'What are the 5 physician actions?', a: 'Confirm (claim is legitimate), Dispute (amount or service is wrong), Flag Supplier (supplier is unknown or suspicious), Unknown Patient (patient not recognized), Did Not Order (service was never prescribed). Each action updates the risk engine instantly.' },
+  { q: 'What are the 5 physician actions?', a: 'Confirm (claim is legitimate), Dispute (amount or service is wrong), Flag Vendor (vendor is unknown or suspicious), Unknown Patient (patient not recognized), Did Not Order (service was never prescribed). Each action updates the risk engine instantly.' },
   { q: 'How fast do alerts reach investigators?', a: 'Alerts stream via Server-Sent Events (SSE) — the moment a physician takes an action, it appears live in the Plan dashboard in under one second. No polling, no batch jobs.' },
-  { q: 'What fraud patterns does the risk engine detect?', a: 'The engine runs 10+ weighted rules: OIG LEIE hits, cross-NPI suppliers, geographic anomalies, volume spikes, duplicate billing, unbundling, new high-value suppliers, impossible days, rapid patient cycling, and supplier concentration.' },
+  { q: 'What fraud patterns does the risk engine detect?', a: 'The engine runs 10+ weighted rules: OIG LEIE hits, cross-NPI vendors, geographic anomalies, volume spikes, duplicate billing, unbundling, new high-value vendors, impossible days, rapid patient cycling, and vendor concentration.' },
   { q: 'Do physicians need training?', a: 'No. The physician dashboard shows their claims in a simple table. One click per claim — the five action buttons are labeled and color-coded. Most physicians complete their first review in minutes.' },
-  { q: 'What does the Plan investigator see?', a: 'A live activity feed with every physician action, a risk leaderboard of all monitored NPIs, a supplier watchlist with OIG flags, and full drill-down into any NPI showing claims, fired rules, and physician responses.' },
+  { q: 'What does the Plan investigator see?', a: 'A live activity feed with every physician action, a risk leaderboard of all monitored NPIs, a vendor watchlist with OIG flags, and full drill-down into any NPI showing claims, fired rules, and physician responses.' },
   { q: 'Can we try it before committing?', a: 'Yes — use the demo credentials on the Sign In page for instant access to both the Physician and Plan Investigator portals loaded with synthetic Medicare claims.' },
 ];
 
@@ -84,11 +92,11 @@ export default function LandingPage() {
           </div>
 
           {/* Desktop links */}
-          <div className="hidden md:flex items-center gap-6 lg:gap-8 text-[13px] font-semibold text-white/70">
-            <a href="#features" className="hover:text-white transition-colors">Features</a>
-            <a href="#how" className="hover:text-white transition-colors">How It Works</a>
-            <a href="#plans" className="hover:text-white transition-colors">For Health Plans</a>
-            <a href="#faq" className="hover:text-white transition-colors">FAQ</a>
+          <div className="hidden md:block">
+            <NavHeader
+              items={NAV_LINKS}
+              onNavigate={(href) => document.querySelector(href)?.scrollIntoView({ behavior: 'smooth' })}
+            />
           </div>
 
           {/* Right: sign in + hamburger */}
@@ -273,7 +281,7 @@ export default function LandingPage() {
             </h2>
             <div className="w-12 sm:w-16 h-1 bg-emerald-400 rounded" />
             <p className="text-blue-100 text-[11px] sm:text-xs lg:text-sm leading-relaxed max-w-md font-light">
-              They see it in the claims. They feel it when a supplier keeps showing up. Give your investigators the same view — and a way to act on it before the money is gone.
+              They see it in the claims. They feel it when a vendor keeps showing up. Give your investigators the same view — and a way to act on it before the money is gone.
             </p>
             <p className="text-emerald-300 text-[11px] sm:text-xs font-semibold tracking-wide pt-1 sm:pt-2">
               See how it works in 30 minutes.

@@ -26,9 +26,20 @@ def rule_ghost_billing_all(db, settings):
     for b in db.query(PhysicianBill).all():
         bills_by_npi[b.npi].append(b)
 
+    # No reference data at all → the rule can't distinguish anything; flagging
+    # 100% of claims is noise, not signal. Skip until bills are loaded.
+    if not bills_by_npi:
+        return []
+
     all_claims = db.query(Claim).all()
     results: list[RuleFlagResult] = []
     flagged_claims: list[Claim] = []
+
+    # Idempotent recompute: clear stamps from prior runs so claims that gained
+    # a matching bill since last run don't stay marked forever.
+    for claim in all_claims:
+        if claim.verification_status == "ghost_billing_suspected":
+            claim.verification_status = "unverified"
 
     for claim in all_claims:
         npi_bills = bills_by_npi.get(claim.npi, [])
@@ -54,11 +65,9 @@ def rule_ghost_billing_all(db, settings):
             claim.verification_status = "ghost_billing_suspected"
             flagged_claims.append(claim)
 
-    if flagged_claims:
-        try:
-            db.commit()
-        except Exception:
-            db.rollback()
+    # verification_status updates ride along with the engine's single
+    # end-of-pipeline commit — committing here would also commit the engine's
+    # pending rules_flags wipe before the new flags are inserted.
 
     # Best-effort SSE broadcast so the physician portal can show live alerts.
     # Silent on any error — this runs in a batch context with no active event loop.

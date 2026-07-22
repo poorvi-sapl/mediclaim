@@ -23,9 +23,9 @@ from backend.database import SessionLocal
 from backend.models import NpiProfile, Claim, Action, RulesFlag, NpiRiskScore
 from backend.config import get_settings
 
-FLAG_ACTIONS = ("flag_supplier", "unknown_patient")
+FLAG_ACTIONS = ("flag_supplier", "unknown_patient", "deceased_patient")
 # physician actions that contribute to the score (did_not_order weighs more)
-SCORED_PHYS_ACTIONS = ("flag_supplier", "unknown_patient", "did_not_order")
+SCORED_PHYS_ACTIONS = ("flag_supplier", "unknown_patient", "deceased_patient", "did_not_order")
 
 
 def _fired_rules(db: Session, column, value) -> set:
@@ -74,7 +74,8 @@ def _physician_signal(db: Session, column, value, settings):
     counts = {a: c for a, c in rows}
     total = sum(counts.values())
     weighted = (
-        (counts.get("flag_supplier", 0) + counts.get("unknown_patient", 0)) * settings.weight_per_physician_flag
+        (counts.get("flag_supplier", 0) + counts.get("unknown_patient", 0) + counts.get("deceased_patient", 0))
+        * settings.weight_per_physician_flag
         + counts.get("did_not_order", 0) * settings.weight_did_not_order
     )
     return total, min(weighted, settings.max_physician_flag_contribution)

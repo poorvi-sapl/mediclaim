@@ -11,7 +11,7 @@ from backend.sse import broker
 
 router = APIRouter()
 
-FLAG_ACTIONS = ("flag_supplier", "unknown_patient")
+FLAG_ACTIONS = ("flag_supplier", "unknown_patient", "deceased_patient")
 
 
 @router.get("/plan/alerts/stream")

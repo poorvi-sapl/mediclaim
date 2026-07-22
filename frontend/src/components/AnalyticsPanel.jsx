@@ -8,17 +8,17 @@ import { API_BASE } from '../api'
 const COLORS = ['#6366f1', '#f59e0b', '#10b981', '#ef4444', '#3b82f6', '#8b5cf6']
 
 const PHYSICIAN_CHIPS = [
-  'Claims by supplier this month',
-  'My top 5 suppliers by amount',
+  'Claims by vendor this month',
+  'My top 5 vendors by amount',
   'Flagged claims in the last 30 days',
   'Claim trend over last 6 months',
-  'Which supplier had the most flags?',
+  'Which vendor had the most flags?',
 ]
 
 const PLAN_CHIPS = [
   'Top 10 highest risk NPIs',
   'Claims by rule type this quarter',
-  'Supplier volume comparison',
+  'Vendor volume comparison',
   'Flag trend over last 90 days',
   'Which NPI billed the most this month?',
 ]

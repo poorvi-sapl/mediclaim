@@ -4,11 +4,12 @@ from datetime import date, datetime
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_
 from backend.database import get_db
-from backend.models import Claim, NpiProfile, Action, RulesFlag
+from backend.models import Claim, NpiProfile, Action, RulesFlag, ClaimNotification
 from backend.schemas import (
     PhysicianSummaryResponse,
     ClaimsPageResponse,
     ClaimResponse,
+    ClaimActionResponse,
     FlaggedSupplierResponse,
 )
 
@@ -18,7 +19,7 @@ VALID_CATEGORIES = {
     'home_health', 'hospice', 'dme', 'drugs', 'hospital'
 }
 
-FLAG_ACTIONS = ('flag_supplier', 'unknown_patient', 'did_not_order')
+FLAG_ACTIONS = ('flag_supplier', 'unknown_patient', 'did_not_order', 'deceased_patient')
 
 
 def validate_npi(npi: str):
@@ -136,7 +137,7 @@ def build_claims_page(
     total_pages = (total + page_size - 1) // page_size if page_size else 0
 
     claims = (
-        q.order_by(Claim.reviewed.asc(), Claim.date_of_service.desc())
+        q.order_by(Claim.reviewed.asc(), Claim.date_of_service.desc(), Claim.id.asc())
         .offset(page * page_size).limit(page_size).all()
     )
 
@@ -168,6 +169,24 @@ def build_claims_page(
         for cid, atype in arows:
             latest_action_by_claim.setdefault(cid, atype)
 
+    # A claim can already have an NPI Watch dispute/fraud-report/confirmation
+    # (from responding to an alert, or another physician-side entry point)
+    # without ever having gone through POST /actions here — that claim would
+    # otherwise show as "Unreviewed" with live dispute/fraud buttons, inviting
+    # a duplicate action that notify_vendor_from_claim_action then silently
+    # no-ops. Fold that status in wherever there's no real Action row yet, so
+    # the row reflects reality and the action buttons don't re-invite a click.
+    if claim_ids:
+        NOTIF_STATUS_TO_ACTION = {"CONFIRMED": "confirm", "DISPUTED": "dispute", "FRAUD_REPORTED": "fraud"}
+        nrows = (
+            db.query(ClaimNotification.claim_id, ClaimNotification.status)
+            .filter(ClaimNotification.claim_id.in_(claim_ids), ClaimNotification.status.in_(NOTIF_STATUS_TO_ACTION))
+            .all()
+        )
+        for cid, nstatus in nrows:
+            if cid not in latest_action_by_claim:
+                latest_action_by_claim[cid] = NOTIF_STATUS_TO_ACTION[nstatus]
+
     items = []
     for c in claims:
         fb = flags_by_claim.get(c.id, {"flags": [], "severities": [], "descs": []})
@@ -191,6 +210,7 @@ def build_claims_page(
             flags=fb["flags"],
             severities=fb["severities"],
             flag_descriptions=fb["descs"],
+            created_at=c.created_at,
         ))
 
     # NPI-wide aggregate cards (from the actions table — physician's own activity)
@@ -219,6 +239,83 @@ def build_claims_page(
         confirmed_count=confirmed_count, disputed_count=disputed_count,
         unknown_count=unknown_count,
     )
+
+
+# ---------------------------------------------------------------------------
+# GET /physician/{npi}/claims/{claim_id}
+# ---------------------------------------------------------------------------
+@router.get("/physician/{npi}/claims/{claim_id}", response_model=ClaimResponse)
+def physician_claim_detail(npi: str, claim_id: str, db: Session = Depends(get_db)):
+    """A single claim row for this NPI, in the exact same shape as the
+    claims-list items — backs a deep-linked / refreshed Claim Detail screen
+    (/physician/claims/:id) where the browser has only the id, not the row
+    that in-app navigation would have handed over. Mirrors the per-claim
+    flag / latest-action / notification-status logic of build_claims_page."""
+    validate_npi(npi)
+    get_physician_or_404(npi, db)
+    c = db.query(Claim).filter(Claim.id == claim_id, Claim.npi == npi).first()
+    if c is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "Claim not found", "code": "CLAIM_NOT_FOUND"},
+        )
+
+    frows = (
+        db.query(RulesFlag.rule_name, RulesFlag.severity, RulesFlag.rule_description)
+        .filter(RulesFlag.claim_id == c.id)
+        .order_by(RulesFlag.fired_at.asc()).all()
+    )
+    flags = [r[0] for r in frows]
+    severities = [r[1] for r in frows]
+    descs = [r[2] for r in frows]
+
+    # Latest real action, falling back to an NPI Watch notification status —
+    # same precedence build_claims_page uses so the Status column matches.
+    arow = (
+        db.query(Action.action_type)
+        .filter(Action.claim_id == c.id, Action.npi == npi)
+        .order_by(Action.created_at.desc()).first()
+    )
+    latest_action = arow[0] if arow else None
+    if latest_action is None:
+        NOTIF_STATUS_TO_ACTION = {"CONFIRMED": "confirm", "DISPUTED": "dispute", "FRAUD_REPORTED": "fraud"}
+        nrow = (
+            db.query(ClaimNotification.status)
+            .filter(ClaimNotification.claim_id == c.id,
+                    ClaimNotification.status.in_(NOTIF_STATUS_TO_ACTION))
+            .first()
+        )
+        if nrow:
+            latest_action = NOTIF_STATUS_TO_ACTION[nrow[0]]
+
+    return ClaimResponse(
+        id=str(c.id), ccn=c.ccn, patient_name=c.patient_name, patient_zip=c.patient_zip,
+        date_of_service=c.date_of_service, cpt_code=c.cpt_code, hcpcs_code=c.hcpcs_code,
+        service_description=c.service_description, service_category=c.service_category,
+        vendor_name=c.vendor_name, vendor_id=c.vendor_id, supplier_npi=c.vendor_npi,
+        claim_amount=float(c.claim_amount), oig_flagged=c.oig_flagged, reviewed=c.reviewed,
+        latest_action=latest_action, flags=flags, severities=severities,
+        flag_descriptions=descs, created_at=c.created_at,
+    )
+
+
+# ---------------------------------------------------------------------------
+# GET /physician/{npi}/claims/{claim_id}/actions
+# ---------------------------------------------------------------------------
+@router.get("/physician/{npi}/claims/{claim_id}/actions", response_model=list[ClaimActionResponse])
+def physician_claim_actions(npi: str, claim_id: str, db: Session = Depends(get_db)):
+    """This claim's decision history under this NPI, oldest first — backs the
+    Claim Detail screen's timeline so it reflects the real action record
+    (note + timestamp) instead of only what's cached in the browser."""
+    validate_npi(npi)
+    get_physician_or_404(npi, db)
+    rows = (
+        db.query(Action)
+        .filter(Action.claim_id == claim_id, Action.npi == npi)
+        .order_by(Action.created_at.asc())
+        .all()
+    )
+    return [ClaimActionResponse(id=str(a.id), action_type=a.action_type, note=a.note, created_at=a.created_at) for a in rows]
 
 
 # ---------------------------------------------------------------------------

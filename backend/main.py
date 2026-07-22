@@ -138,6 +138,15 @@ app.include_router(respond_router.router)
 app.include_router(vendor_router.router)
 app.include_router(npi_watch_router.router)
 
+
+@app.on_event("startup")
+def _start_vendor_reminder_worker():
+    """Day-7/day-13 reminder + day-15 expiry emails for vendor dispute cases —
+    a daemon thread that checks on an interval (vendor_reminder_interval_seconds)."""
+    from backend.rules.reminders import start_reminder_worker
+    start_reminder_worker()
+
+
 @app.get("/health")
 def health_check(db: Session = Depends(get_db)):
     try:

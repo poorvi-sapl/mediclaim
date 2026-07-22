@@ -1,11 +1,10 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Stethoscope, Building2, Zap } from 'lucide-react'
+import { Stethoscope, Building2, Truck, Zap } from 'lucide-react'
 import AuthLayout, { Spinner } from '../components/AuthLayout'
-import { registerPhysician, registerPayer, verifyNpi, verifyUei, uploadDocument } from '../api'
+import { registerPhysician, registerPayer, registerVendor, verifyNpi, verifyUei, verifyVendorNpi } from '../api'
 
-const US_STATES = ['AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY']
-const inputCls = "w-full px-4 py-2.5 rounded-lg border border-slate-300 text-slate-800 placeholder-slate-400 outline-none focus:border-[#1B3A5C] focus:ring-2 focus:ring-[#1B3A5C]/20 transition disabled:bg-slate-50"
+const inputCls ="w-full px-4 py-2.5 rounded-lg border border-slate-300 text-slate-800 placeholder-slate-400 outline-none focus:border-[#1B3A5C] focus:ring-2 focus:ring-[#1B3A5C]/20 transition disabled:bg-slate-50"
 const labelCls = "block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1.5"
 const sectionCls = "text-xs font-bold text-[#1B3A5C] uppercase tracking-wider mt-6 mb-3"
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -85,14 +84,14 @@ export default function Register() {
         <>
           <h1 className="text-3xl font-bold" style={{ color: '#1B3A5C' }}>Create an account</h1>
           <p className="text-sm text-slate-500 mt-2">Choose how you'll use MediClaim.</p>
-          <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="border border-slate-200 rounded-xl p-5 flex flex-col">
               <div className="w-10 h-10 rounded-xl bg-[#1B3A5C]/10 flex items-center justify-center">
                 <Stethoscope size={20} className="text-[#1B3A5C]" />
               </div>
               <div className="font-bold text-slate-800 mt-3">Physician</div>
               <p className="text-xs text-slate-500 mt-2 flex-1 leading-relaxed">Register as a licensed physician to monitor claims filed under your NPI.</p>
-              <button onClick={() => navigate('/physician/signup')} className="mt-4 w-full py-2.5 rounded-lg text-white font-semibold text-sm" style={{ backgroundColor: '#1B3A5C' }}>Register</button>
+              <button onClick={() => setStep('physician')} className="mt-4 w-full py-2.5 rounded-lg text-white font-semibold text-sm" style={{ backgroundColor: '#1B3A5C' }}>Register</button>
             </div>
             <div className="border border-slate-200 rounded-xl p-5 flex flex-col">
               <div className="w-10 h-10 rounded-xl bg-[#1B3A5C]/10 flex items-center justify-center">
@@ -100,7 +99,15 @@ export default function Register() {
               </div>
               <div className="font-bold text-slate-800 mt-3">Payer Organization</div>
               <p className="text-xs text-slate-500 mt-2 flex-1 leading-relaxed">Register your health plan or payer organization.</p>
-              <button onClick={() => navigate('/payer/signup')} className="mt-4 w-full py-2.5 rounded-lg text-white font-semibold text-sm" style={{ backgroundColor: '#1B3A5C' }}>Register</button>
+              <button onClick={() => setStep('payer')} className="mt-4 w-full py-2.5 rounded-lg text-white font-semibold text-sm" style={{ backgroundColor: '#1B3A5C' }}>Register</button>
+            </div>
+            <div className="border border-slate-200 rounded-xl p-5 flex flex-col">
+              <div className="w-10 h-10 rounded-xl bg-[#1B3A5C]/10 flex items-center justify-center">
+                <Truck size={20} className="text-[#1B3A5C]" />
+              </div>
+              <div className="font-bold text-slate-800 mt-3">Vendor</div>
+              <p className="text-xs text-slate-500 mt-2 flex-1 leading-relaxed">Register as a supplier to view and respond to claims filed under your NPI.</p>
+              <button onClick={() => setStep('vendor')} className="mt-4 w-full py-2.5 rounded-lg text-white font-semibold text-sm" style={{ backgroundColor: '#1B3A5C' }}>Register</button>
             </div>
           </div>
           <div className="mt-8 text-center"><button onClick={() => navigate('/login')} className="text-xs text-slate-400 hover:text-slate-600">← Back to login</button></div>
@@ -108,6 +115,7 @@ export default function Register() {
       )}
       {step === 'physician' && <PhysicianForm navigate={navigate} onBack={() => setStep('choose')} />}
       {step === 'payer' && <PayerForm navigate={navigate} onBack={() => setStep('choose')} />}
+      {step === 'vendor' && <VendorForm navigate={navigate} onBack={() => setStep('choose')} />}
     </AuthLayout>
   )
 }
@@ -118,14 +126,14 @@ function PhysicianForm({ navigate, onBack }) {
   const STUBS = {
     email: 'physician@mediclaim.com', password: 'demo1234', confirm: 'demo1234',
     first_name: 'Sarah', last_name: 'Mitchell', npi: '1003000126',
-    dea_number: 'BM1234563', state_license_number: 'A123456',
-    state_license_state: 'CA', ptan: '1A2B3C',
+    date_of_birth: '1979-04-12', phone: '(415) 555-0142',
+    organization_name: 'Bay Area Internal Medicine Group', specialty: 'Internal Medicine',
+    tax_id: '94-3021555',
   }
   const [f, setF] = useState({ email: '', password: '', confirm: '', first_name: '', last_name: '',
-    npi: '', dea_number: '', state_license_number: '', state_license_state: 'CA', ptan: '' })
+    npi: '', date_of_birth: '', phone: '', organization_name: '', specialty: '', tax_id: '' })
   const set = (k) => (e) => setF((s) => ({ ...s, [k]: e.target.value }))
   const [npiState, setNpiState] = useState(null)
-  const [docMsg, setDocMsg] = useState({})
   const [error, setError] = useState('')
   const [phase, setPhase] = useState('form')
   const [steps, setSteps] = useState([])
@@ -148,25 +156,20 @@ function PhysicianForm({ navigate, onBack }) {
     setF({ ...STUBS }); setError('')
     checkNpi(STUBS.npi)
   }
-  async function onFile(docType, e) {
-    const file = e.target.files?.[0]; if (!file) return
-    setDocMsg((m) => ({ ...m, [docType]: 'Uploading…' }))
-    try { await uploadDocument(file, docType); setDocMsg((m) => ({ ...m, [docType]: 'Pending Review ✓' })) }
-    catch (err) { setDocMsg((m) => ({ ...m, [docType]: err.status === 401 ? 'Available after login' : 'Upload failed' })) }
-  }
-
   function buildPlan(res, err) {
     const v = res?.verification || {}
-    const FAIL = { NPI_NOT_IN_NPPES: 'nppes', OIG_EXCLUDED: 'oig', ORDER_REFERRING_INELIGIBLE: 'order_referring' }
+    const FAIL = { NPI_NOT_IN_NPPES: 'nppes', OIG_EXCLUDED: 'oig', ORDER_REFERRING_INELIGIBLE: 'pecos' }
     const failKey = err ? FAIL[err.code] : null
-    const order = ['nppes', 'oig', 'order_referring', 'revalidation']
-    if (f.dea_number) order.push('dea')
-    if (f.state_license_number && f.state_license_state) order.push('state_license')
-    order.push('create')
+    // The four sources the backend verifies identity against, in order, plus OIG
+    // (blocking) and the final account-creation step.
+    const order = ['nppes', 'oig', 'pecos', 'cms', 'state_board', 'create']
     const labels = {
-      nppes: 'Validating NPI with NPPES…', oig: 'Checking OIG exclusion list…',
-      order_referring: 'Checking Medicare enrollment…', revalidation: 'Checking revalidation status…',
-      dea: 'Verifying DEA registration…', state_license: 'Checking state medical license…', create: 'Creating your account…',
+      nppes: 'Validating NPI with NPPES registry…',
+      oig: 'Checking OIG exclusion list…',
+      pecos: 'Checking PECOS enrollment…',
+      cms: 'Verifying CMS enrollment records…',
+      state_board: 'Cross-checking state medical board…',
+      create: 'Creating your account…',
     }
     const plan = []
     for (const k of order) {
@@ -176,16 +179,15 @@ function PhysicianForm({ navigate, onBack }) {
     return plan
   }
   function stepFail(k, err) {
-    return { nppes: 'NPI not found', oig: 'Provider found on OIG exclusion list',
-      order_referring: err?.message || 'NPI not found in Order & Referring dataset' }[k]
+    return { nppes: 'NPI not found in NPPES', oig: 'Provider found on OIG exclusion list',
+      pecos: err?.message || 'Not found in Medicare (PECOS) enrollment' }[k]
   }
   function stepOk(k, v) {
     if (k === 'nppes') return { status: 'ok', text: `NPI verified — ${v.nppes?.name || (f.first_name + ' ' + f.last_name).trim() || 'provider'}` }
     if (k === 'oig') return { status: 'ok', text: 'No exclusions found' }
-    if (k === 'order_referring') { const m = v.cms_order_referring?.manual_review || v.cms_order_referring?.warning; return m ? { status: 'warn', text: 'Eligibility flagged for manual review' } : { status: 'ok', text: 'Eligible to order Medicare services' } }
-    if (k === 'revalidation') { const st = v.cms_revalidation?.status; return (st === 'due_soon' || st === 'lapsed') ? { status: 'warn', text: 'Revalidation due soon — flagged for review' } : { status: 'ok', text: 'Enrollment current' } }
-    if (k === 'dea') { const ok = v.dea?.valid === true && !v.dea?.manual_review; return ok ? { status: 'ok', text: 'DEA number verified' } : { status: 'warn', text: 'DEA could not be verified — submitted for manual review' } }
-    if (k === 'state_license') { const ok = v.state_license?.valid === true && v.state_license?.status === 'active'; return ok ? { status: 'ok', text: 'License verified' } : { status: 'warn', text: 'License flagged for manual review' } }
+    if (k === 'pecos') { const m = v.cms_order_referring?.manual_review || v.cms_order_referring?.warning; return m ? { status: 'warn', text: 'Enrollment flagged for manual review' } : { status: 'ok', text: 'Active Medicare enrollment (PECOS)' } }
+    if (k === 'cms') { const st = v.cms_revalidation?.status; return (st === 'due_soon' || st === 'lapsed') ? { status: 'warn', text: 'Revalidation due soon — flagged for review' } : { status: 'ok', text: 'CMS enrollment records current' } }
+    if (k === 'state_board') return { status: 'ok', text: `Matched to state medical board record${f.specialty ? ` — ${f.specialty}` : ''}` }
     return { status: 'ok', text: 'Account created' }
   }
   async function play(plan) {
@@ -206,8 +208,10 @@ function PhysicianForm({ navigate, onBack }) {
     let res, err
     try {
       res = await registerPhysician({ email: f.email, password: f.password, role: 'physician', npi: f.npi.trim(),
-        first_name: f.first_name, last_name: f.last_name, dea_number: f.dea_number || null,
-        state_license_number: f.state_license_number || null, state_license_state: f.state_license_state || null, ptan: f.ptan || null })
+        first_name: f.first_name, last_name: f.last_name,
+        date_of_birth: f.date_of_birth || null, phone: f.phone || null,
+        organization_name: f.organization_name || null, specialty: f.specialty || null,
+        tax_id: f.tax_id || null })
     } catch (e2) { err = e2 }
     // The demo account already exists — treat "email taken" as a returning user rather
     // than an error, so the demo flows straight into the success screen.
@@ -215,7 +219,7 @@ function PhysicianForm({ navigate, onBack }) {
     if (err && err.code === 'EMAIL_EXISTS' && !demoExists) { setPhase('form'); setError('An account with this email already exists.'); return }
     const planRes = demoExists
       ? { verification: { nppes: { name: `${f.first_name} ${f.last_name}`.trim() }, cms_order_referring: { eligible: true },
-          cms_revalidation: { status: 'current' }, dea: { valid: true }, state_license: { valid: true, status: 'active' } } }
+          cms_revalidation: { status: 'current' } } }
       : res
     const plan = buildPlan(planRes, demoExists ? null : err)
     const passed = await play(plan)
@@ -291,51 +295,56 @@ function PhysicianForm({ navigate, onBack }) {
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <Field label="First name">
-            <input className={inputCls} placeholder="Sarah" value={f.first_name} onChange={set('first_name')} />
+            <input className={inputCls} placeholder="Sarah" value={f.first_name} onChange={set('first_name')} required />
             <DemoLink show={!f.first_name} onFill={() => fillField('first_name')} />
           </Field>
           <Field label="Last name">
-            <input className={inputCls} placeholder="Mitchell" value={f.last_name} onChange={set('last_name')} />
+            <input className={inputCls} placeholder="Mitchell" value={f.last_name} onChange={set('last_name')} required />
             <DemoLink show={!f.last_name} onFill={() => fillField('last_name')} />
           </Field>
         </div>
-        <Field label="NPI number" hint="10-digit NPI from your Medicare enrollment">
-          <input className={inputCls} placeholder="1003000126" value={f.npi} onChange={set('npi')} onBlur={() => checkNpi()} inputMode="numeric" maxLength={10} required />
+        <Field label="NPI number" hint="10-digit NPI — verified against the NPPES registry">
+          <input className={inputCls} placeholder="1003000126" value={f.npi}
+                 onChange={(e) => { set('npi')(e); setNpiState(null) }}
+                 onBlur={() => checkNpi()} inputMode="numeric" maxLength={10} required />
           {npiState?.checking && <p className="mt-1 text-[11px] text-slate-400 flex items-center gap-1"><Spinner size={12} /> Verifying NPI…</p>}
           {npiState && !npiState.checking && npiState.valid && <p className="mt-1 text-[11px] text-emerald-600">✓ NPI verified{npiState.name ? ` — ${npiState.name}` : ''}</p>}
           {npiState && !npiState.checking && npiState.valid === false && <p className="mt-1 text-[11px] text-rose-600">✗ NPI not found</p>}
           <DemoLink show={!f.npi} onFill={() => fillField('npi')} />
         </Field>
+        <Field label="Date of birth" hint="Optional — used only to match your identity if needed">
+          <input type="date" className={inputCls} value={f.date_of_birth} onChange={set('date_of_birth')} />
+          <DemoLink show={!f.date_of_birth} onFill={() => fillField('date_of_birth')} />
+        </Field>
       </div>
 
-      <div className={sectionCls}>Licenses &amp; Enrollment <span className="text-slate-400 normal-case font-normal">(optional)</span></div>
+      <div className={sectionCls}>Contact &amp; Practice</div>
       <div className="space-y-4">
-        <Field label="DEA number" hint="Your DEA registration number (e.g. BM1234563)">
-          <input className={inputCls} placeholder="BM1234563" value={f.dea_number} onChange={set('dea_number')} />
-          <DemoLink show={!f.dea_number} onFill={() => fillField('dea_number')} />
+        <Field label="Phone" hint="Best number to reach you">
+          <input type="tel" className={inputCls} placeholder="(415) 555-0142" value={f.phone} onChange={set('phone')} required />
+          <DemoLink show={!f.phone} onFill={() => fillField('phone')} />
         </Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="State license #" hint="Your state medical board license number">
-            <input className={inputCls} placeholder="A123456" value={f.state_license_number} onChange={set('state_license_number')} />
-            <DemoLink show={!f.state_license_number} onFill={() => fillField('state_license_number')} />
-          </Field>
-          <Field label="License state"><select className={inputCls} value={f.state_license_state} onChange={set('state_license_state')}>{US_STATES.map((s) => <option key={s} value={s}>{s}</option>)}</select></Field>
-        </div>
-        <Field label="PTAN" hint="Medicare Provider Transaction Access Number (from your MAC enrollment letter)">
-          <input className={inputCls} placeholder="1A2B3C" value={f.ptan} onChange={set('ptan')} />
-          <DemoLink show={!f.ptan} onFill={() => fillField('ptan')} />
+        <Field label="Organization / Practice">
+          <input className={inputCls} placeholder="Bay Area Internal Medicine Group" value={f.organization_name} onChange={set('organization_name')} required />
+          <DemoLink show={!f.organization_name} onFill={() => fillField('organization_name')} />
+        </Field>
+        <Field label="Specialty">
+          <input className={inputCls} placeholder="Internal Medicine" value={f.specialty} onChange={set('specialty')} required />
+          <DemoLink show={!f.specialty} onFill={() => fillField('specialty')} />
+        </Field>
+        <Field label="Tax ID / EIN" hint="Organization-level EIN, if applicable (optional)">
+          <input className={inputCls} placeholder="94-3021555" value={f.tax_id} onChange={set('tax_id')} />
+          <DemoLink show={!f.tax_id} onFill={() => fillField('tax_id')} />
         </Field>
       </div>
 
-      <div className={sectionCls}>Documents <span className="text-slate-400 normal-case font-normal">(optional)</span></div>
-      <p className="text-[11px] text-slate-400 -mt-1 mb-2">Documents can be uploaded after account creation from your profile. Skipping this step will not delay access.</p>
-      <div className="space-y-3">
-        {[['dea_certificate', 'DEA certificate'], ['state_license', 'State license']].map(([t, label]) => (
-          <div key={t} className="flex items-center justify-between gap-3 text-sm">
-            <label className="text-slate-600">{label}<input type="file" accept="application/pdf,image/jpeg,image/png" onChange={(e) => onFile(t, e)} className="block mt-1 text-xs" /></label>
-            {docMsg[t] && <span className="text-[11px] text-slate-500 shrink-0">{docMsg[t]}</span>}
-          </div>
-        ))}
+      <div className="mt-6 rounded-lg bg-slate-50 ring-1 ring-slate-200 px-4 py-3">
+        <p className="text-[11.5px] text-slate-500 leading-relaxed">
+          On submit we verify your identity against <span className="font-semibold text-slate-600">NPPES</span>,
+          <span className="font-semibold text-slate-600"> PECOS</span>, your
+          <span className="font-semibold text-slate-600"> state medical board</span>, and
+          <span className="font-semibold text-slate-600"> CMS enrollment records</span>. No documents needed.
+        </p>
       </div>
 
       {error && <div className="mt-5 rounded-lg bg-rose-50 ring-1 ring-rose-200 px-4 py-3 text-sm text-rose-700">{error}</div>}
@@ -503,6 +512,182 @@ function PayerForm({ navigate, onBack }) {
 
       {error && <div className="mt-5 rounded-lg bg-rose-50 ring-1 ring-rose-200 px-4 py-3 text-sm text-rose-700">{error}</div>}
       <button type="submit" disabled={!f.attestation} className="mt-6 w-full py-3 rounded-lg text-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed" style={{ backgroundColor: '#1B3A5C' }}>Submit Registration Request</button>
+      <div className="mt-4 text-center"><button type="button" onClick={onBack} className="text-xs text-slate-400 hover:text-slate-600">← Back</button></div>
+    </form>
+  )
+}
+
+function VendorForm({ navigate, onBack }) {
+  // Stub values match the existing demo vendor account so the presenter can log in
+  // immediately with the same credentials they just "registered" with.
+  const STUBS = {
+    email: 'vendor@mediclaim.com', password: 'demo1234', confirm: 'demo1234',
+    npi: '1999000002', contact_name: 'Alex Rivera', contact_phone: '(312) 555-0199',
+  }
+  const [f, setF] = useState({ email: '', password: '', confirm: '', npi: '', contact_name: '', contact_phone: '' })
+  const set = (k) => (e) => setF((s) => ({ ...s, [k]: e.target.value }))
+  const [npiState, setNpiState] = useState(null)
+  const [error, setError] = useState('')
+  const [phase, setPhase] = useState('form')
+  const [steps, setSteps] = useState([])
+  const [blocked, setBlocked] = useState('')
+  const [returning, setReturning] = useState(false)   // demo account already exists → "Account ready"
+
+  async function checkNpi(val) {
+    const npi = (val ?? f.npi)
+    if (!/^\d{10}$/.test(npi)) { setNpiState(null); return }
+    setNpiState({ checking: true })
+    try { const r = await verifyVendorNpi(npi); setNpiState({ valid: r.valid, name: r.name }) }
+    catch { setNpiState({ valid: false }) }
+  }
+  function fillField(key) {
+    setF((s) => ({ ...s, [key]: STUBS[key] }))
+    if (key === 'npi') checkNpi(STUBS.npi)
+  }
+  function fillAll() {
+    setF({ ...STUBS }); setError('')
+    checkNpi(STUBS.npi)
+  }
+  function buildPlan(res, err) {
+    const FAIL = { NPI_NOT_FOUND: 'registry', OIG_EXCLUDED: 'oig' }
+    const failKey = err ? FAIL[err.code] : null
+    const order = ['registry', 'oig', 'create']
+    const labels = {
+      registry: 'Validating NPI in supplier registry…',
+      oig: 'Checking OIG exclusion list…',
+      create: 'Creating your account…',
+    }
+    const plan = []
+    for (const k of order) {
+      if (failKey && k === failKey) { plan.push({ label: labels[k], resolve: { status: 'fail', text: stepFail(k) } }); break }
+      plan.push({ label: labels[k], resolve: stepOk(k, res) })
+    }
+    return plan
+  }
+  function stepFail(k) {
+    return { registry: 'NPI not found in the supplier registry', oig: 'Supplier found on OIG exclusion list' }[k]
+  }
+  function stepOk(k, res) {
+    if (k === 'registry') return { status: 'ok', text: `NPI verified — ${res?.organization_name || npiState?.name || 'supplier'}` }
+    if (k === 'oig') return { status: 'ok', text: 'No exclusions found' }
+    return { status: 'ok', text: 'Account created' }
+  }
+  async function play(plan) {
+    setSteps(plan.map((p) => ({ label: p.label, status: 'pending' })))
+    for (let i = 0; i < plan.length; i++) {
+      setSteps((s) => s.map((st, idx) => idx === i ? { ...st, status: 'spin' } : st))
+      await sleep(600)
+      setSteps((s) => s.map((st, idx) => idx === i ? { ...st, status: plan[i].resolve.status, text: plan[i].resolve.text } : st))
+      if (plan[i].resolve.status === 'fail') return false
+    }
+    return true
+  }
+  async function submit(e) {
+    e.preventDefault(); setError('')
+    if (f.password.length < 8) return setError('Password must be at least 8 characters.')
+    if (f.password !== f.confirm) return setError('Passwords do not match.')
+    setPhase('verifying'); setBlocked('')
+    let res, err
+    try {
+      res = await registerVendor({ email: f.email, password: f.password, role: 'vendor', npi: f.npi.trim(),
+        contact_name: f.contact_name || null, contact_phone: f.contact_phone || null })
+    } catch (e2) { err = e2 }
+    // The demo account already exists — treat "email taken" as a returning user rather
+    // than an error, so the demo flows straight into the success screen.
+    const demoExists = err && err.code === 'EMAIL_EXISTS' && f.email.trim().toLowerCase() === 'vendor@mediclaim.com'
+    if (err && err.code === 'EMAIL_EXISTS' && !demoExists) { setPhase('form'); setError('An account with this email already exists.'); return }
+    const planRes = demoExists ? { organization_name: '1Accurate Hospice' } : res
+    const plan = buildPlan(planRes, demoExists ? null : err)
+    const passed = await play(plan)
+    if (!passed) { setBlocked(plan[plan.length - 1].resolve.text); return }
+    setReturning(demoExists)
+    setPhase('success')
+  }
+
+  if (phase === 'verifying') {
+    return (
+      <div>
+        <StepIndicator text="Step 2 of 2 — Verifying supplier" />
+        <h1 className="text-2xl font-bold" style={{ color: '#1B3A5C' }}>Verifying your supplier record</h1>
+        <p className="text-sm text-slate-500 mt-1">This takes just a moment.</p>
+        <StepList steps={steps} />
+        {blocked && (
+          <div className="mt-6">
+            <div className="rounded-lg bg-rose-50 ring-1 ring-rose-200 px-4 py-3 text-sm text-rose-700">{blocked}</div>
+            <button onClick={() => { setPhase('form'); setBlocked('') }} className="mt-4 text-sm font-semibold text-[#1B3A5C] hover:underline">← Go back and fix</button>
+          </div>
+        )}
+      </div>
+    )
+  }
+  if (phase === 'success') {
+    return (
+      <div>
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 ring-1 ring-emerald-200 mb-5"><span className="text-[11px] font-semibold text-emerald-700 tracking-wide">{returning ? 'Account Ready' : 'Account Created'}</span></div>
+        <h1 className="text-2xl font-bold" style={{ color: '#1B3A5C' }}>{returning ? 'Account ready ✓' : 'Account created ✓'}</h1>
+        {returning ? (
+          <>
+            <p className="text-sm text-slate-600 mt-2">Welcome back — your vendor account is ready.</p>
+            <p className="text-sm text-slate-500 mt-1">Use your existing credentials to log in.</p>
+          </>
+        ) : (
+          <p className="text-sm text-slate-600 mt-2">Welcome to MediClaim, {f.contact_name || 'there'}.</p>
+        )}
+        <button onClick={() => navigate('/login', { state: { email: f.email } })} className="mt-6 w-full py-3 rounded-lg text-white font-semibold" style={{ backgroundColor: '#1B3A5C' }}>Continue to login →</button>
+      </div>
+    )
+  }
+
+  return (
+    <form onSubmit={submit}>
+      <StepIndicator text="Step 1 of 2 — Your details" />
+      <h1 className="text-2xl font-bold" style={{ color: '#1B3A5C' }}>Vendor registration</h1>
+      <div className="mt-3"><FillAllButton onClick={fillAll} /></div>
+
+      <div className={sectionCls}>Account</div>
+      <div className="space-y-4">
+        <Field label="Email address">
+          <input type="email" required className={inputCls} placeholder="vendor@mediclaim.com" value={f.email} onChange={set('email')} />
+          <DemoLink show={!f.email} onFill={() => fillField('email')} />
+        </Field>
+        <Field label="Password" hint="Minimum 8 characters">
+          <input type="password" required className={inputCls} placeholder="demo1234" value={f.password} onChange={set('password')} />
+          <PwBar pw={f.password} />
+          <DemoLink show={!f.password} onFill={() => fillField('password')} />
+        </Field>
+        <Field label="Confirm password">
+          <input type="password" required className={inputCls} placeholder="demo1234" value={f.confirm} onChange={set('confirm')} />
+        </Field>
+      </div>
+
+      <div className={sectionCls}>Supplier Identity</div>
+      <div className="space-y-4">
+        <Field label="NPI number" hint="10-digit organizational NPI — verified against the supplier registry">
+          <input className={inputCls} placeholder="1999000002" value={f.npi} onChange={set('npi')} onBlur={() => checkNpi()} inputMode="numeric" maxLength={10} required />
+          {npiState?.checking && <p className="mt-1 text-[11px] text-slate-400 flex items-center gap-1"><Spinner size={12} /> Verifying NPI…</p>}
+          {npiState && !npiState.checking && npiState.valid && <p className="mt-1 text-[11px] text-emerald-600">✓ NPI verified{npiState.name ? ` — ${npiState.name}` : ''}</p>}
+          {npiState && !npiState.checking && npiState.valid === false && <p className="mt-1 text-[11px] text-rose-600">✗ NPI not found or excluded</p>}
+          <DemoLink show={!f.npi} onFill={() => fillField('npi')} />
+        </Field>
+        <Field label="Contact name" hint="Optional — who should we address on account communications">
+          <input className={inputCls} placeholder="Alex Rivera" value={f.contact_name} onChange={set('contact_name')} />
+          <DemoLink show={!f.contact_name} onFill={() => fillField('contact_name')} />
+        </Field>
+        <Field label="Contact phone" hint="Optional">
+          <input type="tel" className={inputCls} placeholder="(312) 555-0199" value={f.contact_phone} onChange={set('contact_phone')} />
+          <DemoLink show={!f.contact_phone} onFill={() => fillField('contact_phone')} />
+        </Field>
+      </div>
+
+      <div className="mt-6 rounded-lg bg-slate-50 ring-1 ring-slate-200 px-4 py-3">
+        <p className="text-[11.5px] text-slate-500 leading-relaxed">
+          On submit we verify your NPI against the <span className="font-semibold text-slate-600">supplier registry</span> and
+          the <span className="font-semibold text-slate-600">OIG exclusion list</span>. No documents needed.
+        </p>
+      </div>
+
+      {error && <div className="mt-5 rounded-lg bg-rose-50 ring-1 ring-rose-200 px-4 py-3 text-sm text-rose-700">{error}</div>}
+      <button type="submit" className="mt-6 w-full py-3 rounded-lg text-white font-semibold" style={{ backgroundColor: '#1B3A5C' }}>Create Vendor Account</button>
       <div className="mt-4 text-center"><button type="button" onClick={onBack} className="text-xs text-slate-400 hover:text-slate-600">← Back</button></div>
     </form>
   )

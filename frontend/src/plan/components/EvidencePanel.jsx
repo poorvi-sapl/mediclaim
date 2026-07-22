@@ -60,13 +60,13 @@ export default function EvidencePanel({ variant, evidence = [], practice, physic
 
   const noun = isCross ? 'physician' : 'claim'
   const label = isCross
-    ? `${total} physician${total !== 1 ? 's' : ''} billing this supplier`
+    ? `${total} physician${total !== 1 ? 's' : ''} billing this vendor`
     : `${total} claim${total !== 1 ? 's' : ''} triggered this`
 
   return (
     <div>
       {variant === 'geo' && practice && (
-        <div className="rounded-lg bg-[#F9FAFB] border border-slate-200 px-4 py-2.5 text-sm text-slate-600 mb-4">
+        <div className="rounded-lg bg-[#F7F9FC] border border-slate-200 px-4 py-2.5 text-sm text-slate-600 mb-4">
           Practice: <span className="font-semibold text-slate-800">{practice.city || '—'}, {practice.state || '—'}</span>
         </div>
       )}
@@ -127,7 +127,7 @@ export default function EvidencePanel({ variant, evidence = [], practice, physic
           ))}
         </div>
       ) : variant === 'geo' ? (
-        <div className="divide-y divide-[#F3F4F6]">
+        <div className="divide-y divide-[#F1F4F9]">
           {rows.slice(0, cap).map((c) => (
             <div key={c.id} className="py-3">
               <div className="flex items-center justify-between gap-3">
@@ -135,12 +135,12 @@ export default function EvidencePanel({ variant, evidence = [], practice, physic
                 <div className="text-sm font-bold text-slate-800 tabular-nums flex-shrink-0">{fmtUSD(c.amount, 2)}</div>
               </div>
               <div className="text-[13px] text-slate-500 mt-0.5">{fmtDate(c.date)} · {c.category} · {c.supplier}</div>
-              {milesOf(c.why) >= 0 && <div className="text-[13px] text-amber-600 mt-0.5">{milesOf(c.why).toLocaleString()} miles from practice</div>}
+              {milesOf(c.why) >= 0 && <div className="text-[13px] text-[#8A6A34] mt-0.5">{milesOf(c.why).toLocaleString()} miles from practice</div>}
             </div>
           ))}
         </div>
       ) : (
-        <div className="divide-y divide-[#F3F4F6]">
+        <div className="divide-y divide-[#F1F4F9]">
           {rows.slice(0, cap).map((c) => <TwoLine key={c.id} c={c} />)}
         </div>
       )}

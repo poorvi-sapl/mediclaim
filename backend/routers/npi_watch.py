@@ -17,11 +17,11 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from backend.database import get_db
-from backend.models import Claim, ClaimNotification, DisputeCase, User
+from backend.models import Claim, ClaimNotification, DisputeCase, DisputeCaseEvent, User
 from backend.schemas import ActionRequest
 from backend.auth import decode_token, extract_token, is_blacklisted
 from backend.config import get_settings
-from backend.rules.trigger_engine import escalate_overdue_disputes, escalate_unconfirmed_physician_resolutions, broadcast_dispute_event
+from backend.rules.trigger_engine import escalate_overdue_disputes, escalate_unconfirmed_physician_resolutions, broadcast_dispute_event, record_dispute_event, serialize_dispute_events
 from backend.routers.actions import create_action
 from backend.sse import broker
 
@@ -134,6 +134,7 @@ def get_notifications(request: Request, db: Session = Depends(get_db)):
                 {**doc, "download_url": f"{base}/api/v1/vendor/disputes/{d.case_id}/docs/{doc.get('stored_name')}"}
                 for doc in (d.vendor_docs or [])
             ],
+            "events": serialize_dispute_events(db, d.case_id, base),
         }
 
     notifications = [
@@ -146,7 +147,10 @@ def get_notifications(request: Request, db: Session = Depends(get_db)):
             "patient_name_partial": r.patient_name_partial,
             "dos_from":             str(r.dos_from) if r.dos_from else None,
             "dos_to":               str(r.dos_to)   if r.dos_to   else None,
+            "service_description":  r.service_description,
+            "hcpcs_codes":          r.hcpcs_codes,
             "amount_billed":        float(r.amount_billed) if r.amount_billed else None,
+            "amount_paid":          float(r.amount_paid) if r.amount_paid else None,
             "physician_npi_role":   r.physician_npi_role,
             "status":               r.status,
             "created_at":           r.created_at.isoformat() if r.created_at else None,
@@ -162,34 +166,92 @@ def get_notifications(request: Request, db: Session = Depends(get_db)):
     return {"notifications": notifications}
 
 
+# ---------------------------------------------------------------------------
+# GET /notifications/bell — recent-activity bell dropdown, distinct from the
+# full "My Disputes" feed above: event-level (one row per thing that
+# happened), not claim-level, and only events caused by someone else — a
+# vendor responding, or an auto-escalation — the same convention vendor.py's
+# own bell uses (excludes the physician's own DISPUTE_OPENED/CONFIRMED/REJECTED).
+# ---------------------------------------------------------------------------
+_PHYSICIAN_NOTIFICATION_EVENTS = ("VENDOR_RESPONDED", "NON_RESPONSIVE", "CONFIRMATION_EXPIRED")
+_PHYSICIAN_EVENT_TITLES = {
+    "NON_RESPONSIVE":       "Vendor did not respond — escalated to compliance",
+    "CONFIRMATION_EXPIRED": "Confirmation window expired — case reopened",
+}
+
+
+@router.get("/notifications/bell")
+def get_bell_notifications(request: Request, db: Session = Depends(get_db)):
+    user = _require_physician(request, db)
+    since = user.last_alert_seen_at if user.last_alert_seen_at else datetime(1970, 1, 1)
+
+    rows = (
+        db.query(DisputeCaseEvent, DisputeCase, ClaimNotification)
+        .join(DisputeCase, DisputeCase.case_id == DisputeCaseEvent.case_id)
+        .join(ClaimNotification, ClaimNotification.notification_id == DisputeCase.notification_id)
+        .filter(
+            DisputeCase.physician_npi == user.npi,
+            DisputeCaseEvent.event_type.in_(_PHYSICIAN_NOTIFICATION_EVENTS),
+        )
+        .order_by(DisputeCaseEvent.created_at.desc())
+        .limit(30)
+        .all()
+    )
+
+    notifications = []
+    for event, case, notif in rows:
+        is_fraud = case.dispute_type == "FRAUD_REPORT"
+        is_deceased = case.dispute_type == "DECEASED_PATIENT"
+        claim_number = notif.claim_ccn or notif.claim_number
+        if event.event_type == "VENDOR_RESPONDED":
+            title = ("Vendor responded to your deceased-patient report" if is_deceased
+                     else "Vendor responded to your fraud report" if is_fraud
+                     else "Vendor responded to your dispute")
+        else:
+            title = _PHYSICIAN_EVENT_TITLES.get(event.event_type, event.event_type)
+        notifications.append({
+            "id":           f"event-{event.event_id}",
+            "category":     "fraud" if is_fraud else "dispute",
+            "title":        title,
+            "description":  f"Claim {claim_number}" + (f" — {event.note}" if event.note else ""),
+            "created_at":   event.created_at.isoformat(),
+            "case_id":      case.case_id,
+            "claim_number": claim_number,
+            "read":         event.created_at <= since,
+        })
+
+    return {"notifications": notifications}
+
+
 @router.get("/stats")
 def get_stats(request: Request, db: Session = Depends(get_db)):
     user = _require_physician(request, db)
     escalate_overdue_disputes(db)
     escalate_unconfirmed_physician_resolutions(db)
 
-    rows = (
-        db.query(ClaimNotification.status)
-        .filter(
-            ClaimNotification.physician_npi == user.npi,
-            ClaimNotification.status.in_(["DISPUTED", "FRAUD_REPORTED"]),
-        )
+    # Counted from the case's dispute_type, not the notification status —
+    # DECEASED_PATIENT cases share the FRAUD_REPORTED notification status
+    # (see trigger_engine._STATUS_MAP), so status alone can't tell them apart.
+    type_rows = (
+        db.query(DisputeCase.dispute_type)
+        .filter(DisputeCase.physician_npi == user.npi)
         .all()
     )
-    statuses = [s for (s,) in rows]
-    disputed = statuses.count("DISPUTED")
-    fraud_reported = statuses.count("FRAUD_REPORTED")
+    types = [t for (t,) in type_rows]
+    disputed = types.count("DISPUTE")
+    fraud_reported = types.count("FRAUD_REPORT")
+    deceased_reported = types.count("DECEASED_PATIENT")
 
     # DisputeCase.physician_npi is the direct, correct scope here — filtering by
     # vendor_npi instead would pull in other physicians' disputes against the same
-    # vendor, which isn't what "my open disputes" means. PENDING_PHYSICIAN_CONFIRMATION
+    # vendor, which isn't what "my open disputes" means. PENDING_PHYSICIAN_REVIEW
     # counts as "open" too — it's arguably more actionable than plain OPEN since it's
-    # the physician's own confirm/reject action that's pending, not the vendor's.
+    # the physician's own approve/decline that's pending, not the vendor's.
     open_count = (
         db.query(DisputeCase)
         .filter(
             DisputeCase.physician_npi == user.npi,
-            DisputeCase.status.in_(["OPEN", "PENDING_PHYSICIAN_CONFIRMATION"]),
+            DisputeCase.status.in_(["OPEN", "PENDING_PHYSICIAN_REVIEW"]),
         )
         .count()
     )
@@ -197,30 +259,46 @@ def get_stats(request: Request, db: Session = Depends(get_db)):
         db.query(DisputeCase)
         .filter(
             DisputeCase.physician_npi == user.npi,
-            DisputeCase.status.in_(["RESPONDED_TO_MEDICARE", "RESOLVED_BY_PHYSICIAN"]),
+            DisputeCase.status.in_(["RESOLVED_BY_PHYSICIAN", "REFERRED_TO_PAYER"]),
+        )
+        .count()
+    )
+    # Separate from open_count above (which folds this in as "actionable open") —
+    # this is specifically "vendor uploaded docs, your approve/decline is pending",
+    # for the physician-side filter that isolates just that queue.
+    needs_confirmation_count = (
+        db.query(DisputeCase)
+        .filter(
+            DisputeCase.physician_npi == user.npi,
+            DisputeCase.status == "PENDING_PHYSICIAN_REVIEW",
         )
         .count()
     )
 
     return {
-        "total":          disputed + fraud_reported,
-        "disputed":       disputed,
-        "fraud_reported": fraud_reported,
-        "open":           open_count,
-        "resolved":       resolved_count,
+        "total":              disputed + fraud_reported + deceased_reported,
+        "disputed":           disputed,
+        "fraud_reported":     fraud_reported,
+        "deceased_reported":  deceased_reported,
+        "open":               open_count,
+        "resolved":           resolved_count,
+        "needs_confirmation": needs_confirmation_count,
     }
 
 
 class DisputeConfirmationRequest(BaseModel):
     confirmed: bool
+    note: str = None
 
 
 @router.post("/disputes/{case_id}/confirm")
 def confirm_dispute_resolution(case_id: int, body: DisputeConfirmationRequest, request: Request, db: Session = Depends(get_db)):
-    """Physician's response to a vendor's RESOLVED_WITH_PHYSICIAN claim.
-    confirmed=True  -> case is done (RESOLVED_BY_PHYSICIAN).
-    confirmed=False -> case reopens and unlocks RESPONDED_TO_MEDICARE for the vendor's
-                        next response — the physician disagrees it's actually resolved."""
+    """Physician's review of the vendor's uploaded proof-of-work documents.
+    confirmed=True  -> Approve: docs are satisfactory, case is done (RESOLVED_BY_PHYSICIAN).
+    confirmed=False -> Decline: docs are unsatisfactory. The case leaves the vendor
+                        (they are NOT asked again) and is referred to the payer
+                        (REFERRED_TO_PAYER); the payer is notified via the
+                        PHYSICIAN_REJECTED event on its dashboard."""
     user = _require_physician(request, db)
 
     case = db.query(DisputeCase).filter(DisputeCase.case_id == case_id).first()
@@ -228,19 +306,21 @@ def confirm_dispute_resolution(case_id: int, body: DisputeConfirmationRequest, r
         return JSONResponse(status_code=404, content={"error": "not_found", "message": "Dispute case not found."})
     if case.physician_npi != user.npi:
         return JSONResponse(status_code=403, content={"error": "forbidden", "message": "This dispute does not belong to you."})
-    if case.status != "PENDING_PHYSICIAN_CONFIRMATION":
+    if case.status != "PENDING_PHYSICIAN_REVIEW":
         return JSONResponse(status_code=409, content={
-            "error": "not_pending_confirmation",
-            "message": "This case isn't awaiting your confirmation.",
+            "error": "not_pending_review",
+            "message": "This case isn't awaiting your review of the vendor's documents.",
         })
 
     if body.confirmed:
         case.status = "RESOLVED_BY_PHYSICIAN"
         case.closed_at = datetime.utcnow()
+        record_dispute_event(db, case, "PHYSICIAN_CONFIRMED", "PHYSICIAN")
     else:
-        case.status = "OPEN"
-        case.escalation_unlocked = True
-        case.physician_confirmation_due_date = None
+        # Declined — hand the case to the payer; the vendor is done with it.
+        case.status = "REFERRED_TO_PAYER"
+        case.closed_at = datetime.utcnow()
+        record_dispute_event(db, case, "PHYSICIAN_REJECTED", "PHYSICIAN", note=body.note)
 
     db.commit()
     db.refresh(case)
@@ -253,9 +333,9 @@ def confirm_dispute_resolution(case_id: int, body: DisputeConfirmationRequest, r
 # POST /api/v1/physician/npi-watch/disputes/{case_id}/decide
 # ---------------------------------------------------------------------------
 
-# The same 5 actions available in My Claims (ClaimsTable.jsx's ACTIONS array) —
-# 'did_not_order' isn't one of the 5 UI buttons, so it's excluded here too.
-PHYSICIAN_REVIEW_ACTION_TYPES = {"confirm", "dispute", "flag_supplier", "unknown_patient", "fraud"}
+# The same 6 actions available in My Claims (ClaimsTable.jsx's ACTIONS array) —
+# 'did_not_order' isn't one of the UI buttons, so it's excluded here too.
+PHYSICIAN_REVIEW_ACTION_TYPES = {"confirm", "dispute", "flag_supplier", "unknown_patient", "fraud", "deceased_patient"}
 
 # A vendor response has to actually exist before there's anything to review and
 # decide on. PENDING_PHYSICIAN_CONFIRMATION already has its own dedicated

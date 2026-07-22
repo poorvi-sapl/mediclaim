@@ -363,10 +363,11 @@ def run_all_rules(db: Session, settings) -> int:
     from .supplier_concentration import rule_supplier_concentration
     from .ghost_billing import rule_ghost_billing_all
 
-    # 1. idempotency — wipe existing flags
+    # 1. idempotency — wipe existing flags. NOT committed here: the delete and
+    # the bulk insert below share one transaction, so a failed run rolls back
+    # to the previous flag set instead of leaving rules_flags empty.
     deleted = db.query(RulesFlag).delete()
-    db.commit()
-    log.info(f"Cleared {deleted} existing rules_flags rows")
+    log.info(f"Cleared {deleted} existing rules_flags rows (pending commit)")
 
     # 2. run rules in the specified order
     pipeline = [
@@ -413,7 +414,7 @@ def run_all_rules(db: Session, settings) -> int:
     ]
     if mappings:
         db.bulk_insert_mappings(RulesFlag, mappings)
-        db.commit()
+    db.commit()  # delete + insert land together
 
     log.info(f"Total flags written: {len(mappings)}")
     return len(mappings)

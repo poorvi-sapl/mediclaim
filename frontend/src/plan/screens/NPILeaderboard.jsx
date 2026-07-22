@@ -1,550 +1,524 @@
 import { useState, useEffect, useRef } from 'react'
-import { getNpiRiskList } from '../../api'
+import { getNpiRiskList, getPlanDisputes, API_BASE } from '../../api'
 import TableSkeleton from '../../components/TableSkeleton'
 import { fmtUSD, Icon } from '../../components/ui'
 
-const BANDS = [['all', 'All'], ['high', 'High'], ['medium', 'Medium'], ['low', 'Low']]
+// ─── Greeting overview (one-page) ────────────────────────────────────────────
+// Verbatim port of dashboard-ref4-greeting-overview.html onto the NPI
+// Leaderboard slot: greeting row, hero + network stats, charts row, the
+// physician activity table (rows click through to NPI detail, same as the old
+// leaderboard), and the bottom Upcoming / Recent flags / Top rule triggers
+// strip. Everything except "Upcoming" is backed by real queries — risk list,
+// dispute cases, and the claims-trend analytics endpoint.
 
-const PATTERNS = [
-  { key: 'oig_leie_hit',           label: 'OIG LEIE Hit',            meta: 'OIG Hit',               abbrev: 'OIG'     },
-  { key: 'cross_npi_supplier',     label: 'Cross-NPI Supplier',      meta: 'Cross-NPI Supplier',    abbrev: 'Cross'   },
-  { key: 'geographic_anomaly',     label: 'Geographic Anomaly',      meta: 'Geographic Anomaly',    abbrev: 'Geo'     },
-  { key: 'volume_spike',           label: 'Volume Spike',            meta: 'Volume Spike',          abbrev: 'Spike'   },
-  { key: 'duplicate_billing',      label: 'Duplicate Billing',       meta: 'Duplicate Billing',     abbrev: 'Dup'     },
-  { key: 'unbundling',             label: 'Unbundling',              meta: 'Unbundling',            abbrev: 'Unbdl'   },
-  { key: 'new_high_value_supplier',label: 'New High Value Supplier', meta: 'New High-Value Supplier',abbrev: 'New'    },
-  { key: 'impossible_day',         label: 'Impossible Day',          meta: 'Impossible Day',        abbrev: 'ImpDay'  },
-  { key: 'rapid_cycling',          label: 'Rapid Patient Cycling',   meta: 'Rapid Patient Cycling', abbrev: 'Rapid'   },
-  { key: 'supplier_concentration', label: 'Supplier Concentration',  meta: 'Supplier Concentration',abbrev: 'Conc'   },
-]
-const PHYSICIAN_REPORTED = [
-  { key: 'physician_dispute', label: 'Physician Dispute' },
-  { key: 'flagged_supplier',  label: 'Flagged Supplier'  },
-  { key: 'unknown_patient',   label: 'Unknown Patient'   },
-]
-const ABBREV = {
-  'OIG Hit': 'OIG', 'Cross-NPI Supplier': 'Cross', 'Geographic Anomaly': 'Geo',
-  'Volume Spike': 'Spike', 'Duplicate Billing': 'Dup', 'New High-Value Supplier': 'New',
-  'Unbundling': 'Unbdl', 'Patient Identity Reuse': 'ID', 'Abnormal Hospice Duration': 'Hospice', 'Upcoding': 'Upcode',
+const NAVY = '#0A1F3D'
+const SLATE_BLUE = '#5B84C4'
+const CHART_BLUE = '#8FADD9'  // lighter blue for the ring gauges + "Flagged" bars, easier on the eye than SLATE_BLUE at this size
+const N_600 = '#46586F'
+const N_500 = '#647089'
+const N_400 = '#93A0B3'
+const N_300 = '#C7D0DE'
+const N_100 = '#F1F4F9'
+const MONO = "'JetBrains Mono',monospace"
+const DISPLAY = "'Manrope',sans-serif"                 // big numbers + greeting (matches Physician dashboard)
+const HEADING = "'Inter Tight','Inter',sans-serif"     // card/section titles (matches Physician dashboard)
+
+const RESOLVED_STATUSES = ['RESPONDED_TO_MEDICARE', 'RESOLVED_BY_PHYSICIAN', 'CLOSED', 'REFERRED_OIG']
+
+function fmtShortUSD(v) {
+  if (v >= 1e6) return `$${(v / 1e6).toFixed(1)}M`
+  if (v >= 1e3) return `$${(v / 1e3).toFixed(0)}K`
+  return fmtUSD(v)
 }
 
-const COLUMNS = [
-  { key: 'name',        label: 'Physician'   },
-  { key: 'specialty',   label: 'Specialty',  cls: 'hidden md:table-cell' },
-  { key: 'score',       label: 'Risk Score'  },
-  { key: 'claims',      label: 'Claims',     right: true },
-  { key: 'amount',      label: 'Billed',     right: true, cls: 'hidden lg:table-cell' },
-  { key: 'rules',       label: 'Rules',      right: true, cls: 'hidden lg:table-cell' },
-  { key: 'flags',       label: 'Flags',      right: true },
-  { key: 'topSupplier', label: 'Top Supplier', cls: 'hidden xl:table-cell' },
-]
-const COMPARATORS = {
-  name:        (a, b) => (a.name        || '').localeCompare(b.name        || ''),
-  specialty:   (a, b) => (a.specialty   || '').localeCompare(b.specialty   || ''),
-  score:       (a, b) => (a.score       || 0) - (b.score       || 0),
-  claims:      (a, b) => (a.totalClaims || 0) - (b.totalClaims || 0),
-  amount:      (a, b) => (a.totalAmount || 0) - (b.totalAmount || 0),
-  rules:       (a, b) => (a.rulesFiredCount || 0) - (b.rulesFiredCount || 0),
-  flags:       (a, b) => (a.physicianFlags  || 0) - (b.physicianFlags  || 0),
-  topSupplier: (a, b) => (a.topSupplier || '').localeCompare(b.topSupplier || ''),
+function statusOf(score) {
+  if (score > 80) return { label: 'Critical', bg: '#F7EBEA', tx: '#8A423D' }
+  if (score > 65) return { label: 'High', bg: '#FBF3E4', tx: '#8A6A34' }
+  return { label: 'Clean', bg: '#E9F3ED', tx: '#2E6B4F' }
 }
 
-function CustomSelect({ value, onChange, placeholder, options, optionGroups }) {
+// Status/Specialty column headers — click opens a dropdown to filter the
+// physician activity table, same interaction as the Risk/OIG column headers
+// on Vendor Watchlist (FilterTh). Generic so both columns share it.
+const STATUS_FILTER_OPTIONS = [
+  { id: '',         label: 'All' },
+  { id: 'Critical', label: 'Critical' },
+  { id: 'High',     label: 'High' },
+  { id: 'Clean',    label: 'Clean' },
+]
+// Glass-gradient badge recipe — same tokens as the NPI Disputes table's
+// Type/Status badges (solid/warning/success), applied to the risk-tier pill.
+function statusBadgeStyle(label) {
+  if (label === 'Critical') return { background: 'linear-gradient(180deg,#B95951,#9A3F39)', color: '#fff', border: '1px solid #8A3B35' }
+  if (label === 'High')     return { background: 'linear-gradient(180deg,#FDF6E9,#FBF3E4)', color: '#8A6A34', border: '1px solid #F0E0BE' }
+  return                           { background: 'linear-gradient(180deg,#EEF6F1,#E9F3ED)', color: '#2E6B4F', border: '1px solid #D5E9DD' }
+}
+function DropdownFilterTh({ label, options, value, onChange, hide }) {
   const [open, setOpen] = useState(false)
-  const [search, setSearch] = useState('')
   const ref = useRef(null)
+  const active = !!value
 
   useEffect(() => {
-    function onDoc(e) { if (ref.current && !ref.current.contains(e.target)) { setOpen(false); setSearch('') } }
+    if (!open) return
+    function onDoc(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
     document.addEventListener('mousedown', onDoc)
     return () => document.removeEventListener('mousedown', onDoc)
-  }, [])
-
-  const allOptions = optionGroups
-    ? optionGroups.flatMap(g => g.options)
-    : options
-
-  const filtered = search.trim()
-    ? allOptions.filter(o => o.toLowerCase().includes(search.toLowerCase()))
-    : null
-
-  function pick(val) { onChange(val); setOpen(false); setSearch('') }
+  }, [open])
 
   return (
-    <div ref={ref} className="relative w-full sm:w-auto sm:min-w-[148px]">
-      <button onClick={() => setOpen(v => !v)}
-              className={`flex items-center justify-between gap-2 bg-white border rounded-lg px-3 py-2 text-[12px] font-medium transition-all w-full ${open ? 'border-[#0d1f35]/40 ring-2 ring-[#0d1f35]/10' : 'border-slate-200 hover:border-slate-300'} ${value ? 'text-slate-800' : 'text-slate-500'}`}>
-        <span className="truncate">{value || placeholder}</span>
-        <Icon name="chevronDown" size={12} stroke={2.5} className={`shrink-0 text-slate-400 transition-transform duration-150 ${open ? 'rotate-180' : ''}`} />
+    <th ref={ref} className={`text-left py-2 px-2.5 text-[10px] font-bold uppercase tracking-[0.04em] whitespace-nowrap relative ${hide ? `hidden ${hide}:table-cell` : ''}`}
+        style={{ color: active || open ? NAVY : N_500, background: '#F7F9FC', borderBottom: `1px solid ${N_100}` }}>
+      <button onClick={() => setOpen((o) => !o)}
+              className="inline-flex items-center gap-1 bg-transparent border-0 p-0 m-0 cursor-pointer" style={{ color: 'inherit', font: 'inherit' }}>
+        {label}
+        <Icon name="chevronDown" size={10} style={{ color: active || open ? NAVY : N_300, transition: 'transform .15s ease', transform: open ? 'rotate(180deg)' : 'none' }} />
       </button>
-
       {open && (
-        <div className="absolute top-full left-0 mt-1.5 bg-white rounded-xl border border-slate-200 z-40 min-w-[200px] overflow-hidden"
+        <div className="absolute top-full left-0 mt-1.5 bg-white rounded-xl border border-slate-200 z-40 min-w-[160px] max-h-[260px] overflow-y-auto normal-case"
              style={{ boxShadow: '0 8px 24px rgba(15,23,42,0.10), 0 2px 6px rgba(15,23,42,0.06)' }}>
-
-          {/* Search */}
-          {allOptions.length > 5 && (
-            <div className="p-2 border-b border-slate-100">
-              <div className="relative">
-                <Icon name="search" size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                <input autoFocus value={search} onChange={e => setSearch(e.target.value)}
-                       placeholder="Search…"
-                       className="w-full pl-7 pr-3 py-1.5 text-[12px] bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-slate-300 focus:bg-white transition-colors" />
-              </div>
-            </div>
-          )}
-
-          <div className="max-h-56 overflow-y-auto py-1">
-            <button onMouseDown={() => pick('')}
-                    className={`w-full text-left px-3.5 py-2 text-[12px] font-medium transition-colors flex items-center justify-between gap-3 ${!value ? 'text-[#0d1f35] bg-slate-50 font-semibold' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'}`}>
-              {placeholder}
-              {!value && <span className="text-[#0d1f35] text-[11px]">✓</span>}
-            </button>
-
-            {(filtered ?? (optionGroups ? [] : options)).map(opt => (
-              <button key={opt} onMouseDown={() => pick(opt)}
-                      className={`w-full text-left px-3.5 py-2 text-[12px] transition-colors flex items-center justify-between gap-3 ${value === opt ? 'bg-slate-50 text-[#0d1f35] font-semibold' : 'font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-800'}`}>
-                <span className="truncate">{opt}</span>
-                {value === opt && <span className="text-[#0d1f35] shrink-0 text-[11px]">✓</span>}
+          <div className="py-1">
+            {options.map((opt) => (
+              <button key={opt.id} onMouseDown={() => { onChange(opt.id); setOpen(false) }}
+                      className="w-full text-left px-3.5 py-2 text-[12px] transition-colors flex items-center justify-between gap-3 hover:bg-slate-50">
+                <span className="truncate" style={{ color: value === opt.id ? NAVY : '#475569', fontWeight: value === opt.id ? 600 : 500 }}>{opt.label}</span>
+                {value === opt.id && <Icon name="check" size={12} style={{ color: NAVY }} />}
               </button>
             ))}
-
-            {!filtered && optionGroups && optionGroups.map(g => (
-              <div key={g.label}>
-                <div className="px-3.5 pt-2 pb-1 text-[10px] font-bold uppercase tracking-widest text-slate-400">{g.label}</div>
-                {g.options.map(opt => (
-                  <button key={opt.key ?? opt} onMouseDown={() => pick(opt.key ?? opt)}
-                          className={`w-full text-left px-3.5 py-2 text-[12px] transition-colors flex items-center justify-between gap-3 ${value === (opt.key ?? opt) ? 'bg-slate-50 text-[#0d1f35] font-semibold' : 'font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-800'}`}>
-                    <span className="truncate">{opt.label ?? opt}</span>
-                    {value === (opt.key ?? opt) && <span className="text-[#0d1f35] shrink-0 text-[11px]">✓</span>}
-                  </button>
-                ))}
-              </div>
-            ))}
-
-            {filtered?.length === 0 && (
-              <div className="px-3.5 py-4 text-[12px] text-slate-400 text-center">No results</div>
-            )}
           </div>
         </div>
       )}
-    </div>
+    </th>
   )
 }
 
-function scoreStyle(score) {
-  if (score > 80) return { color: '#e11d48', track: '#ffe4e6' }
-  if (score > 60) return { color: '#ea580c', track: '#ffedd5' }
-  if (score > 30) return { color: '#d97706', track: '#fef3c7' }
-  return              { color: '#059669', track: '#d1fae5' }
-}
-
-function ScoreCell({ score }) {
-  const { color, track } = scoreStyle(score)
+function Card({ children, className = '', style }) {
   return (
-    <div className="flex items-center gap-2.5 min-w-[120px]">
-      <span className="text-[13px] font-bold tabular-nums w-7 shrink-0" style={{ color }}>{score}</span>
-      <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ backgroundColor: track }}>
-        <div className="h-full rounded-full transition-all" style={{ width: `${score}%`, backgroundColor: color }} />
-      </div>
+    <div className={`bg-white border border-[#E1E6EE] rounded-2xl px-[18px] py-4 ${className}`}
+         style={{ boxShadow: '0 1px 2px rgba(10,31,61,.05), 0 1px 1px rgba(10,31,61,.03)', ...style }}>
+      {children}
     </div>
   )
 }
 
-function RankBadge({ rank }) {
-  if (rank === 1) return (
-    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full text-[11px] font-bold bg-amber-100 text-amber-700">1</span>
+function CardHead({ title, sub, right }) {
+  return (
+    <div className="flex items-baseline justify-between mb-3 gap-3">
+      <div>
+        <h3 className="text-[15px] font-bold" style={{ fontFamily: HEADING, color: NAVY }}>{title}</h3>
+        {sub && <span className="text-[11.5px]" style={{ color: N_500 }}>{sub}</span>}
+      </div>
+      {right}
+    </div>
   )
-  if (rank === 2) return (
-    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full text-[11px] font-bold bg-slate-100 text-slate-500">2</span>
-  )
-  if (rank === 3) return (
-    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full text-[11px] font-bold bg-orange-100 text-orange-600">3</span>
-  )
-  return <span className="text-[12px] font-medium text-slate-400 tabular-nums">{rank}</span>
 }
 
-const WarnIcon = () => (
-  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-       strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-    <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
-  </svg>
-)
+// Shared full-circle ring gauge — same recipe for Recovery rate and Case
+// review so both cards render identically, matching the reference (which uses
+// one ring style for both instead of Case review's old semi-donut).
+function RingChart({ pct, size = 96, stroke = 14, track = '#DCE6F7', arc = CHART_BLUE, textColor = NAVY }) {
+  const r = 50 - stroke / 2
+  return (
+    <svg viewBox="0 0 100 100" style={{ width: size, height: size, flexShrink: 0 }}>
+      <circle cx="50" cy="50" r={r} fill="none" stroke={track} strokeWidth={stroke} />
+      <circle cx="50" cy="50" r={r} fill="none" stroke={arc} strokeWidth={stroke} pathLength="100"
+              strokeDasharray={`${pct} 100`} strokeLinecap="round" transform="rotate(-90 50 50)" />
+      <text x="50" y="57" textAnchor="middle" fontFamily="Manrope" fontWeight="800" fontSize="20" fill={textColor}>{pct}%</text>
+    </svg>
+  )
+}
 
-function exportCSV(filename, headers, rows) {
-  const esc = (v) => { const s = String(v ?? ''); return /[,"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s }
-  const csv = [headers, ...rows].map(r => r.map(esc).join(',')).join('\n')
-  const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(new Blob([csv], { type: 'text/csv' })), download: filename })
-  a.click(); URL.revokeObjectURL(a.href)
+function StatCell({ tint, icon, value, label, loading, onClick }) {
+  const Wrapper = onClick ? 'button' : 'div'
+  return (
+    <Wrapper onClick={onClick} className={`text-center flex-1 min-w-0 px-2 ${onClick ? 'cursor-pointer hover:opacity-75 transition-opacity' : ''}`}>
+      <div className="w-12 h-12 rounded-full mx-auto mb-2.5 flex items-center justify-center" style={{ background: tint }}>
+        {icon}
+      </div>
+      {loading
+        ? <div className="h-6 w-14 mx-auto rounded bg-slate-100 animate-pulse" />
+        : <div className="font-extrabold text-[26px] leading-none" style={{ fontFamily: DISPLAY, color: NAVY, letterSpacing: '-0.02em' }}>{value}</div>}
+      <div className="text-[12px] mt-1.5" style={{ color: N_500 }}>{label}</div>
+    </Wrapper>
+  )
 }
 
 export default function NPILeaderboard({ setSelectedNPI, setActiveScreen, initialBand = 'all', search = '' }) {
-  const [rows, setRows]         = useState([])
-  const [loading, setLoading]   = useState(true)
-  const [error, setError]       = useState(null)
-  const [band, setBand]         = useState(initialBand)
-  const [specialty, setSpecialty] = useState('')
-  const [state, setState]       = useState('')
-  const [pattern, setPattern]   = useState('')
-  const [sort, setSort]         = useState({ key: null, dir: null })
-  const [visibleCount, setVisibleCount] = useState(15)
+  const [rows, setRows] = useState([])
+  const [disputes, setDisputes] = useState([])
+  const [trend, setTrend] = useState(null)      // { months, total, flagged }
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [statusFilter, setStatusFilter] = useState('')   // '' | Critical | High | Clean — Status column-header dropdown
+  const [specialtyFilter, setSpecialtyFilter] = useState('')   // '' | <specialty> — Specialty column-header dropdown
+  const [hoverMonth, setHoverMonth] = useState(null)   // Claims report bar hover — index of the hovered month
 
   useEffect(() => {
     let cancelled = false
-    setLoading(true)
-    getNpiRiskList({ riskBand: band, patternFilter: pattern || undefined })
-      .then((d) => { if (!cancelled) { setRows(d); setLoading(false) } })
-      .catch((e) => { if (!cancelled) { setError(e.message); setLoading(false) } })
+    Promise.allSettled([
+      getNpiRiskList({}),
+      getPlanDisputes('all'),
+      fetch(`${API_BASE}/analytics/overview/claims-trend`, { credentials: 'include' }).then((r) => r.json()),
+    ]).then(([r, d, t]) => {
+      if (cancelled) return
+      if (r.status === 'fulfilled') setRows(r.value)
+      else setError(r.reason?.message || 'Failed to load physicians')
+      if (d.status === 'fulfilled') setDisputes(d.value?.disputes || [])
+      if (t.status === 'fulfilled') setTrend(t.value)
+      setLoading(false)
+    })
     return () => { cancelled = true }
-  }, [band, pattern])
+  }, [])
 
-  useEffect(() => { setSort({ key: null, dir: null }); setVisibleCount(15) }, [band, specialty, state, search, pattern])
-
-  const selectedPattern = PATTERNS.find((p) => p.key === pattern)
-    || PHYSICIAN_REPORTED.find((p) => p.key === pattern)
-    || null
-
-  function onSort(key) {
-    setSort((p) =>
-      p.key !== key ? { key, dir: 'asc' }
-      : p.dir === 'asc' ? { key, dir: 'desc' }
-      : { key: null, dir: null }
-    )
-  }
-
-  if (loading) return <div className="w-full px-4 sm:px-7 py-5 sm:py-6"><TableSkeleton rows={10} /></div>
   if (error) return (
     <div className="w-full px-4 sm:px-7 py-5 sm:py-6">
-      <div className="mc-card border-rose-200 bg-rose-50/50 px-6 py-5 text-sm">
-        <span className="font-semibold text-rose-600">Couldn't load the leaderboard:</span>{' '}
+      <div className="mc-card border-[#EBD3D1] bg-[#F7EBEA]/50 px-6 py-5 text-sm">
+        <span className="font-semibold text-[#A6453F]">Couldn't load the dashboard:</span>{' '}
         <span className="text-slate-500">{error}</span>
       </div>
     </div>
   )
 
-  const specialties = [...new Set(rows.map((r) => r.specialty).filter(Boolean))].sort()
-  const states      = [...new Set(rows.map((r) => r.state).filter(Boolean))].sort()
+  // ── Derivations (all from real data) ──
+  const sorted = rows.slice().sort((a, b) => (b.score || 0) - (a.score || 0))
+  const specialtyOptions = [{ id: '', label: 'All' }, ...[...new Set(rows.map((r) => r.specialty).filter(Boolean))].sort().map((s) => ({ id: s, label: s }))]
+  const q = search.trim().toLowerCase()
+  const tableRows = sorted
+    .filter((r) => !q || r.name?.toLowerCase().includes(q) || r.npi?.includes(q) || r.specialty?.toLowerCase().includes(q))
+    .filter((r) => !statusFilter || statusOf(r.score || 0).label === statusFilter)
+    .filter((r) => !specialtyFilter || r.specialty === specialtyFilter)
+  const highRisk = rows.filter((r) => (r.score || 0) > 80).length
+  const totalClaims = rows.reduce((s, r) => s + (r.totalClaims || 0), 0)
+  const totalBilled = rows.reduce((s, r) => s + (r.totalAmount || 0), 0)
+  const openDisputes = disputes.filter((d) => ['OPEN', 'NON_RESPONSIVE', 'REFERRED_TO_PAYER'].includes(d.status))
+  const resolvedDisputes = disputes.filter((d) => RESOLVED_STATUSES.includes(d.status))
 
-  const filtered = rows.filter((r) => {
-    if (specialty && r.specialty !== specialty) return false
-    if (state     && r.state     !== state)     return false
-    if (search) {
-      const q = search.toLowerCase()
-      if (!(r.name?.toLowerCase().includes(q) || r.npi?.includes(q))) return false
-    }
-    return true
-  })
+  // Hero: billing disputed/reported across every case the payer has opened.
+  const disputedBilled = disputes.reduce((s, d) => s + (d.claim?.amount_billed || 0), 0)
 
-  const sorted = [...filtered]
-  if (sort.key && COMPARATORS[sort.key]) {
-    sorted.sort(COMPARATORS[sort.key])
-    if (sort.dir === 'desc') sorted.reverse()
-  } else {
-    sorted.sort((a, b) => (b.score || 0) - (a.score || 0))
-  }
+  // Recovery = resolved cases; "recovered" $ = billed on those resolved cases.
+  const recoveryRate = disputes.length ? Math.round((resolvedDisputes.length / disputes.length) * 100) : 0
+  const recoveredAmt = resolvedDisputes.reduce((s, d) => s + (d.claim?.amount_billed || 0), 0)
 
-  function doExport() {
-    exportCSV('npi-leaderboard.csv',
-      ['Rank', 'Physician', 'NPI', 'City', 'State', 'Specialty', 'Risk Score', 'Claims', 'Billed', 'Rules Fired', 'Flags', 'Top Supplier'],
-      sorted.map((r, i) => [i + 1, r.name, r.npi, r.city, r.state, r.specialty, r.score, r.totalClaims, r.totalAmount, r.rulesFiredCount, r.physicianFlags, r.topSupplier])
-    )
-  }
+  // Claims report bars (reviewed vs flagged per month).
+  const trendData = (trend?.months || []).map((m, i) => ({
+    month: m, total: trend.total?.[i] || 0, flagged: trend.flagged?.[i] || 0,
+  }))
+  // Stacked bar scale, rounded up to a clean 5K step so the axis labels read
+  // like a real chart (0/5K/10K/...) instead of an arbitrary max.
+  const stackMax = Math.max(1, ...trendData.map((t) => t.total + t.flagged))
+  const trendMax = Math.max(5000, Math.ceil(stackMax / 5000) * 5000)
+  const yTicks = [1, 0.75, 0.5, 0.25, 0].map((f) => Math.round(trendMax * f))
 
-  const exportBtn = (extraCls = '') => (
-    <button onClick={doExport}
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#1E3A5F]/20 bg-white text-[#1E3A5F] text-[12px] font-semibold hover:bg-[#EEF2F7] transition-colors ${extraCls}`}>
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-      </svg>
-      Export
-    </button>
-  )
+  if (loading) return <div className="w-full px-4 sm:px-7 py-5 sm:py-6"><TableSkeleton rows={10} /></div>
 
   return (
-    <div className="w-full px-4 sm:px-7 py-4 sm:py-6 space-y-4 sm:space-y-5">
+    // Greeting moved to the top header ("Hey {name}") — the reclaimed vertical
+    // space flows to the flex-1 physician table below, so more rows are visible
+    // without scrolling.
+    <div className="w-full h-full flex flex-col min-h-0 px-4 sm:px-7 pt-5 pb-5 gap-3.5">
 
-      {/* Page header */}
-      <div className="flex items-start sm:items-end justify-between gap-3">
-        <div>
-          <h2 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">NPI Risk Leaderboard</h2>
-          <p className="text-xs sm:text-sm text-slate-400 mt-0.5">Physicians ranked by composite fraud risk score</p>
+      {/* ── Row: hero + network statistics ── */}
+      <div className="flex-shrink-0 grid grid-cols-1 md:grid-cols-[280px_1fr] gap-3.5">
+        <div className="relative overflow-hidden rounded-[16px] px-[18px] py-4 flex flex-col"
+             style={{ background: 'linear-gradient(135deg,#D8E4F3 0%,#E9F0F8 55%,#F3F7FB 100%)', border: '1px solid #DCE5F0' }}>
+          {/* Decorative soft wave shapes */}
+          <div className="absolute rounded-full" style={{ top: -60, right: -70, width: 190, height: 190, background: 'rgba(255,255,255,.55)' }} />
+          <div className="absolute rounded-full" style={{ bottom: -80, right: -30, width: 170, height: 170, background: 'rgba(91,132,196,.10)' }} />
+          <div className="relative z-[1] w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0" style={{ background: '#C9DAF0' }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={NAVY} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 2l8 4v6c0 5-3.5 9-8 10-4.5-1-8-5-8-10V6l8-4z" />
+              <circle cx="12" cy="11" r="1" /><path d="M12 12v3" />
+            </svg>
+          </div>
+          <div className="relative z-[1] font-extrabold text-[32px] mt-2.5 leading-none" style={{ fontFamily: DISPLAY, color: '#12233D', letterSpacing: '-0.02em' }}>
+            {fmtShortUSD(disputedBilled)}
+          </div>
+          <p className="relative z-[1] text-[11.5px] mt-2 leading-snug" style={{ color: '#3D4C63' }}>
+            Fraudulent billing challenged across your network to date.
+          </p>
+          <button onClick={() => setActiveScreen('disputes')}
+                  className="relative z-[1] self-start mt-3 rounded-[9px] px-3.5 py-2 font-bold text-[11.5px] text-white cursor-pointer border-0 flex items-center gap-1.5"
+                  style={{ background: '#13294B' }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" />
+            </svg>
+            View fraud report
+          </button>
         </div>
-        <span className="text-[11px] sm:text-[12px] font-semibold text-slate-400 bg-white border border-slate-200 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg tabular-nums shrink-0">
-          {rows.length.toLocaleString()} physicians
-        </span>
+
+        <Card className="flex flex-col justify-center" style={{ paddingTop: 14, paddingBottom: 14 }}>
+          <div className="flex items-baseline justify-between mb-4 gap-3">
+            <h3 className="text-[15px] font-bold" style={{ fontFamily: HEADING, color: NAVY }}>Network statistics</h3>
+            <span className="flex items-center gap-1.5 text-[11px] shrink-0" style={{ color: N_500 }}>
+              Live from claims data
+              <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ background: '#3A9D6E' }} />
+            </span>
+          </div>
+          <div className="flex items-stretch divide-x divide-[#E7ECF4]">
+            <StatCell tint="linear-gradient(135deg,#CFE0F4,#E6EFFA)" loading={loading} value={rows.length.toLocaleString()} label="Physicians"
+              icon={<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#4A7AB5" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>}
+              onClick={() => setStatusFilter('')} />
+            <StatCell tint="linear-gradient(135deg,#E4DDF3,#F0EAFA)" loading={loading} value={highRisk} label="High-risk NPIs"
+              icon={<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#8A5B9C" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M10.3 3.9L1.8 18a2 2 0 001.7 3h16.9a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z" /><line x1="12" y1="9" x2="12" y2="13" /></svg>}
+              onClick={() => setStatusFilter('Critical')} />
+            <StatCell tint="linear-gradient(135deg,#E2DEF5,#EFEBFA)" loading={loading} value={openDisputes.length} label="Open disputes"
+              icon={<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#6F5BAE" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 01-4.9 7.6 8.38 8.38 0 01-3.8.9 8.5 8.5 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 018-8.5h.5a8.48 8.48 0 018 8v.5z" /></svg>}
+              onClick={() => setActiveScreen('disputes')} />
+            <StatCell tint="linear-gradient(135deg,#DFE4EC,#EFF2F6)" loading={loading} value={totalClaims.toLocaleString()} label="Total claims"
+              icon={<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#46586F" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" /></svg>} />
+            <StatCell tint="linear-gradient(135deg,#CFE9DA,#E7F5EC)" loading={loading} value={fmtShortUSD(totalBilled)} label="Total billed"
+              icon={<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#2E6B4F" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" /></svg>} />
+          </div>
+        </Card>
       </div>
 
-      <div className="mc-card">
-
-        {/* ── Filter bar ─────────────────────────────────────── */}
-        <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-100 bg-white flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
-
-          {/* Row 1 (mobile): band tabs + export */}
-          <div className="flex items-center gap-2">
-            <div className="flex items-center bg-slate-100 rounded-xl p-1 gap-0.5">
-              {BANDS.map(([id, label]) => (
-                <button key={id} onClick={() => setBand(id)}
-                        className={`px-3 sm:px-4 py-1.5 text-[12px] font-semibold rounded-lg transition-all duration-150 ${
-                          band === id
-                            ? 'bg-white text-slate-900 shadow-sm ring-1 ring-slate-200/60'
-                            : 'text-slate-500 hover:text-slate-700 hover:bg-white/50'
-                        }`}>
-                  {label}
-                </button>
-              ))}
-            </div>
-            {/* Export — mobile only, tucked next to band tabs */}
-            {exportBtn('sm:hidden ml-auto')}
-          </div>
-
-          {/* Divider — desktop only */}
-          <div className="hidden sm:block w-px h-6 bg-slate-200 mx-1 shrink-0" />
-
-          {/* Row 2 (mobile): dropdowns in 2-col grid */}
-          <div className="grid grid-cols-2 gap-2 sm:hidden">
-            <CustomSelect value={specialty} onChange={setSpecialty} placeholder="All Specialties" options={specialties} />
-            <CustomSelect value={state}     onChange={setState}     placeholder="All States"      options={states} />
-            <div className="col-span-2">
-              <CustomSelect
-                value={pattern} onChange={setPattern} placeholder="Fraud Pattern"
-                optionGroups={[
-                  { label: 'Algorithmic Patterns', options: PATTERNS.map(p => ({ key: p.key, label: p.label })) },
-                  { label: 'Physician Reported',   options: PHYSICIAN_REPORTED.map(p => ({ key: p.key, label: p.label })) },
-                ]}
-                options={[]}
-              />
-            </div>
-          </div>
-
-          {/* Desktop dropdowns (sm:contents makes div transparent, children join parent flex) */}
-          <div className="hidden sm:contents">
-            <CustomSelect value={specialty} onChange={setSpecialty} placeholder="All Specialties" options={specialties} />
-            <CustomSelect value={state}     onChange={setState}     placeholder="All States"      options={states} />
-            <CustomSelect
-              value={pattern} onChange={setPattern} placeholder="Fraud Pattern"
-              optionGroups={[
-                { label: 'Algorithmic Patterns', options: PATTERNS.map(p => ({ key: p.key, label: p.label })) },
-                { label: 'Physician Reported',   options: PHYSICIAN_REPORTED.map(p => ({ key: p.key, label: p.label })) },
-              ]}
-              options={[]}
-            />
-          </div>
-
-          {selectedPattern && (
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold bg-blue-50 text-blue-700 border border-blue-200 self-start sm:self-auto">
-              {selectedPattern.label}
-              <button onClick={() => setPattern('')} aria-label="Clear pattern filter"
-                      className="hover:text-rose-500 transition-colors leading-none text-blue-400">✕</button>
-            </span>
-          )}
-
-          {/* Result count (mobile, below dropdowns) */}
-          <div className="sm:hidden flex items-center gap-1.5">
-            <span className="text-[12px] font-semibold text-slate-800 tabular-nums">{sorted.length.toLocaleString()}</span>
-            <span className="text-[12px] text-slate-400">result{sorted.length !== 1 ? 's' : ''}</span>
-          </div>
-
-          {/* Result count + export — desktop */}
-          <div className="ml-auto hidden sm:flex items-center gap-2">
-            <span className="text-[12px] font-semibold text-slate-800 tabular-nums">{sorted.length.toLocaleString()}</span>
-            <span className="text-[12px] text-slate-400">result{sorted.length !== 1 ? 's' : ''}</span>
-            {exportBtn()}
-          </div>
-        </div>
-
-        {/* ── Mobile card view (< sm) ─────────────────────── */}
-        <div className="sm:hidden divide-y divide-slate-100">
-          {sorted.slice(0, visibleCount).map((r, idx) => {
-            const { color, track } = scoreStyle(r.score)
-            return (
-              <div key={r.id}
-                   onClick={() => { setSelectedNPI(r); setActiveScreen('detail') }}
-                   className="px-4 py-3.5 hover:bg-slate-50 active:bg-slate-100 cursor-pointer transition-colors">
-                <div className="flex items-start gap-3">
-                  {/* Rank */}
-                  <div className="shrink-0 w-6 flex justify-center mt-0.5">
-                    <RankBadge rank={idx + 1} />
-                  </div>
-
-                  {/* Main info */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <span className="text-[13px] font-semibold text-slate-800 truncate leading-tight">{r.name}</span>
-                      {r.needsManualReview && (
-                        <span className="text-amber-400 shrink-0"><WarnIcon /></span>
+      {/* ── Row: claims report + recovery rate + case review ── */}
+      <div className="flex-shrink-0 grid grid-cols-1 lg:grid-cols-[1.4fr_1fr_1fr] gap-3.5">
+        <Card>
+          <CardHead title="Claims report" sub={`Reviewed vs flagged, last ${trendData.length || 0} months`}
+            right={
+              <div className="flex items-center gap-3 shrink-0">
+                <span className="flex items-center gap-1.5 text-[10.5px]" style={{ color: N_500 }}>
+                  <span className="w-2 h-2 rounded-full inline-block" style={{ background: '#3A7D5C' }} />Reviewed
+                </span>
+                <span className="flex items-center gap-1.5 text-[10.5px]" style={{ color: N_500 }}>
+                  <span className="w-2 h-2 rounded-full inline-block" style={{ background: CHART_BLUE }} />Flagged
+                </span>
+              </div>
+            } />
+          {trendData.length === 0 ? (
+            <div className="h-[132px] flex items-center justify-center text-[12px]" style={{ color: N_400 }}>No trend data</div>
+          ) : (
+            <>
+              <div className="flex mt-1" style={{ height: 132 }}>
+                <div className="flex flex-col justify-between text-right pr-2 shrink-0" style={{ width: 32 }}>
+                  {yTicks.map((v) => (
+                    <span key={v} className="text-[10px] leading-none" style={{ color: N_400 }}>{v === 0 ? '0' : fmtShortUSD(v).replace('$', '')}</span>
+                  ))}
+                </div>
+                <div className="relative flex-1 flex items-end gap-3">
+                  {yTicks.map((v) => (
+                    <div key={v} className="absolute left-0 right-0 border-t" style={{ bottom: `${(v / trendMax) * 100}%`, borderColor: N_100 }} />
+                  ))}
+                  {trendData.map((t, i) => (
+                    <div key={t.month} className="relative flex-1 flex flex-col items-center min-w-0 h-full justify-end"
+                         onMouseEnter={() => setHoverMonth(i)} onMouseLeave={() => setHoverMonth((h) => (h === i ? null : h))}>
+                      {hoverMonth === i && (
+                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 z-10 pointer-events-none whitespace-nowrap rounded-lg px-2.5 py-1.5 text-white"
+                             style={{ background: NAVY, boxShadow: '0 4px 12px rgba(10,31,61,.25)' }}>
+                          <div className="text-[10.5px] font-bold">{t.month}</div>
+                          <div className="text-[10px] flex items-center gap-1.5 mt-0.5">
+                            <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ background: '#3A7D5C' }} />
+                            {t.total.toLocaleString()} reviewed
+                          </div>
+                          <div className="text-[10px] flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ background: CHART_BLUE }} />
+                            {t.flagged.toLocaleString()} flagged
+                          </div>
+                        </div>
                       )}
-                    </div>
-                    <div className="text-[11px] text-slate-400 mt-0.5 truncate">{r.npi} · {r.city}, {r.state}</div>
-                    {r.specialty && <div className="text-[11px] text-slate-500 mt-0.5">{r.specialty}</div>}
-                    {/* Score bar */}
-                    <div className="flex items-center gap-2 mt-2 pr-1">
-                      <span className="text-[13px] font-bold tabular-nums w-7 shrink-0" style={{ color }}>{r.score}</span>
-                      <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: track }}>
-                        <div className="h-full rounded-full" style={{ width: `${r.score}%`, backgroundColor: color }} />
+                      <div className="flex flex-col items-center justify-end cursor-default" style={{ width: 28, height: '100%' }}>
+                        <div className="w-full rounded-t-[3px] transition-opacity" style={{ height: `${Math.max(t.flagged ? 3 : 0, (t.flagged / trendMax) * 100)}%`, background: CHART_BLUE, opacity: hoverMonth === null || hoverMonth === i ? 1 : 0.45 }} />
+                        <div className="w-full transition-opacity" style={{ height: `${Math.max(t.total ? 3 : 0, (t.total / trendMax) * 100)}%`, background: '#3A7D5C', opacity: hoverMonth === null || hoverMonth === i ? 1 : 0.45 }} />
                       </div>
                     </div>
-                  </div>
-
-                  {/* Right-side stats */}
-                  <div className="shrink-0 text-right ml-2">
-                    <div className="text-[13px] font-bold text-slate-700 tabular-nums whitespace-nowrap">{fmtUSD(r.totalAmount)}</div>
-                    <div className="text-[11px] text-slate-400 mt-0.5 whitespace-nowrap">{(r.totalClaims || 0).toLocaleString()} claims</div>
-                    {r.physicianFlags > 0
-                      ? <span className="inline-flex items-center justify-center min-w-[20px] h-4 px-1 rounded text-[10px] font-bold bg-rose-50 text-rose-500 ring-1 ring-inset ring-rose-200 mt-1">
-                          {r.physicianFlags}
-                        </span>
-                      : null}
-                  </div>
+                  ))}
                 </div>
               </div>
-            )
-          })}
-
-          {sorted.length === 0 && (
-            <div className="px-6 py-16 text-center">
-              <p className="text-sm text-slate-400">No physicians match these filters.</p>
-              <p className="text-xs text-slate-300 mt-1">Try adjusting your search or filters.</p>
-            </div>
+              <div className="flex mt-2">
+                <div style={{ width: 32 }} className="shrink-0" />
+                <div className="flex-1 flex gap-3">
+                  {trendData.map((t, i) => (
+                    <span key={t.month} className="flex-1 text-center text-[10.5px] whitespace-nowrap"
+                          style={{ color: hoverMonth === i ? NAVY : N_500, fontWeight: hoverMonth === i ? 700 : 400 }}>
+                      {String(t.month).split(' ')[0]}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </>
           )}
+        </Card>
+
+        <Card className="flex flex-col">
+          <CardHead title="Recovery rate" sub="Disputes resolved to date" />
+          <div className="flex-1 flex items-center gap-5">
+            <RingChart pct={recoveryRate} size={124} stroke={16} arc="#3A7D5C" track="#E9F3ED" />
+            <div>
+              <div className="font-extrabold text-[26px] leading-none" style={{ fontFamily: DISPLAY, color: NAVY }}>{fmtShortUSD(recoveredAmt)}</div>
+              <div className="text-[12.5px] mt-2 leading-snug" style={{ color: N_500 }}>Resolved without escalation across {resolvedDisputes.length} case{resolvedDisputes.length !== 1 ? 's' : ''}.</div>
+            </div>
+          </div>
+        </Card>
+
+        <Card className="flex flex-col">
+          <CardHead title="Case review" sub="Open vs closed cases" />
+          <div className="flex-1 flex items-center gap-5">
+            <RingChart pct={recoveryRate} size={124} stroke={16} />
+            <div className="space-y-3">
+              <div className="flex items-baseline gap-2">
+                <span className="text-[26px] font-extrabold leading-none" style={{ fontFamily: DISPLAY, color: NAVY }}>{resolvedDisputes.length}</span>
+                <span className="text-[12.5px]" style={{ color: N_500 }}>closed</span>
+              </div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-[26px] font-extrabold leading-none" style={{ fontFamily: DISPLAY, color: NAVY }}>{openDisputes.length}</span>
+                <span className="text-[12.5px]" style={{ color: N_500 }}>in progress</span>
+              </div>
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      {/* ── Physician activity table (the leaderboard itself) — titled head
+           row like the Vendor Watchlist's Vendors table ── */}
+      <Card className="flex-1 min-h-0 flex flex-col !py-4">
+        <div className="flex-shrink-0 flex items-start justify-between gap-3 mb-2">
+          <div>
+            <h3 className="text-[15px] font-bold" style={{ fontFamily: HEADING, color: NAVY }}>Physicians</h3>
+            <span className="text-[11px]" style={{ color: N_500 }}>{rows.length.toLocaleString()} total, sorted by risk score</span>
+          </div>
+          <button onClick={() => setActiveScreen('physicians')}
+                  className="text-[11.5px] font-semibold hover:underline pt-0.5" style={{ color: SLATE_BLUE }}>
+            View all →
+          </button>
         </div>
+        <PhysicianTable
+          rows={tableRows}
+          specialtyOptions={specialtyOptions}
+          specialtyFilter={specialtyFilter} setSpecialtyFilter={setSpecialtyFilter}
+          statusFilter={statusFilter} setStatusFilter={setStatusFilter}
+          onOpen={(r) => { setSelectedNPI(r); setActiveScreen('detail') }}
+        />
+      </Card>
 
-        {/* ── Desktop table view (sm+) ────────────────────── */}
-        <div className="hidden sm:block overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-y border-slate-100" style={{ backgroundColor: '#f8fafc' }}>
-                <th className="w-14 px-5 py-3.5 text-center text-[10px] font-bold uppercase tracking-widest text-slate-400">#</th>
-                {COLUMNS.map((c) => {
-                  const active = sort.key === c.key
-                  return (
-                    <th key={c.key} onClick={() => onSort(c.key)}
-                        className={`px-4 py-3.5 text-[10px] font-bold uppercase tracking-widest cursor-pointer select-none group transition-colors ${active ? 'text-[#0d1f35]' : 'text-slate-700 hover:text-[#0d1f35]'} ${c.right ? 'text-right' : 'text-left'} ${c.cls || ''}`}>
-                      <span className={`inline-flex items-center gap-1 ${c.right ? 'justify-end' : ''}`}>
-                        {c.label}
-                        <span className={`transition-colors text-[10px] ${active ? 'text-[#0d1f35]' : 'text-slate-400 group-hover:text-[#0d1f35]'}`}>
-                          {active ? (sort.dir === 'asc' ? '↑' : '↓') : '↕'}
-                        </span>
-                      </span>
-                    </th>
-                  )
-                })}
-              </tr>
-            </thead>
+    </div>
+  )
+}
 
-            <tbody className="divide-y divide-slate-100/80">
-              {sorted.slice(0, visibleCount).map((r, idx) => (
-                <tr key={r.id}
-                    onClick={() => { setSelectedNPI(r); setActiveScreen('detail') }}
-                    className="hover:bg-[#f8fafc] cursor-pointer transition-colors group">
-
-                  <td className="w-14 px-5 py-4 text-center">
-                    <RankBadge rank={idx + 1} />
-                  </td>
-
-                  <td className="px-4 py-4">
-                    <div className="text-[13px] font-semibold text-slate-800 flex items-center gap-1.5 group-hover:text-[#0d1f35] transition-colors leading-tight">
-                      {r.name}
-                      {r.needsManualReview && (
-                        <span title="Flagged for manual enrollment review" className="text-amber-400 shrink-0">
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                               strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-                            <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
-                          </svg>
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-[11px] text-slate-400 tabular-nums mt-0.5">{r.npi} · {r.city}, {r.state}</div>
-                  </td>
-
-                  <td className="px-4 py-4 hidden md:table-cell text-[12px] text-slate-500">{r.specialty || '—'}</td>
-
-                  <td className="px-4 py-4"><ScoreCell score={r.score} /></td>
-
-                  <td className="px-4 py-4 text-right tabular-nums text-[13px] text-slate-600">
-                    {(r.totalClaims || 0).toLocaleString()}
-                  </td>
-
-                  <td className="px-4 py-4 text-right tabular-nums text-[13px] font-semibold text-slate-800 hidden lg:table-cell">
-                    {fmtUSD(r.totalAmount)}
-                  </td>
-
-                  <td className="px-4 py-4 text-right tabular-nums hidden lg:table-cell">
-                    {pattern ? (
-                      <div className="flex flex-wrap gap-1 justify-end">
-                        {r.rulesFired.length === 0
-                          ? <span className="text-slate-300">—</span>
-                          : r.rulesFired.map((rf) => {
-                              const highlighted = selectedPattern && rf.label === selectedPattern.meta
-                              return (
-                                <span key={rf.label} className="text-[10px] px-1.5 py-0.5 rounded font-semibold"
-                                      style={{ backgroundColor: highlighted ? '#DBEAFE' : '#F1F5F9', color: highlighted ? '#1E40AF' : '#64748B' }}>
-                                  {ABBREV[rf.label] || rf.label}
-                                </span>
-                              )
-                            })}
-                      </div>
-                    ) : (
-                      <span className={`text-[13px] ${r.rulesFiredCount > 0 ? 'text-slate-700 font-medium' : 'text-slate-300'}`}>
-                        {r.rulesFiredCount || '—'}
+// The physician table itself — shared between the dashboard card above and the
+// full-screen "All Physicians" view (AllPhysicians below), so columns/filters/
+// badges never drift apart between the two.
+function PhysicianTable({ rows, specialtyOptions, specialtyFilter, setSpecialtyFilter, statusFilter, setStatusFilter, onOpen }) {
+  return (
+    <div className="flex-1 min-h-0 overflow-auto -mx-[18px] px-[18px]">
+      <table className="w-full border-collapse text-[12.5px]">
+        <thead className="sticky top-0 z-10">
+          <tr>
+            <th className="text-left py-2 px-2.5 text-[10px] font-bold uppercase tracking-[0.04em] whitespace-nowrap"
+                style={{ color: N_500, background: '#F7F9FC', borderBottom: `1px solid ${N_100}` }}>
+              Physician
+            </th>
+            <DropdownFilterTh label="Specialty" options={specialtyOptions} value={specialtyFilter} onChange={setSpecialtyFilter} hide="md" />
+            {['Claims', 'Billed'].map((h) => (
+              <th key={h} className="text-left py-2 px-2.5 text-[10px] font-bold uppercase tracking-[0.04em] whitespace-nowrap text-right"
+                  style={{ color: N_500, background: '#F7F9FC', borderBottom: `1px solid ${N_100}` }}>
+                {h}
+              </th>
+            ))}
+            <th className="text-left py-2 px-2.5 text-[10px] font-bold uppercase tracking-[0.04em] whitespace-nowrap"
+                style={{ color: N_500, background: '#F7F9FC', borderBottom: `1px solid ${N_100}` }}>
+              Flags
+            </th>
+            <DropdownFilterTh label="Status" options={STATUS_FILTER_OPTIONS} value={statusFilter} onChange={setStatusFilter} />
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => {
+            const st = statusOf(r.score || 0)
+            return (
+              <tr key={r.id} onClick={() => onOpen(r)}
+                  className="cursor-pointer transition-colors hover:bg-[#F7F9FC]">
+                <td className="py-2 px-2.5" style={{ borderBottom: `1px solid ${N_100}` }}>
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold" style={{ color: NAVY }}>{r.name}</span>
+                    {r.needsManualReview && (
+                      <span title="Flagged for manual enrollment review" style={{ color: '#D1A85C' }}>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                          <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+                        </svg>
                       </span>
                     )}
-                  </td>
+                  </div>
+                </td>
+                <td className="py-2 px-2.5 hidden md:table-cell" style={{ color: N_600, borderBottom: `1px solid ${N_100}` }}>{r.specialty || '—'}</td>
+                <td className="py-2 px-2.5 text-right font-semibold tabular-nums" style={{ fontFamily: MONO, borderBottom: `1px solid ${N_100}` }}>{(r.totalClaims || 0).toLocaleString()}</td>
+                <td className="py-2 px-2.5 text-right font-semibold tabular-nums" style={{ fontFamily: MONO, borderBottom: `1px solid ${N_100}` }}>{fmtUSD(r.totalAmount)}</td>
+                <td className="py-2 px-2.5" style={{ borderBottom: `1px solid ${N_100}` }}>
+                  {r.physicianFlags > 0
+                    ? <span className="font-bold text-[11.5px]" style={{ color: '#8A423D' }}>↑ {r.physicianFlags}</span>
+                    : <span style={{ color: N_300 }}>—</span>}
+                </td>
+                <td className="py-2 px-2.5" style={{ borderBottom: `1px solid ${N_100}` }}>
+                  <span className="text-[10.5px] font-semibold px-2.5 py-[3px] rounded-full whitespace-nowrap" style={statusBadgeStyle(st.label)}>{st.label}</span>
+                </td>
+              </tr>
+            )
+          })}
+          {rows.length === 0 && (
+            <tr><td colSpan={6} className="py-10 text-center text-[12.5px]" style={{ color: N_400 }}>No physicians match this search.</td></tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  )
+}
 
-                  <td className="px-4 py-4 text-right tabular-nums">
-                    {r.physicianFlags > 0
-                      ? <span className="inline-flex items-center justify-center min-w-[22px] h-5 px-1.5 rounded-md text-[11px] font-bold bg-rose-50 text-rose-500 ring-1 ring-inset ring-rose-200">
-                          {r.physicianFlags}
-                        </span>
-                      : <span className="text-slate-300">—</span>}
-                  </td>
+// ─── Full-screen "All Physicians" table — opened by the dashboard table's
+// "View all →" link. Same columns/filters as the dashboard card, but the
+// table is the whole screen. ───────────────────────────────────────────────
+export function AllPhysicians({ setSelectedNPI, setActiveScreen, search = '' }) {
+  const [rows, setRows] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [statusFilter, setStatusFilter] = useState('')
+  const [specialtyFilter, setSpecialtyFilter] = useState('')
 
-                  <td className="px-4 py-4 hidden xl:table-cell text-[12px] text-slate-400">{r.topSupplier || '—'}</td>
-                </tr>
-              ))}
+  useEffect(() => {
+    let cancelled = false
+    getNpiRiskList({})
+      .then((r) => { if (!cancelled) { setRows(r); setLoading(false) } })
+      .catch((e) => { if (!cancelled) { setError(e?.message || 'Failed to load physicians'); setLoading(false) } })
+    return () => { cancelled = true }
+  }, [])
 
-              {sorted.length === 0 && (
-                <tr>
-                  <td colSpan={9} className="px-6 py-16 text-center">
-                    <p className="text-sm text-slate-400">No physicians match these filters.</p>
-                    <p className="text-xs text-slate-300 mt-1">Try adjusting your search or filters.</p>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* ── Pagination (shared) ─────────────────────────── */}
-        {sorted.length > visibleCount && (
-          <div className="px-4 sm:px-6 py-3 sm:py-4 border-t border-slate-100 flex items-center justify-between gap-4 bg-white">
-            <span className="text-[12px] text-slate-400">
-              Showing <span className="font-semibold text-slate-600">{visibleCount}</span> of{' '}
-              <span className="font-semibold text-slate-600">{sorted.length}</span>
-              <span className="hidden sm:inline"> physicians</span>
-            </span>
-            <button
-              onClick={() => setVisibleCount(v => Math.min(v + 15, sorted.length))}
-              className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-[12px] sm:text-[13px] font-semibold text-[#0d1f35] bg-[#EEF2F7] hover:bg-[#dde6f0] border border-[#1B3A5C]/10 transition-colors">
-              Show next {Math.min(15, sorted.length - visibleCount)}
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="6 9 12 15 18 9"/>
-              </svg>
-            </button>
-          </div>
-        )}
-
-        {sorted.length > 0 && visibleCount >= sorted.length && sorted.length > 15 && (
-          <div className="px-4 sm:px-6 py-3.5 border-t border-slate-100 flex items-center justify-between bg-white">
-            <span className="text-[12px] text-slate-400">All <span className="font-semibold text-slate-600">{sorted.length}</span> physicians shown</span>
-            <button onClick={() => setVisibleCount(15)} className="text-[12px] font-medium text-slate-400 hover:text-slate-600 transition-colors">
-              Collapse ↑
-            </button>
-          </div>
-        )}
-
+  if (error) return (
+    <div className="w-full px-4 sm:px-7 py-5 sm:py-6">
+      <div className="mc-card border-[#EBD3D1] bg-[#F7EBEA]/50 px-6 py-5 text-sm">
+        <span className="font-semibold text-[#A6453F]">Couldn't load physicians:</span>{' '}
+        <span className="text-slate-500">{error}</span>
       </div>
+    </div>
+  )
+  if (loading) return <div className="w-full px-4 sm:px-7 py-5 sm:py-6"><TableSkeleton rows={12} /></div>
+
+  const sorted = rows.slice().sort((a, b) => (b.score || 0) - (a.score || 0))
+  const specialtyOptions = [{ id: '', label: 'All' }, ...[...new Set(rows.map((r) => r.specialty).filter(Boolean))].sort().map((s) => ({ id: s, label: s }))]
+  const q = search.trim().toLowerCase()
+  const tableRows = sorted
+    .filter((r) => !q || r.name?.toLowerCase().includes(q) || r.npi?.includes(q) || r.specialty?.toLowerCase().includes(q))
+    .filter((r) => !statusFilter || statusOf(r.score || 0).label === statusFilter)
+    .filter((r) => !specialtyFilter || r.specialty === specialtyFilter)
+
+  return (
+    <div className="w-full h-full flex flex-col min-h-0 px-4 sm:px-7 pt-4 pb-5">
+      <Card className="flex-1 min-h-0 flex flex-col !py-4">
+        <div className="flex-shrink-0 flex items-baseline justify-between gap-3 mb-2">
+          <div>
+            <h3 className="text-[15px] font-bold" style={{ fontFamily: HEADING, color: NAVY }}>All physicians</h3>
+            <span className="text-[10.5px]" style={{ color: N_500 }}>
+              {tableRows.length.toLocaleString()} of {rows.length.toLocaleString()} physicians, sorted by risk
+            </span>
+          </div>
+        </div>
+        <PhysicianTable
+          rows={tableRows}
+          specialtyOptions={specialtyOptions}
+          specialtyFilter={specialtyFilter} setSpecialtyFilter={setSpecialtyFilter}
+          statusFilter={statusFilter} setStatusFilter={setStatusFilter}
+          onOpen={(r) => { setSelectedNPI(r); setActiveScreen('detail') }}
+        />
+      </Card>
     </div>
   )
 }

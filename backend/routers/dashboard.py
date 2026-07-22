@@ -10,8 +10,8 @@ from sqlalchemy.orm import Session
 
 from backend.database import get_db
 from backend.config import get_settings
-from backend.models import NpiRiskScore, NpiProfile, Claim, Action, ActionStatusLog, RulesFlag, User, DisputeCase, SupplierProfile, ClaimNotification, Physician
-from backend.rules.trigger_engine import escalate_overdue_disputes
+from backend.models import NpiRiskScore, NpiProfile, Claim, Action, ActionStatusLog, RulesFlag, User, DisputeCase, DisputeCaseEvent, SupplierProfile, ClaimNotification, Physician
+from backend.rules.trigger_engine import escalate_overdue_disputes, serialize_dispute_events, record_dispute_event, broadcast_dispute_event
 from backend.schemas import (
     PlanSummaryResponse, NpiRiskRow, NpiRiskPageResponse,
     NpiDetailResponse, SupplierWatchlistRow, SupplierPageResponse,
@@ -22,7 +22,7 @@ from backend.ai_summary import generate_npi_summary
 from backend.routers.claims import build_claims_page
 
 router = APIRouter()
-FLAG_ACTIONS = ("flag_supplier", "unknown_patient", "did_not_order")
+FLAG_ACTIONS = ("flag_supplier", "unknown_patient", "did_not_order", "deceased_patient")
 # pending → under_review → (acknowledged | case_opened | dismissed)
 VALID_PLAN_STATUS = ("pending", "under_review", "acknowledged", "case_opened", "dismissed")
 RESOLVED_STATUS = ("acknowledged", "case_opened", "dismissed")
@@ -226,11 +226,11 @@ def get_npi_detail(npi: str, db: Session = Depends(get_db)):
         if score.geo_flag:
             breakdown.append({"factor": "Geographic anomaly", "points": settings.weight_geo_anomaly, "rule": "geographic_anomaly"})
         if score.cross_npi_flag:
-            breakdown.append({"factor": "Cross-NPI supplier", "points": settings.weight_cross_npi, "rule": "cross_npi_supplier"})
+            breakdown.append({"factor": "Cross-NPI vendor", "points": settings.weight_cross_npi, "rule": "cross_npi_supplier"})
         if score.oig_flag:
             breakdown.append({"factor": "OIG LEIE hit", "points": settings.weight_oig_hit, "rule": "oig_leie_hit"})
         if score.new_vendor_flag:
-            breakdown.append({"factor": "New high-value supplier", "points": settings.weight_new_vendor, "rule": "new_high_value_supplier"})
+            breakdown.append({"factor": "New high-value vendor", "points": settings.weight_new_vendor, "rule": "new_high_value_supplier"})
         if getattr(score, "identity_reuse_flag", False):
             breakdown.append({"factor": "Patient identity reuse", "points": settings.weight_identity_reuse, "rule": "identity_reuse"})
         if getattr(score, "hospice_duration_flag", False):
@@ -252,10 +252,10 @@ def get_npi_detail(npi: str, db: Session = Depends(get_db)):
         if score.physician_flag_count > 0:
             prows = (db.query(Action.action_type, func.count(Action.id))
                      .filter(Action.npi == npi,
-                             Action.action_type.in_(("flag_supplier", "unknown_patient", "did_not_order")))
+                             Action.action_type.in_(("flag_supplier", "unknown_patient", "did_not_order", "deceased_patient")))
                      .group_by(Action.action_type).all())
             pc = {a: c for a, c in prows}
-            flags = pc.get("flag_supplier", 0) + pc.get("unknown_patient", 0)
+            flags = pc.get("flag_supplier", 0) + pc.get("unknown_patient", 0) + pc.get("deceased_patient", 0)
             denials = pc.get("did_not_order", 0)
             pts = min(flags * settings.weight_per_physician_flag
                       + denials * settings.weight_did_not_order,
@@ -353,12 +353,12 @@ RULE_INFO = {
         "This provider's claim rate in the last 30 days is far above their own prior baseline — a sign of sudden over-billing."),
     "geographic_anomaly": ("Geographic Anomaly",
         "Claims were filed for patients located far from the provider's practice address — unusual for legitimate care."),
-    "cross_npi_supplier": ("Cross-NPI Supplier",
-        "A supplier on these claims bills under many unrelated physician NPIs — the classic kickback-ring pattern."),
+    "cross_npi_supplier": ("Cross-NPI Vendor",
+        "A vendor on these claims bills under many unrelated physician NPIs — the classic kickback-ring pattern."),
     "oig_leie_hit": ("OIG LEIE Hit",
-        "A supplier on these claims appears on the federal OIG exclusion list — Medicare/Medicaid cannot reimburse excluded providers."),
-    "new_high_value_supplier": ("New High-Value Supplier",
-        "A brand-new supplier relationship appeared with unusually high-dollar claims."),
+        "A vendor on these claims appears on the federal OIG exclusion list — Medicare/Medicaid cannot reimburse excluded providers."),
+    "new_high_value_supplier": ("New High-Value Vendor",
+        "A brand-new vendor relationship appeared with unusually high-dollar claims."),
     "identity_reuse": ("Patient Identity Reuse",
         "The same patient is billed under multiple unrelated physician NPIs — a phantom-billing / identity-reuse signal."),
     "abnormal_hospice_duration": ("Abnormal Hospice Duration",
@@ -377,8 +377,8 @@ RULE_INFO = {
         "Near-identical services were billed separately for the same patient on the same date — consistent with reworded line items to bypass duplicate checks."),
     "rapid_cycling": ("Rapid Patient Cycling",
         "The provider billed an unusually high number of distinct patients in one day — implausible patient turnover."),
-    "supplier_concentration": ("Supplier Concentration",
-        "An unusually large share of this provider's billing flows through a single supplier — consistent with a kickback or referral relationship."),
+    "supplier_concentration": ("Vendor Concentration",
+        "An unusually large share of this provider's billing flows through a single vendor — consistent with a kickback or referral relationship."),
 }
 
 # New rules + their NPI-detail breakdown weight (the per-unit caps live in the scorer;
@@ -388,7 +388,7 @@ NEW_RULE_BREAKDOWN = [
     ("impossible_day", "Impossible day", 40),
     ("modifier_abuse", "Modifier abuse", 24),
     ("rapid_cycling", "Rapid patient cycling", 30),
-    ("supplier_concentration", "Supplier concentration", 18),
+    ("supplier_concentration", "Vendor concentration", 18),
 ]
 
 
@@ -545,7 +545,7 @@ def get_supplier_physicians(supplier_id: str, db: Session = Depends(get_db)):
 
     if not npi_rows:
         raise HTTPException(status_code=404, detail={
-            "error": "Supplier not found", "code": "SUPPLIER_NOT_FOUND"})
+            "error": "Vendor not found", "code": "SUPPLIER_NOT_FOUND"})
 
     result = []
     for row in npi_rows:
@@ -713,6 +713,7 @@ def get_plan_disputes(status: str = Query("open"), db: Session = Depends(get_db)
 
     escalate_overdue_disputes(db)
     now = datetime.now(timezone.utc).replace(tzinfo=None)
+    base = get_settings().base_url.rstrip("/")
 
     query = (
         db.query(DisputeCase, SupplierProfile.supplier_name, ClaimNotification)
@@ -755,6 +756,7 @@ def get_plan_disputes(status: str = Query("open"), db: Session = Depends(get_db)
             "closed_at":                    case.closed_at.isoformat() if case.closed_at else None,
             "resolution_notes":             case.resolution_notes,
             "escalation_unlocked":          case.escalation_unlocked,
+            "events":                       serialize_dispute_events(db, case.case_id, base),
             "claim": {
                 "patient_name_partial": notif.patient_name_partial,
                 "dos_from":             str(notif.dos_from) if notif.dos_from else None,
@@ -769,3 +771,164 @@ def get_plan_disputes(status: str = Query("open"), db: Session = Depends(get_db)
             },
         })
     return {"disputes": result, "total": len(result)}
+
+
+# ---------------------------------------------------------------------------
+# POST /plan/disputes/{case_id}/compliance-action — compliance records a
+# decision on an escalated (non-responsive) dispute case. Two of the four
+# actions resolve the case (moving it into _RESOLVED_STATUSES above); the
+# other two just log a note without changing where the case sits.
+# ---------------------------------------------------------------------------
+COMPLIANCE_ACTION_LABEL = {
+    "REFER_TO_MEDICARE":   "Referred to Medicare",
+    "SUSPEND_SUPPLIER":    "Supplier enrollment suspended",
+    "REQUEST_DOCS":        "Requested more documentation",
+    "CLOSE_INVESTIGATION": "Investigation closed",
+}
+
+
+class ComplianceActionRequest(BaseModel):
+    action: str
+    notes: Optional[str] = None
+
+
+@router.post("/plan/disputes/{case_id}/compliance-action")
+def submit_compliance_action(case_id: int, body: ComplianceActionRequest, request: Request,
+                              db: Session = Depends(get_db)):
+    if body.action not in COMPLIANCE_ACTION_LABEL:
+        raise HTTPException(status_code=422, detail={
+            "error": f"action must be one of {list(COMPLIANCE_ACTION_LABEL)}", "code": "INVALID_ACTION"})
+
+    case = db.query(DisputeCase).filter(DisputeCase.case_id == case_id).first()
+    if not case:
+        raise HTTPException(status_code=404, detail={"error": "Case not found", "code": "CASE_NOT_FOUND"})
+
+    # response_type carries the action code (frontend maps it to a label,
+    # same convention VENDOR_RESPONDED uses) — notes stay separate free text
+    # instead of being flattened into one string, so the UI can render them
+    # as a distinct quoted line under the action label.
+    record_dispute_event(db, case, "COMPLIANCE_ACTION", "COMPLIANCE",
+                          response_type=body.action, note=body.notes)
+
+    if body.action == "REFER_TO_MEDICARE":
+        case.status = "REFERRED_OIG"
+        case.closed_at = datetime.utcnow()
+        case.resolution_notes = body.notes
+    elif body.action == "CLOSE_INVESTIGATION":
+        case.status = "CLOSED"
+        case.closed_at = datetime.utcnow()
+        case.resolution_notes = body.notes
+    elif body.action == "SUSPEND_SUPPLIER" and case.vendor_npi:
+        supplier = db.query(SupplierProfile).filter(SupplierProfile.npi == case.vendor_npi).first()
+        if supplier:
+            supplier.oig_excluded = True
+    # REQUEST_DOCS leaves status untouched — just the logged note above.
+
+    db.commit()
+    broadcast_dispute_event(case, "compliance_action")
+    return {"ok": True, "status": case.status}
+
+
+# ---------------------------------------------------------------------------
+# GET /plan/notifications — compliance bell dropdown
+# ---------------------------------------------------------------------------
+
+# Exactly three kinds of activity reach the compliance bell:
+# (1) a physician marking a claim (dispute/fraud/deceased — DISPUTE_OPENED,
+#     plus the flag Actions below), (2) the vendor's response landing or the
+#     response window expiring unanswered, (3) the physician's approve/decline
+#     verdict on the vendor's response.
+_PLAN_NOTIFICATION_EVENTS = (
+    "DISPUTE_OPENED", "VENDOR_RESPONDED", "NON_RESPONSIVE",
+    "PHYSICIAN_CONFIRMED", "PHYSICIAN_REJECTED",
+)
+_PLAN_EVENT_TITLES = {
+    "PHYSICIAN_CONFIRMED":  "Physician approved vendor's documents",
+    "PHYSICIAN_REJECTED":   "Physician declined vendor's documents — referred to you",
+    "NON_RESPONSIVE":       "Vendor did not respond — escalated",
+}
+# Which of the bell's three filter tabs each event belongs to:
+# reported = a physician marked a claim, response = the vendor's docs landed
+# or the window expired unanswered, decision = the physician's verdict.
+_PLAN_EVENT_GROUPS = {
+    "DISPUTE_OPENED":       "reported",
+    "VENDOR_RESPONDED":     "response",
+    "NON_RESPONSIVE":       "response",
+    "PHYSICIAN_CONFIRMED":  "decision",
+    "PHYSICIAN_REJECTED":   "decision",
+}
+_PLAN_ACTION_TITLES = {
+    "flag_supplier":  "Vendor flagged",
+    "unknown_patient": "Unknown patient flagged",
+    "did_not_order":  "Did-not-order flagged",
+    "deceased_patient": "Deceased patient flagged",
+}
+
+
+@router.get("/plan/notifications")
+def get_plan_notifications(request: Request, db: Session = Depends(get_db)):
+    """Recent activity for the compliance bell dropdown — the same dispute-case
+    event log and flag Actions that already drive this role's unread count
+    (auth.py's /notifications/count sees everything, unfiltered by type/case),
+    just shaped into a displayable list instead of a bare number."""
+    email = _investigator_email(request)
+    user = db.query(User).filter(User.email == email).first() if email else None
+    since = user.last_alert_seen_at if user and user.last_alert_seen_at else datetime(1970, 1, 1)
+
+    event_rows = (
+        db.query(DisputeCaseEvent, DisputeCase, ClaimNotification)
+        .join(DisputeCase, DisputeCase.case_id == DisputeCaseEvent.case_id)
+        .join(ClaimNotification, ClaimNotification.notification_id == DisputeCase.notification_id)
+        .filter(DisputeCaseEvent.event_type.in_(_PLAN_NOTIFICATION_EVENTS))
+        .order_by(DisputeCaseEvent.created_at.desc())
+        .limit(20)
+        .all()
+    )
+    action_rows = (
+        db.query(Action)
+        .filter(Action.action_type.in_(FLAG_ACTIONS))
+        .order_by(Action.created_at.desc())
+        .limit(20)
+        .all()
+    )
+
+    notifications = []
+    for event, case, notif in event_rows:
+        is_fraud = case.dispute_type == "FRAUD_REPORT"
+        is_deceased = case.dispute_type == "DECEASED_PATIENT"
+        claim_number = notif.claim_ccn or notif.claim_number
+        if event.event_type == "DISPUTE_OPENED":
+            title = ("Deceased patient reported" if is_deceased
+                     else "Fraud reported" if is_fraud
+                     else "New dispute filed")
+        elif event.event_type == "VENDOR_RESPONDED":
+            title = "Vendor uploaded proof-of-work documents"
+        else:
+            title = _PLAN_EVENT_TITLES.get(event.event_type, event.event_type)
+        notifications.append({
+            "id":           f"event-{event.event_id}",
+            "category":     "deceased" if is_deceased else "fraud" if is_fraud else "dispute",
+            "group":        _PLAN_EVENT_GROUPS.get(event.event_type, "reported"),
+            "title":        title,
+            "description":  f"Claim {claim_number}" + (f" — {event.note}" if event.note else ""),
+            "created_at":   event.created_at.isoformat(),
+            "case_id":      case.case_id,
+            "claim_number": claim_number,
+            "read":         event.created_at <= since,
+        })
+
+    for a in action_rows:
+        notifications.append({
+            "id":           f"action-{a.id}",
+            "category":     "deceased" if a.action_type == "deceased_patient" else "flag",
+            "group":        "reported",  # flag actions are all "physician marked a claim"
+            "title":        _PLAN_ACTION_TITLES.get(a.action_type, a.action_type),
+            "description":  f"{a.vendor_name} — {a.patient_name}",
+            "created_at":   a.created_at.isoformat() if a.created_at else None,
+            "case_id":      None,
+            "claim_number": None,
+            "read":         (a.created_at <= since) if a.created_at else True,
+        })
+
+    notifications.sort(key=lambda n: n["created_at"] or "", reverse=True)
+    return {"notifications": notifications[:30]}

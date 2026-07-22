@@ -39,6 +39,12 @@ export default {
           400: '#1c1c22',
           300: '#26262e',
         },
+        // Vendor portal theme (navy / steel-blue / beige / cream) — rolling out
+        // across the vendor portal starting with the dashboard KPI cards.
+        vendorNavy:  '#213555',
+        vendorSteel: '#3E5879',
+        vendorBeige: '#D8C4B6',
+        vendorCream: '#F5EFE7',
         // MedClaim Analytics light theme
         sidebar: '#1B3A5C',
         ink: {

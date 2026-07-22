@@ -1,36 +1,13 @@
 import { useState, useEffect, useRef } from 'react'
 import { getSupplierPhysicians, getAlertsHistory } from '../../api'
 import { Icon, RiskPill, fmtUSD, timeAgo } from '../../components/ui'
-
-function KpiCard({ icon, label, value, accent = 'slate', onClick }) {
-  const styles = {
-    slate:  { icon: 'bg-slate-100 text-slate-500'    },
-    rose:   { icon: 'bg-rose-50 text-rose-500'       },
-    blue:   { icon: 'bg-blue-50 text-blue-500'       },
-    amber:  { icon: 'bg-amber-50 text-amber-500'     },
-    emerald:{ icon: 'bg-emerald-50 text-emerald-600' },
-  }
-  const s = styles[accent] || styles.slate
-  const cls = `mc-card px-3 sm:px-5 py-3 sm:py-4 flex flex-col gap-2 sm:gap-3 hover:-translate-y-0.5 hover:shadow-[0_8px_24px_-6px_rgba(15,23,42,0.10)] hover:border-slate-200 transition-all duration-200 ${onClick ? 'cursor-pointer' : ''}`
-  const inner = (
-    <>
-      <div className="flex items-start justify-between gap-2">
-        <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none pt-0.5">{label}</span>
-        <div className={`w-6 h-6 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center shrink-0 ${s.icon}`}>
-          <Icon name={icon} size={12} />
-        </div>
-      </div>
-      <div className="text-[1.3rem] sm:text-[1.6rem] font-bold tabular-nums leading-none tracking-tight text-slate-900 truncate">{value}</div>
-    </>
-  )
-  if (onClick) return <button onClick={onClick} className={cls + ' text-left w-full'}>{inner}</button>
-  return <div className={cls}>{inner}</div>
-}
+import { KpiCard } from '../../components/ui/kpi-card'
 
 const ALERT_META = {
-  flagged:        { icon: 'flag',  chip: 'bg-amber-50 text-amber-500',  label: 'Flag Supplier'   },
-  unknownPatient: { icon: 'userx', chip: 'bg-rose-50 text-rose-500',    label: 'Unknown Patient' },
-  deniedOrder:    { icon: 'ban',   chip: 'bg-rose-50 text-rose-600',    label: 'Did Not Order'   },
+  flagged:         { icon: 'flag',     chip: 'bg-[#FBF3E4] text-[#D1A85C]',  label: 'Flag Vendor'      },
+  unknownPatient:  { icon: 'userx',    chip: 'bg-[#F7EBEA] text-[#A6453F]',  label: 'Unknown Patient'  },
+  deceasedPatient: { icon: 'heartOff', chip: 'bg-[#F2EEF7] text-[#7A6899]',  label: 'Deceased Patient' },
+  deniedOrder:     { icon: 'ban',      chip: 'bg-[#F7EBEA] text-[#8A423D]',  label: 'Did Not Order'    },
 }
 
 const PHYS_COLUMNS = [
@@ -69,7 +46,7 @@ export default function SupplierDetail({ supplier, onBack, onSelectPhysician }) 
     setPhysSort((p) => p.key !== key ? { key, dir: 'asc' } : p.dir === 'asc' ? { key, dir: 'desc' } : { key: null, dir: null })
   }
 
-  if (!supplier) return <div className="w-full px-4 sm:px-7 py-5 sm:py-7 text-slate-500">No supplier selected.</div>
+  if (!supplier) return <div className="w-full px-4 sm:px-7 py-5 sm:py-7 text-slate-500">No vendor selected.</div>
 
   const physicians = data?.physicians || []
   const sortedPhysicians = (() => {
@@ -88,11 +65,11 @@ export default function SupplierDetail({ supplier, onBack, onSelectPhysician }) 
 
       {/* ── Header ── */}
       <div className="mc-card px-4 sm:px-6 py-3 sm:py-4 mb-4 sm:mb-6 flex items-start sm:items-center gap-3 sm:gap-4">
-        <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-rose-50 text-rose-500 ring-1 ring-rose-100 flex items-center justify-center shrink-0 mt-0.5 sm:mt-0">
+        <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#F7EBEA] text-[#A6453F] ring-1 ring-[#EBD3D1] flex items-center justify-center shrink-0 mt-0.5 sm:mt-0">
           <Icon name="suppliers" size={16} />
         </div>
         <div className="min-w-0 flex-1">
-          <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-widest">Supplier Case</span>
+          <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-widest">Vendor Case</span>
           <h1 className="text-[15px] sm:text-[17px] font-bold text-slate-900 leading-tight truncate">{supplier.name}</h1>
           {/* Badges on mobile — below name */}
           <div className="flex items-center gap-2 mt-1.5 sm:hidden flex-wrap">
@@ -115,12 +92,24 @@ export default function SupplierDetail({ supplier, onBack, onSelectPhysician }) 
         </div>
       </div>
 
-      {/* ── KPI grid ── */}
+      {/* ── KPI grid — shared moodboard KpiCard (glow circle, icon badge,
+           colored progress track), same recipe as the physician dashboard ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-4 sm:mb-6">
-        <KpiCard icon="users" label="Distinct NPIs"   value={supplier.distinctNPIs}       accent="slate"   onClick={() => scrollTo(physiciansRef)} />
-        <KpiCard icon="flag"  label="Physician Flags" value={supplier.physicianFlags}      accent="rose"    onClick={() => scrollTo(flagsRef)} />
-        <KpiCard icon="bolt"  label="Total Billed"    value={fmtUSD(supplier.totalAmount)} accent="blue" />
-        <KpiCard icon="ban"   label="Denials"         value={data?.totalDenials ?? 0}      accent="amber" />
+        <KpiCard tone="default" label="Distinct NPIs" value={supplier.distinctNPIs}
+                 sub="Physicians billing this vendor"
+                 icon={<Icon name="users" size={16} />}
+                 onClick={() => scrollTo(physiciansRef)} />
+        <KpiCard tone={supplier.physicianFlags > 0 ? 'danger' : 'default'} label="Physician Flags" value={supplier.physicianFlags}
+                 sub="Raised by physicians" pct={supplier.physicianFlags > 0 ? 100 : 0}
+                 icon={<Icon name="flag" size={16} />}
+                 onClick={() => scrollTo(flagsRef)} />
+        <KpiCard tone="ai" label="Total Billed" value={fmtUSD(supplier.totalAmount)}
+                 sub="Across all claims"
+                 icon={<Icon name="bolt" size={16} />}
+                 onClick={() => { setPhysSort({ key: 'billed', dir: 'desc' }); scrollTo(physiciansRef) }} />
+        <KpiCard tone="warning" label="Denials" value={data?.totalDenials ?? 0}
+                 sub="Claims denied to date" pct={(data?.totalDenials ?? 0) > 0 ? 100 : 0}
+                 icon={<Icon name="ban" size={16} />} />
       </div>
 
       {/* ── Two-column panels ── */}
@@ -129,12 +118,12 @@ export default function SupplierDetail({ supplier, onBack, onSelectPhysician }) 
         {/* Physicians billing this supplier */}
         <div ref={physiciansRef} className="mc-card overflow-hidden scroll-mt-20">
           <div className="px-4 sm:px-5 py-3 sm:py-4 border-b border-slate-100">
-            <h2 className="text-sm font-bold text-slate-900">Physicians Billing This Supplier ({physicians.length})</h2>
+            <h2 className="text-sm font-bold text-slate-900">Physicians Billing This Vendor ({physicians.length})</h2>
           </div>
 
           {/* Mobile card view (< sm) */}
           <div className="sm:hidden divide-y divide-slate-100">
-            {error && <div className="px-4 py-4 text-rose-600 text-sm">{error}</div>}
+            {error && <div className="px-4 py-4 text-[#A6453F] text-sm">{error}</div>}
             {!error && physicians.length === 0 && (
               <div className="px-4 py-8 text-center text-sm text-slate-400">Loading…</div>
             )}
@@ -160,7 +149,7 @@ export default function SupplierDetail({ supplier, onBack, onSelectPhysician }) 
                   {p.flagsOnThisSupplier > 0 && (
                     <>
                       <span className="text-slate-300">·</span>
-                      <span className="font-bold text-rose-500 tabular-nums">{p.flagsOnThisSupplier} flags</span>
+                      <span className="font-bold text-[#A6453F] tabular-nums">{p.flagsOnThisSupplier} flags</span>
                     </>
                   )}
                   {p.hasDenied && <span className="pill pill-critical text-[10px]">DENIED</span>}
@@ -179,10 +168,10 @@ export default function SupplierDetail({ supplier, onBack, onSelectPhysician }) 
                     return (
                       <th key={c.key} onClick={() => onPhysSort(c.key)}
                           className={`th cursor-pointer select-none group ${c.right ? 'text-right' : ''} ${c.cls || ''}`}>
-                        <span className="inline-flex items-center gap-1 group-hover:text-[#1E3A5F] transition-colors">
+                        <span className="inline-flex items-center gap-1 group-hover:text-[#0A1F3D] transition-colors">
                           {c.label}
                           {active
-                            ? <span className="text-[#1E3A5F]">{physSort.dir === 'asc' ? '↑' : '↓'}</span>
+                            ? <span className="text-[#0A1F3D]">{physSort.dir === 'asc' ? '↑' : '↓'}</span>
                             : <span className="text-slate-300 group-hover:text-slate-500 transition-colors">↕</span>}
                         </span>
                       </th>
@@ -191,14 +180,14 @@ export default function SupplierDetail({ supplier, onBack, onSelectPhysician }) 
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {error && <tr><td colSpan={4} className="td text-rose-600 text-sm">{error}</td></tr>}
+                {error && <tr><td colSpan={4} className="td text-[#A6453F] text-sm">{error}</td></tr>}
                 {!error && physicians.length === 0 && (
                   <tr><td colSpan={4} className="td text-slate-400 text-sm">Loading…</td></tr>
                 )}
                 {sortedPhysicians.map((p) => (
                   <tr key={p.npi} onClick={() => onSelectPhysician?.({ npi: p.npi, name: p.name })}
                       title={`Open NPI detail for ${p.name}`}
-                      className="group cursor-pointer transition-colors hover:bg-[#F9FAFB]">
+                      className="group cursor-pointer transition-colors hover:bg-[#F7F9FC]">
                     <td className="td">
                       <div className="font-semibold text-slate-800 text-sm">{p.name}</div>
                       <div className="text-[11px] text-slate-400 tabular-nums">{p.npi} · {p.city}{p.state ? `, ${p.state}` : ''}</div>
@@ -209,7 +198,7 @@ export default function SupplierDetail({ supplier, onBack, onSelectPhysician }) 
                       <span className="inline-flex items-center justify-end gap-2">
                         <span>
                           {p.flagsOnThisSupplier > 0
-                            ? <span className="font-bold text-rose-500">{p.flagsOnThisSupplier}</span>
+                            ? <span className="font-bold text-[#A6453F]">{p.flagsOnThisSupplier}</span>
                             : <span className="text-slate-300">—</span>}
                           {p.hasDenied && <span className="ml-1 pill pill-critical">DENIED</span>}
                         </span>
@@ -233,7 +222,7 @@ export default function SupplierDetail({ supplier, onBack, onSelectPhysician }) 
           <div className="divide-y divide-slate-100 max-h-[360px] sm:max-h-[420px] overflow-y-auto">
             {flags.length === 0 && (
               <div className="px-4 sm:px-5 py-8 text-center text-sm text-slate-400">
-                No physician flags on this supplier.
+                No physician flags on this vendor.
               </div>
             )}
             {flags.map((a) => {

@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Sentinel Claims — Design Moodboard v2</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --navy-900:#0A1F3D; --navy-800:#12335E; --blue-600:#3E5F94; --slate-blue:#5B84C4; --sky:#6FB4E6;
+  --pale-blue:#AFC3E8; --palest-blue:#DCE6F7;
+  --success:#3A7D5C; --warning:#D1A85C; --error:#A6453F; --info:#5A9BC9; --ai:#2E6B8F;
+  --success-bg:#E9F3ED; --warning-bg:#FBF3E4; --error-bg:#F7EBEA; --info-bg:#E9F0F6; --ai-bg:#EAF1F5;
+  --success-tx:#2E6B4F; --warning-tx:#8A6A34; --error-tx:#8A423D; --info-tx:#35607D; --ai-tx:#2E6B8F;
+  --n-900:#0B1626; --n-800:#17233A; --n-700:#2B3A52; --n-600:#46586F; --n-500:#647089; --n-400:#93A0B3;
+  --n-300:#C7D0DE; --n-200:#E1E6EE; --n-100:#F1F4F9; --n-50:#F7F9FC; --surface:#FFFFFF;
+  --font-display:'Manrope',sans-serif; --font-body:'Inter',sans-serif; --font-mono:'JetBrains Mono',monospace;
+  --shadow-sm:0 1px 2px rgba(10,31,61,.05), 0 1px 1px rgba(10,31,61,.03);
+  --shadow-md:0 8px 20px rgba(10,31,61,.07), 0 1px 2px rgba(10,31,61,.04);
+  --shadow-lg:0 16px 40px rgba(10,31,61,.12), 0 2px 8px rgba(10,31,61,.05);
+}
+*{box-sizing:border-box;}
+html{scroll-behavior:smooth;}
+body{margin:0; background:var(--n-50); color:var(--n-800); font-family:var(--font-body); font-size:14px; line-height:1.5; -webkit-font-smoothing:antialiased;}
+h1,h2,h3,h4{font-family:var(--font-display); color:var(--navy-900); margin:0;}
+p{margin:0;} a{color:inherit; text-decoration:none;}
+::selection{background:var(--palest-blue); color:var(--navy-900);}
+
+.doc-topbar{position:sticky; top:0; z-index:50; background:rgba(255,255,255,.92); backdrop-filter:blur(10px); border-bottom:1px solid var(--n-200); padding:14px 32px;}
+.doc-topbar-inner{max-width:1360px; margin:0 auto; display:flex; align-items:center; justify-content:space-between; gap:24px; flex-wrap:wrap;}
+.doc-brand{display:flex; align-items:center; gap:10px;}
+.doc-brand-mark{width:30px; height:30px; border-radius:8px; background:linear-gradient(135deg,var(--slate-blue),var(--navy-900)); display:flex; align-items:center; justify-content:center; color:#fff;}
+.doc-brand-text{font-family:var(--font-display); font-weight:700; font-size:15px; color:var(--navy-900); letter-spacing:-.01em;}
+.doc-brand-sub{font-size:11px; color:var(--n-500); font-weight:500;}
+.doc-nav{display:flex; gap:2px; flex-wrap:wrap;}
+.doc-nav a{font-size:12.5px; color:var(--n-600); font-weight:500; padding:6px 10px; border-radius:7px; white-space:nowrap;}
+.doc-nav a:hover{background:var(--n-100); color:var(--navy-900);}
+
+.wrap{max-width:1360px; margin:0 auto; padding:0 32px;}
+.hero{padding:72px 32px 56px;}
+.hero-inner{max-width:1360px; margin:0 auto;}
+.hero-eyebrow{display:inline-flex; align-items:center; gap:6px; background:var(--palest-blue); color:var(--navy-900); font-size:12px; font-weight:600; padding:6px 12px; border-radius:100px; margin-bottom:20px;}
+.hero h1{font-size:42px; font-weight:800; letter-spacing:-.02em; line-height:1.1; max-width:820px;}
+.hero p.lead{margin-top:16px; font-size:16px; color:var(--n-600); max-width:640px; line-height:1.6;}
+.hero-tags{display:flex; gap:8px; flex-wrap:wrap; margin-top:28px;}
+.hero-tag{font-size:12px; font-weight:600; color:var(--n-600); background:var(--surface); border:1px solid var(--n-200); padding:6px 12px; border-radius:100px;}
+
+section.block{padding:56px 32px; border-top:1px solid var(--n-200);}
+.block-inner{max-width:1360px; margin:0 auto;}
+.block-head{display:flex; align-items:baseline; justify-content:space-between; gap:24px; margin-bottom:32px; flex-wrap:wrap;}
+.block-head h2{font-size:26px; font-weight:700; letter-spacing:-.01em;}
+.block-num{font-family:var(--font-mono); font-size:12px; color:var(--n-400); font-weight:500;}
+.block-desc{color:var(--n-500); font-size:13.5px; max-width:580px; margin-top:6px;}
+.sub-label{font-family:var(--font-mono); font-size:11px; font-weight:500; text-transform:uppercase; letter-spacing:.06em; color:var(--n-400); margin:0 0 14px;}
+
+.grid{display:grid; gap:16px;}
+.g2{grid-template-columns:repeat(2,1fr);} .g3{grid-template-columns:repeat(3,1fr);}
+.g4{grid-template-columns:repeat(4,1fr);} .g5{grid-template-columns:repeat(5,1fr);} .g6{grid-template-columns:repeat(6,1fr);}
+@media(max-width:1100px){.g6{grid-template-columns:repeat(3,1fr);} .g5{grid-template-columns:repeat(3,1fr);} .g4{grid-template-columns:repeat(2,1fr);}}
+@media(max-width:700px){.g2,.g3,.g4,.g5,.g6{grid-template-columns:repeat(2,1fr);}}
+
+.card-frame{background:var(--surface); border:1px solid var(--n-200); border-radius:16px; box-shadow:var(--shadow-sm);}
+.pad{padding:24px;}
+.icon{width:18px; height:18px; stroke:currentColor; fill:none; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; display:block;}
+
+/* ===== Glass buttons (locked, universal) ===== */
+.gbtn{ font-family:var(--font-body); font-weight:600; font-size:13.5px; border-radius:10px; padding:9px 16px; cursor:pointer;
+  display:inline-flex; align-items:center; gap:7px; transition:box-shadow .15s ease, transform .1s ease; border:1px solid var(--n-300);
+  background:linear-gradient(180deg,#fff,#F6F8FB); color:var(--n-700); box-shadow:inset 0 1px 0 #fff, 0 1px 2px rgba(10,31,61,.04); }
+.gbtn:hover{ border-color:var(--n-400); }
+.gbtn:active{ transform:scale(.98); }
+.gbtn-primary{ background:linear-gradient(180deg,var(--navy-800),var(--navy-900)); border-color:var(--navy-900); color:#fff;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.18), 0 8px 18px rgba(10,31,61,.28); }
+.gbtn-ai{ background:linear-gradient(180deg,#3E7FA6,var(--ai)); border-color:#2A5F80; color:#fff;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.25), 0 8px 18px rgba(46,107,143,.28); }
+.gbtn-danger{ background:linear-gradient(180deg,#C4655D,var(--error)); border-color:#8A3B35; color:#fff;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.2), 0 8px 18px rgba(166,69,63,.25); }
+.gbtn-success{ background:linear-gradient(180deg,#5CAE8A,var(--success)); border-color:#2E6B4F; color:#fff;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.2), 0 8px 18px rgba(58,125,92,.25); }
+.gbtn-sm{ padding:6px 12px; font-size:12.5px; border-radius:8px; }
+.gbtn-lg{ padding:12px 22px; font-size:14.5px; border-radius:12px; }
+.gicon-btn{ width:36px; height:36px; border-radius:9px; border:1px solid var(--n-300); background:linear-gradient(180deg,#fff,#F6F8FB);
+  display:inline-flex; align-items:center; justify-content:center; color:var(--n-600); cursor:pointer; box-shadow:inset 0 1px 0 #fff, 0 1px 2px rgba(10,31,61,.04); }
+.gicon-btn:hover{ border-color:var(--n-400); }
+
+/* ===== Light-glass badges (locked) ===== */
+.badge{ display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:600; padding:5px 12px; border-radius:100px; border:1px solid transparent;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.6); }
+.badge.success{ background:linear-gradient(180deg,#EEF6F1,var(--success-bg)); color:var(--success-tx); border-color:#D5E9DD; }
+.badge.warning{ background:linear-gradient(180deg,#FDF6E9,var(--warning-bg)); color:var(--warning-tx); border-color:#F0E0BE; }
+.badge.error{ background:linear-gradient(180deg,#FAEFEE,var(--error-bg)); color:var(--error-tx); border-color:#EBD3D1; }
+.badge.info{ background:linear-gradient(180deg,#EDF3F8,var(--info-bg)); color:var(--info-tx); border-color:#D2E1EB; }
+.badge.ai{ background:linear-gradient(180deg,#EDF3F6,var(--ai-bg)); color:var(--ai-tx); border-color:#D1E2E8; }
+.badge.neutral{ background:linear-gradient(180deg,#F5F6F8,var(--n-100)); color:var(--n-500); border-color:var(--n-200); }
+.badge.solid{ background:linear-gradient(180deg,#B95951,#9A3F39); color:#fff; border-color:#8A3B35; box-shadow:inset 0 1px 0 rgba(255,255,255,.25); }
+
+footer.doc-footer{padding:48px 32px 72px; text-align:center;}
+footer.doc-footer p{font-size:12.5px; color:var(--n-400);}
+</style>
+</head>
+<body>
+
+<svg style="display:none">
+<defs>
+<symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 2l8 4v6c0 5-3.5 9-8 10-4.5-1-8-5-8-10V6l8-4z"/></symbol>
+<symbol id="i-shield-alert" viewBox="0 0 24 24"><path d="M12 2l8 4v6c0 5-3.5 9-8 10-4.5-1-8-5-8-10V6l8-4z"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></symbol>
+<symbol id="i-hospital" viewBox="0 0 24 24"><rect x="4" y="2" width="16" height="20" rx="1"/><line x1="12" y1="7" x2="12" y2="13"/><line x1="9" y1="10" x2="15" y2="10"/><path d="M9 22v-4h6v4"/></symbol>
+<symbol id="i-user" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></symbol>
+<symbol id="i-users" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></symbol>
+<symbol id="i-clipboard" viewBox="0 0 24 24"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/></symbol>
+<symbol id="i-file" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></symbol>
+<symbol id="i-bar" viewBox="0 0 24 24"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></symbol>
+<symbol id="i-ai" viewBox="0 0 24 24"><path d="M12 3l1.6 4.6L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.4L12 3z"/><path d="M19 3v3"/><path d="M20.5 4.5h-3"/></symbol>
+<symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></symbol>
+<symbol id="i-warn" viewBox="0 0 24 24"><path d="M10.3 3.9L1.8 18a2 2 0 001.7 3h16.9a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></symbol>
+<symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></symbol>
+<symbol id="i-upload" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></symbol>
+<symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></symbol>
+<symbol id="i-mail" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/><polyline points="22 6 12 13 2 6"/></symbol>
+<symbol id="i-activity" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></symbol>
+<symbol id="i-lock" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></symbol>
+<symbol id="i-eye" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></symbol>
+<symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.65 1.65 0 004.6 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.6a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></symbol>
+<symbol id="i-bell" viewBox="0 0 24 24"><path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></symbol>
+<symbol id="i-filter" viewBox="0 0 24 24"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></symbol>
+<symbol id="i-database" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></symbol>
+<symbol id="i-arrow-left" viewBox="0 0 24 24"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></symbol>
+<symbol id="i-x" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></symbol>
+<symbol id="i-chevron-down" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></symbol>
+<symbol id="i-more" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></symbol>
+<symbol id="i-trash" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/></symbol>
+<symbol id="i-plus" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></symbol>
+<symbol id="i-phone" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></symbol>
+<symbol id="i-bank" viewBox="0 0 24 24"><line x1="3" y1="21" x2="21" y2="21"/><line x1="3" y1="10" x2="21" y2="10"/><polyline points="5 6 12 3 19 6"/><line x1="4" y1="10" x2="4" y2="21"/><line x1="20" y1="10" x2="20" y2="21"/><line x1="8" y1="14" x2="8" y2="17"/><line x1="12" y1="14" x2="12" y2="17"/><line x1="16" y1="14" x2="16" y2="17"/></symbol>
+<symbol id="i-edit" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 013 3L12 15l-4 1 1-4z"/></symbol>
+<symbol id="i-message" viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 01-4.9 7.6 8.38 8.38 0 01-3.8.9 8.5 8.5 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 018-8.5h.5a8.48 8.48 0 018 8v.5z"/></symbol>
+<symbol id="i-paperclip" viewBox="0 0 24 24"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></symbol>
+<symbol id="i-logout" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></symbol>
+<symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></symbol>
+<symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></symbol>
+</defs>
+</svg>
+
+<div class="doc-topbar">
+  <div class="doc-topbar-inner">
+    <div class="doc-brand">
+      <div class="doc-brand-mark"><svg class="icon" style="width:16px;height:16px;stroke:#fff"><use href="#i-shield"/></svg></div>
+      <div><div class="doc-brand-text">Sentinel Claims</div><div class="doc-brand-sub">Design moodboard &middot; v2.0 — Scientific Blue</div></div>
+    </div>
+    <nav class="doc-nav">
+      <a href="#colors">Color</a><a href="#type">Type</a><a href="#buttons">Buttons</a><a href="#forms">Forms</a>
+      <a href="#notifications">Notifications</a><a href="#badges">Badges</a><a href="#cards">KPI cards</a><a href="#tables">Table</a>
+      <a href="#profile">Profile</a><a href="#timeline">Timeline</a><a href="#claim">Claim page</a><a href="#filters">Filters</a>
+      <a href="#charts">Charts</a><a href="#icons">Icons</a><a href="#shell">Sidebar &amp; header</a><a href="#empty">Empty states</a>
+      <a href="#illustration">Illustration</a><a href="#tokens">Tokens</a>
+    </nav>
+  </div>
+</div>
+
+<div class="hero">
+  <div class="hero-inner">
+    <div class="hero-eyebrow"><svg class="icon" style="width:14px;height:14px"><use href="#i-shield"/></svg>Medicare fraud detection &amp; claims review — v2</div>
+    <h1>Scientific Blue: a calmer, more deliberate system for the people who guard billions in claims.</h1>
+    <p class="lead">This revision replaces the earlier Tailwind-blue palette with a muted, navy-forward "Scientific Blue" system, introduces adapted glass as the universal button and badge language, and rebuilds the table, profile panel, timeline, and sidebar around live, hover-driven interaction rather than static states.</p>
+    <div class="hero-tags">
+      <span class="hero-tag">Scientific Blue palette</span>
+      <span class="hero-tag">Adapted glass — universal</span>
+      <span class="hero-tag">Hover-driven interaction</span>
+      <span class="hero-tag">WCAG AA</span>
+    </div>
+  </div>
+</div>
+
+<!-- ============ COLORS ============ -->
+<section class="block" id="colors">
+  <div class="block-inner">
+    <div class="block-head"><div><h2>Color system — Scientific Blue</h2><p class="block-desc">A single navy-to-sky ramp for brand, five muted status colors, and a dedicated deep steel-blue for anything the AI decided rather than a human.</p></div><span class="block-num">01 / Color</span></div>
+
+    <p class="sub-label">Brand ramp</p>
+    <div class="grid g6" style="margin-bottom:32px;">
+      <div><div style="height:80px;border-radius:12px;background:#0A1F3D;"></div><div style="margin-top:8px;font-size:12.5px;font-weight:600">Navy 900</div><div style="font-family:var(--font-mono);font-size:11px;color:var(--n-500)">#0A1F3D</div></div>
+      <div><div style="height:80px;border-radius:12px;background:#3E5F94;"></div><div style="margin-top:8px;font-size:12.5px;font-weight:600">Interactive blue</div><div style="font-family:var(--font-mono);font-size:11px;color:var(--n-500)">#3E5F94</div></div>
+      <div><div style="height:80px;border-radius:12px;background:#5B84C4;"></div><div style="margin-top:8px;font-size:12.5px;font-weight:600">Slate blue</div><div style="font-family:var(--font-mono);font-size:11px;color:var(--n-500)">#5B84C4</div></div>
+      <div><div style="height:80px;border-radius:12px;background:#6FB4E6;"></div><div style="margin-top:8px;font-size:12.5px;font-weight:600">Sky</div><div style="font-family:var(--font-mono);font-size:11px;color:var(--n-500)">#6FB4E6</div></div>
+      <div><div style="height:80px;border-radius:12px;background:#AFC3E8;"></div><div style="margin-top:8px;font-size:12.5px;font-weight:600">Pale blue</div><div style="font-family:var(--font-mono);font-size:11px;color:var(--n-500)">#AFC3E8</div></div>
+      <div><div style="height:80px;border-radius:12px;background:#DCE6F7;"></div><div style="margin-top:8px;font-size:12.5px;font-weight:600">Palest blue</div><div style="font-family:var(--font-mono);font-size:11px;color:var(--n-500)">#DCE6F7</div></div>
+    </div>
+
+    <p class="sub-label">Status colors — locked</p>
+    <div class="grid g5" style="margin-bottom:32px;">
+      <div><div style="height:70px;border-radius:12px;background:#3A7D5C;display:flex;align-items:flex-end;padding:10px;"><span style="color:#EAF3ED;font-size:12.5px;font-weight:600;">Success</span></div><div style="margin-top:6px;font-family:var(--font-mono);font-size:11px;color:var(--n-500)">#3A7D5C</div></div>
+      <div><div style="height:70px;border-radius:12px;background:#D1A85C;display:flex;align-items:flex-end;padding:10px;"><span style="color:#3E2E12;font-size:12.5px;font-weight:600;">Warning</span></div><div style="margin-top:6px;font-family:var(--font-mono);font-size:11px;color:var(--n-500)">#D1A85C</div></div>
+      <div><div style="height:70px;border-radius:12px;background:#A6453F;display:flex;align-items:flex-end;padding:10px;"><span style="color:#F7E9E8;font-size:12.5px;font-weight:600;">Error</span></div><div style="margin-top:6px;font-family:var(--font-mono);font-size:11px;color:var(--n-500)">#A6453F</div></div>
+      <div><div style="height:70px;border-radius:12px;background:#5A9BC9;display:flex;align-items:flex-end;padding:10px;"><span style="color:#0A1F3D;font-size:12.5px;font-weight:600;">Information</span></div><div style="margin-top:6px;font-family:var(--font-mono);font-size:11px;color:var(--n-500)">#5A9BC9</div></div>
+      <div><div style="height:70px;border-radius:12px;background:#2E6B8F;display:flex;align-items:flex-end;padding:10px;"><span style="color:#E9F1F6;font-size:12.5px;font-weight:600;">AI accent</span></div><div style="margin-top:6px;font-family:var(--font-mono);font-size:11px;color:var(--n-500)">#2E6B8F</div></div>
+    </div>
+
+    <p class="sub-label">Neutral scale</p>
+    <div class="grid g6">
+      <div><div style="height:52px;border-radius:10px;background:#0B1626"></div><div style="margin-top:6px;font-size:11px;font-weight:600">900</div></div>
+      <div><div style="height:52px;border-radius:10px;background:#17233A"></div><div style="margin-top:6px;font-size:11px;font-weight:600">800</div></div>
+      <div><div style="height:52px;border-radius:10px;background:#2B3A52"></div><div style="margin-top:6px;font-size:11px;font-weight:600">700</div></div>
+      <div><div style="height:52px;border-radius:10px;background:#46586F"></div><div style="margin-top:6px;font-size:11px;font-weight:600">600</div></div>
+      <div><div style="height:52px;border-radius:10px;background:#647089"></div><div style="margin-top:6px;font-size:11px;font-weight:600">500</div></div>
+      <div><div style="height:52px;border-radius:10px;background:#93A0B3"></div><div style="margin-top:6px;font-size:11px;font-weight:600">400</div></div>
+      <div><div style="height:52px;border-radius:10px;background:#C7D0DE"></div><div style="margin-top:6px;font-size:11px;font-weight:600">300</div></div>
+      <div><div style="height:52px;border-radius:10px;background:#E1E6EE"></div><div style="margin-top:6px;font-size:11px;font-weight:600">200</div></div>
+      <div><div style="height:52px;border-radius:10px;background:#F1F4F9;border:1px solid var(--n-200)"></div><div style="margin-top:6px;font-size:11px;font-weight:600">100</div></div>
+      <div><div style="height:52px;border-radius:10px;background:#F7F9FC;border:1px solid var(--n-200)"></div><div style="margin-top:6px;font-size:11px;font-weight:600">50</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ TYPOGRAPHY (unchanged this round) ============ -->
+<section class="block" id="type" style="background:var(--surface)">
+  <div class="block-inner">
+    <div class="block-head"><div><h2>Typography</h2><p class="block-desc">Manrope for display, Inter for body and UI, JetBrains Mono for identifiers. Not revisited this round — flag if you want to explore Hanken Grotesque from the reference board next.</p></div><span class="block-num">02 / Type</span></div>
+    <div class="grid g3">
+      <div class="card-frame pad"><p class="sub-label">Display</p><div style="font-family:var(--font-display);font-weight:800;font-size:26px;">Manrope</div></div>
+      <div class="card-frame pad"><p class="sub-label">Body / UI</p><div style="font-family:var(--font-body);font-weight:600;font-size:26px;">Inter</div></div>
+      <div class="card-frame pad"><p class="sub-label">Mono / data</p><div style="font-family:var(--font-mono);font-weight:600;font-size:26px;">JetBrains Mono</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ BUTTONS ============ -->
+<section class="block" id="buttons">
+  <div class="block-inner">
+    <div class="block-head"><div><h2>Buttons — adapted glass, universal</h2><p class="block-desc">Every button in the system now uses this treatment: soft gradient fill, layered shadow, no reliance on backdrop blur — so it looks identical on white, on navy, or inside a table row.</p></div><span class="block-num">03 / Actions</span></div>
+
+    <p class="sub-label">Variants</p>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:28px;">
+      <button class="gbtn gbtn-primary"><svg class="icon" style="width:15px;height:15px"><use href="#i-plus"/></svg>New review</button>
+      <button class="gbtn">Secondary</button>
+      <button class="gbtn gbtn-ai"><svg class="icon" style="width:15px;height:15px"><use href="#i-ai"/></svg>Generate AI summary</button>
+      <button class="gbtn gbtn-success">Approve</button>
+      <button class="gbtn gbtn-danger">Deny</button>
+      <button class="gbtn" style="opacity:.5;cursor:not-allowed;">Disabled</button>
+    </div>
+
+    <p class="sub-label">Sizes</p>
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:28px;">
+      <button class="gbtn gbtn-primary gbtn-sm">Small</button>
+      <button class="gbtn gbtn-primary">Medium</button>
+      <button class="gbtn gbtn-primary gbtn-lg">Large</button>
+    </div>
+
+    <p class="sub-label">Icon buttons</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="gicon-btn"><svg class="icon"><use href="#i-arrow-left"/></svg></button>
+      <button class="gicon-btn"><svg class="icon"><use href="#i-filter"/></svg></button>
+      <button class="gicon-btn"><svg class="icon"><use href="#i-search"/></svg></button>
+      <button class="gicon-btn"><svg class="icon"><use href="#i-download"/></svg></button>
+      <button class="gicon-btn"><svg class="icon"><use href="#i-trash"/></svg></button>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FORMS ============ -->
+<section class="block" id="forms" style="background:var(--surface)">
+  <div class="block-inner">
+    <div class="block-head"><div><h2>Form elements</h2><p class="block-desc">The dropdown now carries a magnetic hover indicator between options; the checkbox uses the muted interactive blue instead of the earlier bright one.</p></div><span class="block-num">04 / Forms</span></div>
+
+    <style>
+      .field{font-family:var(--font-body);font-size:13.5px;padding:9px 12px;border-radius:9px;border:1px solid var(--n-300);background:#fff;color:var(--n-800);width:100%;outline:none;}
+      .field:focus{border-color:var(--blue-600);box-shadow:0 0 0 3px var(--palest-blue);}
+      .flabel{font-size:12px;font-weight:600;color:var(--n-600);margin-bottom:6px;display:block;}
+
+      .select-wrap{max-width:280px; position:relative;}
+      .select-trigger{display:flex; align-items:center; justify-content:space-between; padding:11px 14px; border:1px solid var(--n-300); border-radius:10px; background:#fff; font-size:14px; font-weight:500; cursor:pointer;}
+      .select-trigger:hover{ border-color:var(--slate-blue); }
+      .select-panel{ margin-top:8px; background:#fff; border:1px solid var(--n-200); border-radius:12px; box-shadow:var(--shadow-md); padding:6px; position:relative; }
+      .options{ position:relative; }
+      .hover-indicator{ position:absolute; left:0; right:0; height:0; border-radius:8px; background:var(--n-100); opacity:0; pointer-events:none; transition:top .18s cubic-bezier(.2,.8,.2,1), height .18s cubic-bezier(.2,.8,.2,1), opacity .12s ease; }
+      .option{ position:relative; z-index:1; display:flex; align-items:center; justify-content:space-between; padding:10px 12px; border-radius:8px; font-size:14px; cursor:pointer; }
+      .option .check{ width:15px; height:15px; stroke:var(--blue-600); fill:none; stroke-width:2.4; opacity:0;}
+      .option.selected{ font-weight:600; } .option.selected .check{ opacity:1; }
+
+      .checkbox-row{ display:flex; align-items:center; gap:10px; cursor:pointer; }
+      .checkbox-box{ width:20px; height:20px; border-radius:6px; border:1.5px solid var(--n-300); display:flex; align-items:center; justify-content:center; transition:background .12s ease, border-color .12s ease; flex-shrink:0;}
+      .checkbox-box svg{ width:12px; height:12px; stroke:#fff; fill:none; stroke-width:3; opacity:0; transform:scale(.6); transition:opacity .1s ease, transform .1s ease;}
+      .checkbox-row.checked .checkbox-box{ background:var(--blue-600); border-color:var(--blue-600); }
+      .checkbox-row.checked .checkbox-box svg{ opacity:1; transform:scale(1); }
+      .toggle{width:38px;height:22px;border-radius:20px;background:var(--n-200);position:relative;display:inline-block;}
+      .toggle.on{background:var(--blue-600);}
+      .toggle span{position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#fff;}
+      .toggle.on span{left:18px;}
+    </style>
+
+    <div class="grid g3" style="margin-bottom:28px;">
+      <div><span class="flabel">Global search</span><input class="field" placeholder="Search claims, providers, NPIs…"></div>
+      <div><span class="flabel">Claim ID</span><input class="field" placeholder="CLM-2026-004471"></div>
+      <div><span class="flabel">Date range</span><input class="field" placeholder="Jan 1 – Jan 31, 2026"></div>
+    </div>
+
+    <div class="grid g2">
+      <div class="card-frame pad">
+        <p class="sub-label">Dropdown — magnetic hover indicator</p>
+        <div class="select-wrap">
+          <div class="select-trigger" id="trigger"><span id="trigger-label">Oncology</span><svg class="icon" style="width:16px;height:16px" id="chev"><use href="#i-chevron-down"/></svg></div>
+          <div class="select-panel">
+            <div class="options" id="options">
+              <div class="hover-indicator" id="indicator"></div>
+              <div class="option">Cardiology<svg class="icon check" viewBox="0 0 24 24"><use href="#i-check"/></svg></div>
+              <div class="option">Orthopedics<svg class="icon check" viewBox="0 0 24 24"><use href="#i-check"/></svg></div>
+              <div class="option selected">Oncology<svg class="icon check" viewBox="0 0 24 24"><use href="#i-check"/></svg></div>
+              <div class="option">Neurology<svg class="icon check" viewBox="0 0 24 24"><use href="#i-check"/></svg></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="card-frame pad">
+        <p class="sub-label">Checkbox, toggle, segmented</p>
+        <div style="display:flex;flex-direction:column;gap:14px;">
+          <div class="checkbox-row checked" id="cb"><div class="checkbox-box"><svg viewBox="0 0 24 24"><use href="#i-check"/></svg></div><span style="font-size:13px;">Flag for manual audit</span></div>
+          <div style="display:flex;align-items:center;gap:12px;"><div class="toggle on"><span></span></div><span style="font-size:13px;color:var(--n-600)">Notify on new AI findings</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ NOTIFICATIONS ============ -->
+<section class="block" id="notifications">
+  <div class="block-inner">
+    <div class="block-head"><div><h2>Notifications</h2><p class="block-desc">Toasts now stack like settling cards instead of appearing one at a time; the bell panel is filtered by domain category instead of one long feed.</p></div><span class="block-num">05 / Notifications</span></div>
+
+    <div class="grid g2">
+      <div class="card-frame pad">
+        <p class="sub-label">Stacked toasts</p>
+        <div style="position:relative;height:120px;" id="toastStage"></div>
+        <button class="gbtn gbtn-sm" id="toastBtn" style="margin-top:8px;">Trigger toast</button>
+      </div>
+      <div class="card-frame pad">
+        <p class="sub-label">Notification panel — filtered</p>
+        <div style="display:flex;gap:4px;margin-bottom:10px;">
+          <span class="badge neutral" style="cursor:pointer;background:var(--n-100);color:var(--navy-900);">All</span>
+          <span class="badge neutral" style="cursor:pointer;">Claims</span>
+          <span class="badge neutral" style="cursor:pointer;">Fraud</span>
+          <span class="badge neutral" style="cursor:pointer;">Medicare</span>
+        </div>
+        <div style="display:flex;gap:10px;padding:8px 0;border-top:1px solid var(--n-100);">
+          <div style="width:30px;height:30px;border-radius:8px;background:var(--error-bg);display:flex;align-items:center;justify-content:center;flex-shrink:0;"><svg class="icon" style="width:14px;height:14px;color:var(--error)"><use href="#i-shield-alert"/></svg></div>
+          <div><div style="font-size:12.5px;font-weight:600;">Fraud alert — high confidence</div><div style="font-size:11.5px;color:var(--n-500);">Nova Health Partners, 14 claims flagged.</div></div>
+        </div>
+        <div style="display:flex;gap:10px;padding:8px 0;border-top:1px solid var(--n-100);">
+          <div style="width:30px;height:30px;border-radius:8px;background:var(--info-bg);display:flex;align-items:center;justify-content:center;flex-shrink:0;"><svg class="icon" style="width:14px;height:14px;color:var(--info)"><use href="#i-mail"/></svg></div>
+          <div><div style="font-size:12.5px;font-weight:600;">Medicare response received</div><div style="font-size:11.5px;color:var(--n-500);">Partial payment on CLM-004471.</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ BADGES ============ -->
+<section class="block" id="badges" style="background:var(--surface)">
+  <div class="block-inner">
+    <div class="block-head"><div><h2>Status badges — light glass</h2><p class="block-desc">Sheen and a soft inset highlight, no floating shadow — reads as a polished pill even repeated forty times down a table.</p></div><span class="block-num">06 / Badges</span></div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      <span class="badge neutral"><svg class="icon" style="width:12px;height:12px"><use href="#i-clock"/></svg>Pending</span>
+      <span class="badge info"><svg class="icon" style="width:12px;height:12px"><use href="#i-check"/></svg>Confirmed</span>
+      <span class="badge warning"><svg class="icon" style="width:12px;height:12px"><use href="#i-message"/></svg>Disputed</span>
+      <span class="badge error"><svg class="icon" style="width:12px;height:12px"><use href="#i-warn"/></svg>Fraud reported</span>
+      <span class="badge solid"><svg class="icon" style="width:12px;height:12px"><use href="#i-shield-alert"/></svg>Fraud detected</span>
+      <span class="badge success"><svg class="icon" style="width:12px;height:12px"><use href="#i-check"/></svg>Approved</span>
+      <span class="badge error"><svg class="icon" style="width:12px;height:12px"><use href="#i-x"/></svg>Denied</span>
+      <span class="badge ai"><svg class="icon" style="width:12px;height:12px"><use href="#i-message"/></svg>Appealed</span>
+      <span class="badge success"><svg class="icon" style="width:12px;height:12px"><use href="#i-check"/></svg>Resolved</span>
+      <span class="badge warning"><svg class="icon" style="width:12px;height:12px"><use href="#i-file"/></svg>Needs documentation</span>
+      <span class="badge info"><svg class="icon" style="width:12px;height:12px"><use href="#i-clock"/></svg>Waiting on Medicare</span>
+      <span class="badge success"><svg class="icon" style="width:12px;height:12px"><use href="#i-shield"/></svg>Low risk</span>
+      <span class="badge warning"><svg class="icon" style="width:12px;height:12px"><use href="#i-shield"/></svg>Medium risk</span>
+      <span class="badge error"><svg class="icon" style="width:12px;height:12px"><use href="#i-shield-alert"/></svg>High risk</span>
+      <span class="badge ai"><svg class="icon" style="width:12px;height:12px"><use href="#i-ai"/></svg>AI reviewed</span>
+    </div>
+  </div>
+</section>
+
+<!-- ============ KPI CARDS ============ -->
+<section class="block" id="cards">
+  <div class="block-inner">
+    <div class="block-head"><div><h2>KPI cards</h2><p class="block-desc">Flat corner circle with an icon badge on top — crisp, not blurred — plus a colored progress track under the trend line.</p></div><span class="block-num">07 / KPI cards</span></div>
+
+    <style>
+      .kpi{ position:relative; overflow:hidden; background:#fff; border:1px solid var(--n-200); border-radius:18px; padding:20px 22px 22px;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,.7), var(--shadow-sm); }
+      .kpi-glow{ position:absolute; top:-34px; right:-34px; width:96px; height:96px; border-radius:50%; }
+      .kpi-badge{ position:absolute; top:12px; right:12px; width:32px; height:32px; border-radius:50%; background:#fff; display:flex; align-items:center; justify-content:center; box-shadow:0 1px 2px rgba(10,31,61,.08); }
+      .kpi-badge svg{ width:15px; height:15px; fill:none; stroke-width:2; }
+      .kpi-label{ position:relative; font-size:12.5px; font-weight:600; color:var(--n-500); }
+      .kpi-value{ position:relative; font-family:var(--font-display); font-weight:800; font-size:28px; color:var(--navy-900); letter-spacing:-.02em; margin-top:10px; }
+      .kpi-sub{ position:relative; font-size:12px; color:var(--n-500); margin-top:4px; }
+      .kpi-track{ position:relative; height:4px; border-radius:4px; background:var(--n-100); margin-top:14px; overflow:hidden; }
+      .kpi-fill{ height:100%; border-radius:4px; }
+    </style>
+
+    <div class="grid g4">
+      <div class="kpi"><div class="kpi-glow" style="background:var(--n-100);"></div><div class="kpi-badge"><svg viewBox="0 0 24 24" stroke="var(--slate-blue)"><use href="#i-file"/></svg></div>
+        <div class="kpi-label">Claims reviewed</div><div class="kpi-value">12,482</div><div class="kpi-sub">4.2% month over month</div>
+        <div class="kpi-track"><div class="kpi-fill" style="width:64%;background:linear-gradient(90deg,var(--slate-blue),var(--sky));"></div></div></div>
+      <div class="kpi"><div class="kpi-glow" style="background:var(--error-bg);"></div><div class="kpi-badge"><svg viewBox="0 0 24 24" stroke="var(--error)"><use href="#i-shield-alert"/></svg></div>
+        <div class="kpi-label">Fraud caught</div><div class="kpi-value">$3.7M</div><div class="kpi-sub">12 new cases this week</div>
+        <div class="kpi-track"><div class="kpi-fill" style="width:38%;background:linear-gradient(90deg,#C97a72,var(--error));"></div></div></div>
+      <div class="kpi"><div class="kpi-glow" style="background:var(--success-bg);"></div><div class="kpi-badge"><svg viewBox="0 0 24 24" stroke="var(--success)"><use href="#i-check"/></svg></div>
+        <div class="kpi-label">Appeal success</div><div class="kpi-value">68%</div><div class="kpi-sub">214 of 314 appeals</div>
+        <div class="kpi-track"><div class="kpi-fill" style="width:82%;background:linear-gradient(90deg,#5CAE8A,var(--success));"></div></div></div>
+      <div class="kpi"><div class="kpi-glow" style="background:var(--ai-bg);"></div><div class="kpi-badge"><svg viewBox="0 0 24 24" stroke="var(--ai)"><use href="#i-ai"/></svg></div>
+        <div class="kpi-label">AI confidence avg</div><div class="kpi-value">91.4%</div><div class="kpi-sub">Across 8,204 scored claims</div>
+        <div class="kpi-track"><div class="kpi-fill" style="width:91%;background:linear-gradient(90deg,#4E93B8,var(--ai));"></div></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ TABLE ============ -->
+<section class="block" id="tables" style="background:var(--surface)">
+  <div class="block-inner">
+    <div class="block-head"><div><h2>Claims table</h2><p class="block-desc">Real toolbar, checkbox states (unchecked / checked / indeterminate), selected-row tint, and first/prev/next/last pagination.</p></div><span class="block-num">08 / Table</span></div>
+
+    <style>
+      .tcb{ width:17px; height:17px; border-radius:5px; border:1.5px solid var(--n-300); display:flex; align-items:center; justify-content:center; background:#fff; }
+      .tcb svg{ width:10px; height:10px; stroke:#fff; fill:none; stroke-width:3; }
+      .tcb.on, .tcb.mid{ background:var(--blue-600); border-color:var(--blue-600); }
+      .tcb .dash{ width:8px; height:2px; background:#fff; border-radius:2px; }
+      table.claims{ width:100%; border-collapse:collapse; font-size:13.5px; }
+      table.claims thead th{ text-align:left; padding:11px 14px; font-size:11.5px; font-weight:600; color:var(--n-500); text-transform:uppercase; letter-spacing:.04em; border-bottom:1px solid var(--n-100); background:var(--n-50); }
+      table.claims tbody td{ padding:12px 14px; border-bottom:1px solid var(--n-100); }
+      table.claims tbody tr:hover{ background:var(--n-50); }
+      table.claims tbody tr.checked{ background:#EEF2F8; }
+      td.num{ text-align:right; font-weight:600; } td.mono{ font-family:var(--font-mono); font-weight:500; }
+    </style>
+
+    <div class="card-frame" style="overflow:hidden;">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--n-100);gap:12px;flex-wrap:wrap;">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <input class="field" style="width:220px;" placeholder="Filter by claim ID or provider…">
+          <button class="gbtn gbtn-sm"><svg class="icon" style="width:14px;height:14px"><use href="#i-filter"/></svg>Status</button>
+          <button class="gbtn gbtn-sm"><svg class="icon" style="width:14px;height:14px"><use href="#i-grid"/></svg>View</button>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="gbtn gbtn-sm" style="color:var(--error-tx);"><svg class="icon" style="width:14px;height:14px"><use href="#i-trash"/></svg>Delete<span class="badge error" style="padding:1px 6px;font-size:10px;margin-left:2px;">2</span></button>
+          <button class="gbtn gbtn-primary gbtn-sm"><svg class="icon" style="width:14px;height:14px"><use href="#i-plus"/></svg>New review</button>
+        </div>
+      </div>
+      <div style="overflow-x:auto;">
+      <table class="claims">
+        <thead><tr>
+          <th><div class="tcb mid"><span class="dash"></span></div></th>
+          <th>Claim ID</th><th>Provider</th><th style="text-align:right;">Billed</th><th>Risk</th><th>Status</th>
+        </tr></thead>
+        <tbody>
+          <tr><td><div class="tcb"></div></td><td class="mono">CLM-004471</td><td>Nova Health Partners</td><td class="num">$14,200</td><td><span class="badge error">High</span></td><td><span class="badge solid">Fraud detected</span></td></tr>
+          <tr class="checked"><td><div class="tcb on"><svg viewBox="0 0 24 24"><use href="#i-check"/></svg></div></td><td class="mono">CLM-004398</td><td>Lakeshore Ortho Group</td><td class="num">$3,420</td><td><span class="badge warning">Medium</span></td><td><span class="badge warning">Disputed</span></td></tr>
+          <tr><td><div class="tcb"></div></td><td class="mono">CLM-004521</td><td>Cedar Grove Physical Therapy</td><td class="num">$980</td><td><span class="badge success">Low</span></td><td><span class="badge success">Approved</span></td></tr>
+        </tbody>
+      </table>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 18px;border-top:1px solid var(--n-100);">
+        <span style="font-size:12.5px;color:var(--n-500);">Rows per page: 10</span>
+        <span style="font-size:12.5px;color:var(--n-500);">1–3 of 12,482</span>
+        <div style="display:flex;gap:4px;">
+          <span class="gicon-btn" style="width:28px;height:28px;"><svg class="icon" style="width:13px;height:13px"><use href="#i-arrow-left"/></svg></span>
+          <span class="gicon-btn" style="width:28px;height:28px;"><svg class="icon" style="width:13px;height:13px;transform:scaleX(-1)"><use href="#i-arrow-left"/></svg></span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PROFILE ============ -->
+<section class="block" id="profile">
+  <div class="block-inner">
+    <div class="block-head"><div><h2>Provider profile panel</h2><p class="block-desc">Identity header with quick-contact circles, label-above-value stats, two primary CTAs, then a grouped, dividered action list.</p></div><span class="block-num">09 / Profile</span></div>
+
+    <style>
+      .pp{ width:320px; background:#fff; border:1px solid var(--n-200); border-radius:18px; overflow:hidden; box-shadow:var(--shadow-md); }
+      .pp-id{ padding:20px 20px 16px; }
+      .pp-avatar{ width:48px; height:48px; border-radius:13px; background:linear-gradient(135deg,var(--slate-blue),var(--navy-900)); color:#fff; display:flex; align-items:center; justify-content:center; font-family:var(--font-display); font-weight:800; font-size:16px; }
+      .pp-contact{ display:flex; gap:9px; margin-top:14px; }
+      .pp-contact-btn{ width:34px; height:34px; border-radius:50%; background:#fff; border:1px solid var(--n-200); display:flex; align-items:center; justify-content:center; }
+      .pp-stats{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; padding:0 20px 14px; }
+      .pp-stat{ background:var(--n-50); border-radius:10px; padding:10px 6px; text-align:center; }
+      .pp-cta{ display:flex; gap:8px; padding:0 20px 16px; }
+      .pp-group{ padding:6px 10px; } .pp-group + .pp-group{ border-top:1px solid var(--n-100); }
+      .pp-item{ display:flex; align-items:center; gap:10px; padding:9px 10px; border-radius:9px; font-size:13px; font-weight:500; color:var(--n-700); }
+      .pp-item:hover{ background:var(--n-50); }
+      .pp-item.danger{ color:var(--error-tx); }
+    </style>
+
+    <div class="pp">
+      <div class="pp-id">
+        <div style="display:flex;gap:12px;align-items:center;">
+          <div class="pp-avatar">EM</div>
+          <div><div style="font-weight:700;font-size:15px;color:var(--navy-900);">Dr. Elena Marsh</div><div style="font-size:12px;color:var(--slate-blue);font-weight:600;">Senior Fraud Analyst</div></div>
+        </div>
+        <div class="pp-contact">
+          <div class="pp-contact-btn"><svg class="icon" style="width:15px;height:15px"><use href="#i-phone"/></svg></div>
+          <div class="pp-contact-btn"><svg class="icon" style="width:15px;height:15px"><use href="#i-mail"/></svg></div>
+          <div class="pp-contact-btn"><svg class="icon" style="width:15px;height:15px"><use href="#i-file"/></svg></div>
+          <div class="pp-contact-btn"><svg class="icon" style="width:15px;height:15px"><use href="#i-download"/></svg></div>
+        </div>
+      </div>
+      <div class="pp-stats">
+        <div class="pp-stat"><div style="font-size:10.5px;color:var(--n-500);">Claims / mo</div><div style="font-weight:700;font-size:16px;margin-top:4px;">412</div></div>
+        <div class="pp-stat"><div style="font-size:10.5px;color:var(--n-500);">Fraud alerts</div><div style="font-weight:700;font-size:16px;margin-top:4px;color:var(--warning-tx);">3</div></div>
+        <div class="pp-stat"><div style="font-size:10.5px;color:var(--n-500);">Risk score</div><div style="font-weight:700;font-size:16px;margin-top:4px;color:var(--error-tx);">62</div></div>
+      </div>
+      <div class="pp-cta">
+        <button class="gbtn gbtn-primary" style="flex:1;justify-content:center;">View full profile</button>
+        <button class="gbtn" style="flex:1;justify-content:center;">Message</button>
+      </div>
+      <div class="pp-group"><div class="pp-item"><svg class="icon" style="width:16px;height:16px"><use href="#i-edit"/></svg>Edit details</div></div>
+      <div class="pp-group">
+        <div class="pp-item"><svg class="icon" style="width:16px;height:16px"><use href="#i-file"/></svg>View claims</div>
+        <div class="pp-item"><svg class="icon" style="width:16px;height:16px"><use href="#i-download"/></svg>Download report</div>
+      </div>
+      <div class="pp-group"><div class="pp-item danger"><svg class="icon" style="width:16px;height:16px"><use href="#i-x"/></svg>Suspend provider</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ TIMELINE ============ -->
+<section class="block" id="timeline" style="background:var(--surface)">
+  <div class="block-inner">
+    <div class="block-head"><div><h2>Audit timeline — live and hover-driven</h2><p class="block-desc">Date column on the left, a permanently pulsing marker on the completed step, and hover-revealed marker pop + glass actions per row.</p></div><span class="block-num">10 / Timeline</span></div>
+
+    <style>
+      .tl{ position:relative; max-width:560px; }
+      .tl-rail{ position:absolute; left:120px; top:14px; bottom:14px; width:2px; background:var(--n-200); }
+      .tl-row{ position:relative; display:flex; align-items:flex-start; gap:16px; padding-bottom:20px; }
+      .tl-date-col{ width:92px; flex-shrink:0; text-align:right; padding-top:4px; }
+      .tl-date-main{ font-size:12.5px; font-weight:600; color:var(--n-500); }
+      .tl-date-sub{ font-size:11px; color:var(--n-400); }
+      .tl-marker-col{ width:24px; flex-shrink:0; position:relative; }
+      .tl-marker{ position:relative; width:24px; height:24px; border-radius:50%; display:flex; align-items:center; justify-content:center; background:#fff; border:2px solid var(--n-300); z-index:1; transition:transform .2s cubic-bezier(.34,1.56,.64,1); }
+      .tl-marker svg{ width:12px; height:12px; stroke:#fff; fill:none; stroke-width:3; opacity:0; transform:scale(.4); transition:opacity .15s ease, transform .2s cubic-bezier(.34,1.56,.64,1); }
+      .tl-row.completed:hover .tl-marker{ background:var(--success); border-color:var(--success); transform:scale(1.12); }
+      .tl-row.completed:hover .tl-marker svg{ opacity:1; transform:scale(1); }
+      .tl-row.progress:hover .tl-marker{ background:var(--info); border-color:var(--info); transform:scale(1.12); }
+      .tl-pulse{ position:absolute; top:0; left:0; width:24px; height:24px; border-radius:50%; border:2px solid var(--success); animation:tlpulse 2s ease-out infinite; }
+      @keyframes tlpulse{ 0%{transform:scale(1);opacity:.7;} 100%{transform:scale(2.1);opacity:0;} }
+      .tl-card{ flex:1; background:#fff; border:1px solid var(--n-200); border-radius:14px; padding:16px 18px; }
+      .tl-actions{ display:flex; gap:8px; max-height:0; opacity:0; overflow:hidden; transition:max-height .25s ease, opacity .2s ease, margin-top .25s ease; }
+      .tl-card:hover .tl-actions{ max-height:60px; opacity:1; margin-top:14px; }
+    </style>
+
+    <div class="tl">
+      <div class="tl-rail"></div>
+      <div class="tl-row completed">
+        <div class="tl-date-col"><div class="tl-date-main">Jan 13</div><div class="tl-date-sub">2:16 PM</div></div>
+        <div class="tl-marker-col"><div class="tl-pulse"></div><div class="tl-marker"><svg viewBox="0 0 24 24"><use href="#i-check"/></svg></div></div>
+        <div class="tl-card">
+          <div style="font-weight:700;font-size:14px;color:var(--navy-900);">Documents requested</div>
+          <div style="font-size:12.5px;color:var(--n-500);margin-top:4px;">Operative report and pre-authorization requested from provider.</div>
+          <span class="badge success" style="margin-top:10px;">Completed</span>
+          <div class="tl-actions"><button class="gbtn gbtn-sm">Details</button><button class="gbtn gbtn-primary gbtn-sm">Dismiss</button></div>
+        </div>
+      </div>
+      <div class="tl-row progress">
+        <div class="tl-date-col"><div class="tl-date-main">Jan 13</div><div class="tl-date-sub">1:30 PM</div></div>
+        <div class="tl-marker-col"><div class="tl-marker"><svg viewBox="0 0 24 24"><use href="#i-ai"/></svg></div></div>
+        <div class="tl-card">
+          <div style="font-weight:700;font-size:14px;color:var(--navy-900);">Fraud investigation opened</div>
+          <div style="font-size:12.5px;color:var(--n-500);margin-top:4px;">Case #INV-2291 assigned to J. Alvarez for manual review.</div>
+          <span class="badge info" style="margin-top:10px;">In progress</span>
+          <div class="tl-actions"><button class="gbtn gbtn-sm">Details</button><button class="gbtn gbtn-primary gbtn-sm">Dismiss</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CLAIM DETAILS ============ -->
+<section class="block" id="claim">
+  <div class="block-inner">
+    <div class="block-head"><div><h2>Claim details page</h2><p class="block-desc">AI summary panel recolored from purple to the locked steel-blue AI accent; approve/deny use the success/danger glass buttons.</p></div><span class="block-num">11 / Claim page</span></div>
+
+    <div style="display:grid;grid-template-columns:2fr 1fr;gap:20px;">
+      <div class="card-frame pad">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+          <div><div style="font-family:var(--font-mono);font-weight:700;font-size:17px;">CLM-2026-004471</div><div style="font-size:12.5px;color:var(--n-500);margin-top:2px;">Submitted Jan 9, 2026 &middot; Part B</div></div>
+          <span class="badge solid">Fraud detected</span>
+        </div>
+        <div class="grid g4" style="margin-top:18px;">
+          <div><div style="font-size:11px;color:var(--n-500);">Billed</div><div style="font-weight:700;font-size:15px;">$14,200</div></div>
+          <div><div style="font-size:11px;color:var(--n-500);">Allowed</div><div style="font-weight:700;font-size:15px;">$9,850</div></div>
+          <div><div style="font-size:11px;color:var(--n-500);">Paid</div><div style="font-weight:700;font-size:15px;">$6,200</div></div>
+          <div><div style="font-size:11px;color:var(--n-500);">Adjustment</div><div style="font-weight:700;font-size:15px;color:var(--error-tx);">–$3,650</div></div>
+        </div>
+        <div style="margin-top:18px;display:flex;gap:8px;">
+          <button class="gbtn gbtn-success">Approve</button>
+          <button class="gbtn gbtn-danger">Deny</button>
+        </div>
+      </div>
+
+      <div class="card-frame pad" style="border-color:#D1E2E8;background:linear-gradient(180deg,var(--ai-bg),#fff 70%)">
+        <p class="sub-label" style="color:var(--ai);">AI summary</p>
+        <div style="display:flex;align-items:baseline;gap:10px;">
+          <div style="font-family:var(--font-display);font-weight:800;font-size:32px;color:var(--ai-tx);">87</div>
+          <div style="font-size:12px;color:var(--ai-tx);">fraud score &middot; 91% confidence</div>
+        </div>
+        <div style="font-size:12.5px;color:var(--ai-tx);margin-top:10px;line-height:1.55;">Billing pattern deviates 3.2x from this provider's peer-group average, with a duplicate CPT inside a 14-day window.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FILTERS ============ -->
+<section class="block" id="filters" style="background:var(--surface)">
+  <div class="block-inner">
+    <div class="block-head"><div><h2>Filter sidebar</h2><p class="block-desc">Recolored to Scientific Blue; structure unchanged from the original brief.</p></div><span class="block-num">12 / Filters</span></div>
+    <div class="card-frame pad" style="max-width:300px;">
+      <div style="font-weight:700;font-size:14px;margin-bottom:14px;">Filters</div>
+      <span class="flabel">Risk score</span>
+      <input type="range" style="width:100%;accent-color:var(--blue-600);margin-bottom:14px;">
+      <span class="flabel">Status</span>
+      <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;margin-bottom:8px;"><input type="checkbox" checked style="accent-color:var(--blue-600);">Pending</label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;margin-bottom:14px;"><input type="checkbox" style="accent-color:var(--blue-600);">Fraud detected</label>
+      <button class="gbtn gbtn-primary" style="width:100%;justify-content:center;">Apply filters</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CHARTS ============ -->
+<section class="block" id="charts">
+  <div class="block-inner">
+    <div class="block-head"><div><h2>Charts</h2><p class="block-desc">Recolored: brand blue for volume, muted status colors for semantic meaning only.</p></div><span class="block-num">13 / Charts</span></div>
+    <div class="grid g3">
+      <div class="card-frame pad">
+        <p class="sub-label">Claims volume</p>
+        <div style="display:flex;align-items:flex-end;gap:6px;height:90px;">
+          <div style="flex:1;background:var(--n-200);height:55%;border-radius:4px 4px 0 0;"></div>
+          <div style="flex:1;background:var(--n-200);height:70%;border-radius:4px 4px 0 0;"></div>
+          <div style="flex:1;background:var(--blue-600);height:95%;border-radius:4px 4px 0 0;"></div>
+          <div style="flex:1;background:var(--n-200);height:62%;border-radius:4px 4px 0 0;"></div>
+        </div>
+      </div>
+      <div class="card-frame pad">
+        <p class="sub-label">Fraud categories</p>
+        <div style="width:90px;height:90px;border-radius:50%;background:conic-gradient(var(--error) 0 35%, var(--warning) 35% 60%, var(--ai) 60% 80%, var(--n-300) 80% 100%);position:relative;">
+          <div style="position:absolute;inset:18px;background:#fff;border-radius:50%;"></div>
+        </div>
+      </div>
+      <div class="card-frame pad">
+        <p class="sub-label">Appeal success — ring</p>
+        <svg viewBox="0 0 80 80" style="width:90px;">
+          <circle cx="40" cy="40" r="34" fill="none" stroke="var(--n-200)" stroke-width="8"/>
+          <circle cx="40" cy="40" r="34" fill="none" stroke="var(--success)" stroke-width="8" stroke-dasharray="213" stroke-dashoffset="68" stroke-linecap="round" transform="rotate(-90 40 40)"/>
+          <text x="40" y="45" text-anchor="middle" font-family="Manrope" font-weight="800" font-size="16" fill="var(--navy-900)">68%</text>
+        </svg>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ ICONS ============ -->
+<section class="block" id="icons" style="background:var(--surface)">
+  <div class="block-inner">
+    <div class="block-head"><div><h2>Iconography</h2><p class="block-desc">Same outlined set, recolored to the locked navy/slate scale.</p></div><span class="block-num">14 / Icons</span></div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:8px;">
+      <div class="card-frame" style="padding:14px 8px;text-align:center;"><svg class="icon" style="margin:0 auto 6px;color:var(--n-700)"><use href="#i-shield"/></svg><div style="font-size:10.5px;color:var(--n-500);">Shield</div></div>
+      <div class="card-frame" style="padding:14px 8px;text-align:center;"><svg class="icon" style="margin:0 auto 6px;color:var(--n-700)"><use href="#i-hospital"/></svg><div style="font-size:10.5px;color:var(--n-500);">Hospital</div></div>
+      <div class="card-frame" style="padding:14px 8px;text-align:center;"><svg class="icon" style="margin:0 auto 6px;color:var(--ai)"><use href="#i-ai"/></svg><div style="font-size:10.5px;color:var(--n-500);">AI</div></div>
+      <div class="card-frame" style="padding:14px 8px;text-align:center;"><svg class="icon" style="margin:0 auto 6px;color:var(--warning)"><use href="#i-warn"/></svg><div style="font-size:10.5px;color:var(--n-500);">Warning</div></div>
+      <div class="card-frame" style="padding:14px 8px;text-align:center;"><svg class="icon" style="margin:0 auto 6px;color:var(--n-700)"><use href="#i-bell"/></svg><div style="font-size:10.5px;color:var(--n-500);">Bell</div></div>
+      <div class="card-frame" style="padding:14px 8px;text-align:center;"><svg class="icon" style="margin:0 auto 6px;color:var(--error)"><use href="#i-shield-alert"/></svg><div style="font-size:10.5px;color:var(--n-500);">Fraud alert</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SIDEBAR & HEADER ============ -->
+<section class="block" id="shell">
+  <div class="block-inner">
+    <div class="block-head"><div><h2>Sidebar &amp; header shell</h2><p class="block-desc">Collapsed icon rail by default; hover the sidebar to expand with labels; hover a single item for the label nudge micro-interaction.</p></div><span class="block-num">15 / App shell</span></div>
+
+    <style>
+      .app-sidebar{ height:420px; background:var(--navy-900); border-radius:16px; overflow:hidden; width:72px; transition:width .28s cubic-bezier(.2,.8,.2,1); display:flex; flex-direction:column; padding:16px 12px; flex-shrink:0; }
+      .app-sidebar:hover{ width:216px; }
+      .as-brand{ display:flex; align-items:center; gap:11px; padding:6px 4px 20px; white-space:nowrap; }
+      .as-mark{ width:30px; height:30px; border-radius:9px; background:linear-gradient(135deg,var(--slate-blue),#fff); flex-shrink:0; }
+      .as-brand-name{ font-family:var(--font-display); font-weight:800; font-size:14px; color:#fff; opacity:0; transform:translateX(-6px); transition:opacity .2s ease .05s, transform .2s ease .05s; }
+      .app-sidebar:hover .as-brand-name{ opacity:1; transform:translateX(0); }
+      .as-item{ display:flex; align-items:center; gap:13px; padding:10px; border-radius:10px; color:#8FA3C2; white-space:nowrap; }
+      .as-item:hover{ background:rgba(255,255,255,.07); color:#fff; }
+      .as-item.active{ background:rgba(111,180,230,.14); color:#fff; }
+      .as-item svg{ width:17px; height:17px; flex-shrink:0; }
+      .as-label{ font-size:12.5px; font-weight:500; opacity:0; transform:translateX(-6px); transition:opacity .2s ease, transform .2s ease, margin-left .15s ease; }
+      .app-sidebar:hover .as-label{ opacity:1; transform:translateX(0); }
+      .as-item:hover .as-label{ margin-left:2px; }
+    </style>
+
+    <div style="display:flex; gap:20px; align-items:flex-start;">
+      <div class="app-sidebar">
+        <div class="as-brand"><div class="as-mark"></div><div class="as-brand-name">Sentinel Claims</div></div>
+        <div class="as-item active"><svg class="icon"><use href="#i-grid"/></svg><span class="as-label">Dashboard</span></div>
+        <div class="as-item"><svg class="icon"><use href="#i-file"/></svg><span class="as-label">Claims</span></div>
+        <div class="as-item"><svg class="icon"><use href="#i-shield-alert"/></svg><span class="as-label">Fraud detection</span></div>
+        <div class="as-item"><svg class="icon"><use href="#i-user"/></svg><span class="as-label">Providers</span></div>
+        <div class="as-item"><svg class="icon"><use href="#i-settings"/></svg><span class="as-label">Settings</span></div>
+        <div style="flex:1;"></div>
+        <div class="as-item"><svg class="icon"><use href="#i-logout"/></svg><span class="as-label">Logout</span></div>
+      </div>
+      <div style="flex:1;">
+        <div style="background:#fff;border:1px solid var(--n-200);border-radius:14px;padding:14px 20px;display:flex;justify-content:space-between;align-items:center;">
+          <input class="field" style="max-width:260px;" placeholder="Search…">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <button class="gicon-btn"><svg class="icon" style="width:16px;height:16px"><use href="#i-bell"/></svg></button>
+            <div style="width:30px;height:30px;border-radius:8px;background:var(--navy-900);color:#fff;font-size:11.5px;font-weight:700;display:flex;align-items:center;justify-content:center;">EM</div>
+          </div>
+        </div>
+        <p style="font-size:12.5px;color:var(--n-500);margin-top:12px;">Hover the sidebar at left to see it expand — labels fade in and the active item stays highlighted even when collapsed.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ EMPTY STATES ============ -->
+<section class="block" id="empty" style="background:var(--surface)">
+  <div class="block-inner">
+    <div class="block-head"><div><h2>Empty states</h2><p class="block-desc">Recolored, structure unchanged.</p></div><span class="block-num">16 / Empty states</span></div>
+    <div class="grid g3">
+      <div class="card-frame pad" style="text-align:center;padding:32px 20px;">
+        <div style="width:44px;height:44px;border-radius:12px;background:var(--n-100);display:flex;align-items:center;justify-content:center;margin:0 auto 14px;"><svg class="icon" style="color:var(--n-400)"><use href="#i-clipboard"/></svg></div>
+        <div style="font-weight:700;font-size:13.5px;">No claims yet</div>
+        <div style="font-size:12px;color:var(--n-500);margin-top:4px;">Claims will appear here once submitted.</div>
+      </div>
+      <div class="card-frame pad" style="text-align:center;padding:32px 20px;">
+        <div style="width:44px;height:44px;border-radius:12px;background:var(--ai-bg);display:flex;align-items:center;justify-content:center;margin:0 auto 14px;"><svg class="icon" style="color:var(--ai)"><use href="#i-ai"/></svg></div>
+        <div style="font-weight:700;font-size:13.5px;">No AI findings</div>
+        <div style="font-size:12px;color:var(--n-500);margin-top:4px;">This claim hasn't been scored yet.</div>
+      </div>
+      <div class="card-frame pad" style="text-align:center;padding:32px 20px;">
+        <div style="width:44px;height:44px;border-radius:12px;background:var(--n-100);display:flex;align-items:center;justify-content:center;margin:0 auto 14px;"><svg class="icon" style="color:var(--n-400)"><use href="#i-bell"/></svg></div>
+        <div style="font-weight:700;font-size:13.5px;">You're all caught up</div>
+        <div style="font-size:12px;color:var(--n-500);margin-top:4px;">No new notifications right now.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ ILLUSTRATION ============ -->
+<section class="block" id="illustration">
+  <div class="block-inner">
+    <div class="block-head"><div><h2>Abstract illustration</h2><p class="block-desc">Geometric marks, recolored to Scientific Blue.</p></div><span class="block-num">17 / Illustration</span></div>
+    <div class="grid g4">
+      <div class="card-frame pad" style="text-align:center;">
+        <svg viewBox="0 0 100 80" style="width:100%;height:70px;"><circle cx="50" cy="40" r="26" fill="none" stroke="var(--pale-blue)" stroke-width="2"/><circle cx="50" cy="40" r="16" fill="none" stroke="var(--blue-600)" stroke-width="2"/><circle cx="50" cy="40" r="3" fill="var(--ai)"/></svg>
+        <div style="font-size:11.5px;color:var(--n-500);margin-top:6px;">AI fraud detection</div>
+      </div>
+      <div class="card-frame pad" style="text-align:center;">
+        <svg viewBox="0 0 100 80" style="width:100%;height:70px;"><path d="M50 12l22 8v16c0 14-9 24-22 28-13-4-22-14-22-28V20z" fill="var(--palest-blue)" stroke="var(--navy-900)" stroke-width="2"/></svg>
+        <div style="font-size:11.5px;color:var(--n-500);margin-top:6px;">Shield protection</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ TOKENS ============ -->
+<section class="block" id="tokens" style="background:var(--surface)">
+  <div class="block-inner">
+    <div class="block-head"><div><h2>Design tokens</h2><p class="block-desc">Spacing, radius, and shadow — unchanged structurally, recolored to match.</p></div><span class="block-num">18 / Tokens</span></div>
+    <div class="grid g3">
+      <div class="card-frame pad"><p class="sub-label">Shadow — sm</p><div style="height:52px;background:#fff;border-radius:12px;box-shadow:var(--shadow-sm);"></div></div>
+      <div class="card-frame pad"><p class="sub-label">Shadow — md</p><div style="height:52px;background:#fff;border-radius:12px;box-shadow:var(--shadow-md);"></div></div>
+      <div class="card-frame pad"><p class="sub-label">Shadow — lg</p><div style="height:52px;background:#fff;border-radius:12px;box-shadow:var(--shadow-lg);"></div></div>
+    </div>
+  </div>
+</section>
+
+<footer class="doc-footer"><p>Sentinel Claims — design moodboard v2, Scientific Blue palette. Built section by section, locked as we went.</p></footer>
+
+<script>
+const trigger=document.getElementById('trigger'), options=document.getElementById('options'), indicator=document.getElementById('indicator');
+if(options){
+  options.querySelectorAll('.option').forEach(opt=>{
+    opt.addEventListener('mouseenter',()=>{ indicator.style.top=opt.offsetTop+'px'; indicator.style.height=opt.offsetHeight+'px'; indicator.style.opacity='1'; });
+    opt.addEventListener('click',()=>{ options.querySelectorAll('.option').forEach(o=>o.classList.remove('selected')); opt.classList.add('selected'); document.getElementById('trigger-label').textContent=opt.textContent.trim(); });
+  });
+  options.addEventListener('mouseleave',()=>{ indicator.style.opacity='0'; });
+}
+const cb=document.getElementById('cb'); if(cb) cb.addEventListener('click',function(){ this.classList.toggle('checked'); });
+
+const stage=document.getElementById('toastStage'), toastBtn=document.getElementById('toastBtn');
+let toasts=[];
+function relayout(){ toasts.forEach((t,i)=>{ const depth=toasts.length-1-i; t.style.transform=`translateY(${-depth*10}px) scale(${1-depth*0.05})`; t.style.opacity=depth>2?'0':String(1-depth*0.2); t.style.zIndex=100-depth; }); }
+function addToast(){
+  const el=document.createElement('div');
+  el.style.cssText='position:absolute;left:0;right:0;bottom:0;background:#fff;border:1px solid var(--n-200);border-radius:12px;padding:10px 14px;font-size:12.5px;color:var(--n-700);box-shadow:0 8px 18px rgba(10,31,61,.1);transition:transform .3s ease, opacity .3s ease;';
+  el.textContent='Claim CLM-004471 flagged for duplicate billing.';
+  el.style.transform='translateY(30px)'; el.style.opacity='0';
+  stage.appendChild(el); toasts.push(el);
+  if(toasts.length>3){ toasts.shift().remove(); }
+  requestAnimationFrame(()=>requestAnimationFrame(relayout));
+}
+if(toastBtn){ toastBtn.addEventListener('click',addToast); addToast(); }
+</script>
+
+</body>
+</html>

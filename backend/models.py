@@ -294,6 +294,7 @@ class DisputeCase(Base):
     vendor_token                 = Column(String(600), nullable=True)
     reminder_sent_day7           = Column(Boolean, nullable=False, default=False)
     reminder_sent_day13          = Column(Boolean, nullable=False, default=False)
+    expiry_notice_sent           = Column(Boolean, nullable=False, default=False)
     status                       = Column(String(30), nullable=False, default="OPEN")
     opened_at                    = Column(DateTime, nullable=False, default=datetime.utcnow)
     closed_at                    = Column(DateTime, nullable=True)
@@ -306,16 +307,54 @@ class DisputeCase(Base):
     escalation_unlocked          = Column(Boolean, nullable=False, default=False)
     __table_args__ = (
         CheckConstraint(
-            "dispute_type IN ('DISPUTE', 'FRAUD_REPORT')",
+            "dispute_type IN ('DISPUTE', 'FRAUD_REPORT', 'DECEASED_PATIENT', 'FLAG', 'UNKNOWN_PATIENT')",
             name="chk_dc_dispute_type"
         ),
         CheckConstraint(
-            "status IN ('OPEN', 'RESPONDED_TO_MEDICARE', 'RESOLVED_BY_PHYSICIAN', 'NON_RESPONSIVE', 'CLOSED', 'REFERRED_OIG', 'PENDING_PHYSICIAN_CONFIRMATION')",
+            "status IN ('OPEN', 'RESPONDED_TO_MEDICARE', 'RESOLVED_BY_PHYSICIAN', 'NON_RESPONSIVE', 'CLOSED', 'REFERRED_OIG', 'PENDING_PHYSICIAN_CONFIRMATION', 'PENDING_PHYSICIAN_REVIEW', 'REFERRED_TO_PAYER')",
             name="chk_dc_status"
         ),
         CheckConstraint(
             "provider_response_type IN ('RESPONDED_TO_MEDICARE', 'PHYSICIAN_CHANGED_RESPONSE', 'NONE') OR provider_response_type IS NULL",
             name="chk_dc_provider_response_type"
+        ),
+    )
+
+
+class DisputeCaseEvent(Base):
+    """Append-only history log for a DisputeCase — one row per state transition
+    (opened, each vendor response, each physician confirm/reject, each auto-
+    escalation). DisputeCase itself only tracks the latest snapshot in its
+    vendor_response/vendor_responded_at/provider_response_type/vendor_docs
+    columns (overwritten on every vendor response, by design, so status
+    lookups/filters stay cheap) — this table is what lets a full multi-round
+    timeline be reconstructed instead of only ever showing the most recent
+    round and silently losing everything before it."""
+    __tablename__ = "dispute_case_events"
+
+    event_id      = Column(Integer, primary_key=True, autoincrement=True)
+    case_id       = Column(Integer, ForeignKey("dispute_cases.case_id", ondelete="CASCADE"), nullable=False, index=True)
+    event_type    = Column(String(30), nullable=False)
+    actor         = Column(String(20), nullable=False)
+    # Only meaningful for VENDOR_RESPONDED — which of the two response paths
+    # the vendor took for that specific round (RESPONDED_TO_MEDICARE or
+    # RESOLVED_WITH_PHYSICIAN), independent of whatever the case's overall
+    # provider_response_type says right now.
+    response_type = Column(String(40), nullable=True)
+    note          = Column(Text, nullable=True)
+    # Docs attached to *this* round only, not the case's cumulative vendor_docs.
+    docs          = Column(JSONB, nullable=True)
+    created_at    = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+    __table_args__ = (
+        CheckConstraint(
+            "event_type IN ('DISPUTE_OPENED', 'VENDOR_RESPONDED', 'PHYSICIAN_CONFIRMED', "
+            "'PHYSICIAN_REJECTED', 'NON_RESPONSIVE', 'CONFIRMATION_EXPIRED')",
+            name="chk_dce_event_type"
+        ),
+        CheckConstraint(
+            "actor IN ('PHYSICIAN', 'VENDOR', 'SYSTEM')",
+            name="chk_dce_actor"
         ),
     )
 

@@ -23,6 +23,15 @@ settings = get_settings()
 
 COOKIE_NAME = "claimlens_token"
 
+# Single source of truth for "where does this role land after authenticating" —
+# imported by every router that computes a post-login/post-OTP redirect
+# (routers/auth.py, routers/mfa.py) so a new role only needs adding here once.
+ROLE_REDIRECTS = {
+    "physician": "/physician/dashboard",
+    "plan_investigator": "/plan/dashboard",
+    "vendor": "/vendor/portal",
+}
+
 # In-memory revoked-token set (MVP). Survives only until the process restarts.
 _blacklist: set[str] = set()
 

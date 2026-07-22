@@ -12,11 +12,11 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..config import get_settings
-from ..models import User, Action, NpiProfile
+from ..models import User, Action, NpiProfile, DisputeCase, DisputeCaseEvent, SupplierProfile
 from ..schemas import NotificationCount
 from ..auth import (
     verify_password, hash_password, create_access_token, decode_token,
-    blacklist_token, extract_token, is_blacklisted, COOKIE_NAME,
+    blacklist_token, extract_token, is_blacklisted, COOKIE_NAME, ROLE_REDIRECTS,
 )
 from ..auth.mfa_utils import create_mfa_pending_token  # legacy TOTP flow (deactivated)
 from ..auth.email_otp import authenticate_user, initiate_otp
@@ -30,10 +30,7 @@ from ..verification.sam import check_sam_exclusions
 from ..verification.nppes import check_nppes
 import time as _time
 
-# Where each role lands after a successful login.
-_REDIRECTS = {"physician": "/physician/dashboard", "plan_investigator": "/plan/dashboard", "vendor": "/vendor/portal"}
-
-ALERT_ACTION_TYPES = ("flag_supplier", "unknown_patient", "did_not_order")
+ALERT_ACTION_TYPES = ("flag_supplier", "unknown_patient", "did_not_order", "deceased_patient")
 EPOCH = _dt(1970, 1, 1)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -66,6 +63,15 @@ class RegisterRequest(BaseModel):
     full_name: Optional[str] = None
     first_name: Optional[str] = None
     last_name: Optional[str] = None
+    # Identity/contact/practice fields used for verification against NPPES /
+    # PECOS / state medical board / CMS enrollment records.
+    date_of_birth: Optional[str] = None      # optional, used only for identity matching
+    phone: Optional[str] = None
+    organization_name: Optional[str] = None  # practice / organization
+    specialty: Optional[str] = None
+    tax_id: Optional[str] = None             # organization-level EIN, if applicable
+    # Legacy license fields — still accepted for backward compatibility but no
+    # longer collected by the registration form.
     dea_number: Optional[str] = None
     state_license_number: Optional[str] = None
     state_license_state: Optional[str] = None
@@ -81,6 +87,15 @@ class PayerRegisterRequest(BaseModel):
     authorized_signatory_name: str
     authorized_signatory_title: str
     attestation: bool = False
+
+
+class VendorRegisterRequest(BaseModel):
+    email: str
+    password: str
+    npi: str
+    role: str = "vendor"
+    contact_name: Optional[str] = None
+    contact_phone: Optional[str] = None
 
 
 # Simple in-memory per-IP rate limiter for the public verify endpoints (10/min).
@@ -135,7 +150,7 @@ async def login(payload: LoginRequest, response: Response, db: Session = Depends
             key=COOKIE_NAME, value=token, httponly=True, samesite="lax",
             secure=False, max_age=expires_hours * 3600, path="/",
         )
-        redirect = _REDIRECTS.get(user.role, "/")
+        redirect = ROLE_REDIRECTS.get(user.role, "/")
         return {"otp_required": False, "redirect": redirect, "role": user.role}
 
     return await initiate_otp(user)
@@ -200,14 +215,20 @@ async def register(payload: RegisterRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=409, detail={
             "error": "An account with this email already exists.", "code": "EMAIL_EXISTS"})
 
-    # Step 1 — NPPES NPI check (blocks).
-    profile = db.query(NpiProfile).filter(NpiProfile.npi == npi).first()
-    if not profile:
+    # Step 1 — NPPES presence (blocks). Goes through check_nppes so it honours the
+    # NPPES_MOCK flag: live mode = local npi_profiles lookup; mock/testing mode =
+    # any well-formed 10-digit NPI passes as a mock provider (no table row needed).
+    nppes = await check_nppes(npi, db)
+    if not nppes.get("valid"):
         raise HTTPException(status_code=400, detail={
             "error": "NPI not found in the NPPES registry.", "code": "NPI_NOT_IN_NPPES"})
+    profile = db.query(NpiProfile).filter(NpiProfile.npi == npi).first()   # None in mock mode
+    nppes_name = nppes.get("name") or (profile.physician_name if profile else None)
+    nppes_state = nppes.get("state") or (profile.practice_state if profile else None)
 
-    # Step 2 — OIG LEIE exclusion (blocks).
-    if profile.oig_excluded:
+    # Step 2 — OIG LEIE exclusion (blocks). Only enforceable against a real local
+    # record; a mock-mode NPI with no profile row is treated as not excluded.
+    if profile and profile.oig_excluded:
         raise HTTPException(status_code=400, detail={
             "error": "This provider appears on the OIG LEIE exclusion list and cannot register.",
             "code": "OIG_EXCLUDED"})
@@ -237,13 +258,11 @@ async def register(payload: RegisterRequest, db: Session = Depends(get_db)):
     else:
         ptan = {"status": "not_provided"}
 
-    def _flagged(r):
-        return (r.get("status") in ("not_provided", "manual_review")
-                or r.get("manual_review") is True or r.get("valid") is False)
-
+    # Only the identity/enrollment checks that actually run on the collected
+    # fields can flag a registration now — DEA / state license / PTAN are no
+    # longer part of registration, so their "not_provided" no longer counts.
     needs_manual_review = bool(order_referring.get("manual_review")) \
-        or revalidation.get("status") in ("lapsed", "due_soon") \
-        or any(_flagged(r) for r in (dea, state_license, ptan))
+        or revalidation.get("status") in ("lapsed", "due_soon")
 
     user = User(
         email=email,
@@ -252,16 +271,25 @@ async def register(payload: RegisterRequest, db: Session = Depends(get_db)):
         npi=npi,
         full_name=(payload.full_name
                    or f"{payload.first_name or ''} {payload.last_name or ''}".strip()
-                   or profile.physician_name or "").strip() or None,
+                   or nppes_name or "").strip() or None,
+        organization_name=(payload.organization_name or "").strip() or None,
         is_active=True,  # physicians get immediate access
         verification_results={
-            "nppes": {"valid": True, "name": profile.physician_name, "state": profile.practice_state},
+            "nppes": {"valid": True, "name": nppes_name, "state": nppes_state},
             "oig": {"excluded": False},
             "cms_order_referring": order_referring,
             "cms_revalidation": revalidation,
             "dea": dea,
             "state_license": state_license,
             "ptan": ptan,
+            # Registration profile details captured for verification/matching.
+            "profile": {
+                "date_of_birth": (payload.date_of_birth or "").strip() or None,
+                "phone":         (payload.phone or "").strip() or None,
+                "specialty":     (payload.specialty or "").strip() or None,
+                "organization":  (payload.organization_name or "").strip() or None,
+                "tax_id":        (payload.tax_id or "").strip() or None,
+            },
             "checked_at": datetime.utcnow().isoformat(),
         },
         needs_manual_review=needs_manual_review,
@@ -340,6 +368,51 @@ async def register_payer(payload: PayerRegisterRequest, db: Session = Depends(ge
     }
 
 
+@router.post("/register/vendor", status_code=201)
+async def register_vendor(payload: VendorRegisterRequest, db: Session = Depends(get_db)):
+    """Vendor/supplier self-registration. Blocking: NPI must exist in the supplier
+    registry and not be OIG-excluded. Active immediately, same as physician —
+    there's no admin-activation concept for vendors today."""
+    email = payload.email.lower().strip()
+    npi = payload.npi.strip()
+
+    if db.query(User).filter(User.email == email).first():
+        raise HTTPException(status_code=409, detail={
+            "error": "An account with this email already exists.", "code": "EMAIL_EXISTS"})
+
+    profile = db.query(SupplierProfile).filter(SupplierProfile.npi == npi).first()
+    if not profile:
+        raise HTTPException(status_code=400, detail={
+            "error": "NPI not found in the supplier registry.", "code": "NPI_NOT_FOUND"})
+
+    if profile.oig_excluded:
+        raise HTTPException(status_code=400, detail={
+            "error": "This supplier appears on the OIG LEIE exclusion list and cannot register.",
+            "code": "OIG_EXCLUDED"})
+
+    user = User(
+        email=email,
+        password_hash=hash_password(payload.password.strip()),
+        role="vendor",
+        npi=npi,
+        full_name=(payload.contact_name or profile.contact_name or profile.supplier_name or "").strip() or None,
+        organization_name=profile.supplier_name,
+        is_active=True,
+        verification_results={
+            "supplier_registry": {"valid": True, "name": profile.supplier_name, "type": profile.supplier_type},
+            "oig": {"excluded": False},
+            "checked_at": datetime.utcnow().isoformat(),
+        },
+    )
+    db.add(user)
+    db.commit()
+
+    return {
+        "success": True, "npi": npi, "full_name": user.full_name,
+        "organization_name": profile.supplier_name,
+    }
+
+
 @router.get("/verify-npi")
 async def verify_npi(npi: str, request: Request, db: Session = Depends(get_db)):
     """Public, rate-limited NPPES lookup used inline during registration (no account)."""
@@ -352,6 +425,21 @@ async def verify_uei(uei: str, request: Request):
     """Public, rate-limited UEI lookup used inline during payer registration."""
     _rate_limit(request)
     return await check_uei(uei.strip())
+
+
+@router.get("/verify-vendor-npi")
+async def verify_vendor_npi(npi: str, request: Request, db: Session = Depends(get_db)):
+    """Public, rate-limited supplier-registry lookup used inline during vendor registration."""
+    _rate_limit(request)
+    profile = db.query(SupplierProfile).filter(SupplierProfile.npi == npi.strip()).first()
+    if not profile:
+        return {"valid": False}
+    return {
+        "valid": not profile.oig_excluded,
+        "oig_excluded": profile.oig_excluded,
+        "name": profile.supplier_name,
+        "type": profile.supplier_type,
+    }
 
 
 @router.post("/logout")
@@ -402,15 +490,63 @@ def _current_user(request: Request, db: Session) -> User:
     return user
 
 
+
+# Dispute-case events that matter to each role's bell. Must mirror
+# vendor.py's _VENDOR_NOTIFICATION_EVENTS — the vendor bell shows exactly:
+# case opened, own docs submitted (confirmation), response window expired
+# unanswered, and the physician's approve/decline verdict.
+_PHYSICIAN_DISPUTE_EVENTS = ("VENDOR_RESPONDED", "NON_RESPONSIVE", "CONFIRMATION_EXPIRED")
+_VENDOR_DISPUTE_EVENTS = ("DISPUTE_OPENED", "VENDOR_RESPONDED", "PHYSICIAN_CONFIRMED", "PHYSICIAN_REJECTED", "NON_RESPONSIVE")
+# Payer/compliance bell — mirrors dashboard.py's _PLAN_NOTIFICATION_EVENTS:
+# case opened, vendor responded / window expired unanswered, physician verdict.
+_PLAN_DISPUTE_EVENTS = ("DISPUTE_OPENED", "VENDOR_RESPONDED", "NON_RESPONSIVE", "PHYSICIAN_CONFIRMED", "PHYSICIAN_REJECTED")
+
+
 @router.get("/notifications/count", response_model=NotificationCount)
 def notifications_count(request: Request, db: Session = Depends(get_db)):
-    """Unread alert events = flag/unknown/denial actions since last_alert_seen_at."""
+    """Unread count since last_alert_seen_at, scoped by role:
+    - plan_investigator (payer/compliance): flag/unknown/denial actions PLUS
+      every dispute-case event across every physician/vendor — compliance
+      sees everything.
+    - physician: dispute-case events on their own cases, caused by someone
+      else (the vendor, or an auto-escalation) — not their own actions.
+    - vendor: dispute-case events on their own cases, likewise excluding
+      their own responses."""
     user = _current_user(request, db)
     since = user.last_alert_seen_at or EPOCH
-    unread = db.query(func.count(Action.id)).filter(
-        Action.action_type.in_(ALERT_ACTION_TYPES),
-        Action.created_at > since,
-    ).scalar() or 0
+
+    if user.role == "physician":
+        unread = (
+            db.query(func.count(DisputeCaseEvent.event_id))
+            .join(DisputeCase, DisputeCase.case_id == DisputeCaseEvent.case_id)
+            .filter(
+                DisputeCase.physician_npi == user.npi,
+                DisputeCaseEvent.event_type.in_(_PHYSICIAN_DISPUTE_EVENTS),
+                DisputeCaseEvent.created_at > since,
+            ).scalar()
+        ) or 0
+    elif user.role == "vendor":
+        unread = (
+            db.query(func.count(DisputeCaseEvent.event_id))
+            .join(DisputeCase, DisputeCase.case_id == DisputeCaseEvent.case_id)
+            .filter(
+                DisputeCase.vendor_npi == user.npi,
+                DisputeCaseEvent.event_type.in_(_VENDOR_DISPUTE_EVENTS),
+                DisputeCaseEvent.created_at > since,
+            ).scalar()
+        ) or 0
+    else:
+        unread = db.query(func.count(Action.id)).filter(
+            Action.action_type.in_(ALERT_ACTION_TYPES),
+            Action.created_at > since,
+        ).scalar() or 0
+        # Same event filter as dashboard.py's /plan/notifications feed, so the
+        # badge never counts items the dropdown doesn't show.
+        unread += db.query(func.count(DisputeCaseEvent.event_id)).filter(
+            DisputeCaseEvent.event_type.in_(_PLAN_DISPUTE_EVENTS),
+            DisputeCaseEvent.created_at > since,
+        ).scalar() or 0
+
     return NotificationCount(unread=unread)
 
 

@@ -4,18 +4,20 @@ import { getAlertsHistory } from '../../api'
 import { Icon, fmtUSD, timeAgo } from '../../components/ui'
 
 const META = {
-  flagged:        { icon: 'flag',  chip: 'bg-amber-50 text-amber-500',  verb: 'flagged' },
-  unknownPatient: { icon: 'userx', chip: 'bg-rose-50 text-rose-500',    verb: 'reported unknown patient' },
-  deniedOrder:    { icon: 'ban',   chip: 'bg-rose-50 text-rose-600',    verb: 'denied ordering from' },
+  flagged:         { icon: 'flag',     chip: 'bg-[#FBF3E4] text-[#D1A85C]',  verb: 'flagged' },
+  unknownPatient:  { icon: 'userx',    chip: 'bg-[#F7EBEA] text-[#A6453F]',  verb: 'reported unknown patient' },
+  deceasedPatient: { icon: 'heartOff', chip: 'bg-[#F2EEF7] text-[#7A6899]',  verb: 'reported deceased patient billed by' },
+  deniedOrder:     { icon: 'ban',      chip: 'bg-[#F7EBEA] text-[#8A423D]',  verb: 'denied ordering from' },
 }
-const TYPE_LABEL = { flagged: 'Flag Supplier', unknownPatient: 'Unknown Patient', deniedOrder: 'Did Not Order' }
+const TYPE_LABEL = { flagged: 'Flag Vendor', unknownPatient: 'Unknown Patient', deceasedPatient: 'Deceased Patient', deniedOrder: 'Did Not Order' }
 
 const TYPE_OPTIONS = [
-  { key: 'flagged', label: 'Flag Supplier' },
+  { key: 'flagged', label: 'Flag Vendor' },
   { key: 'unknownPatient', label: 'Unknown Patient' },
+  { key: 'deceasedPatient', label: 'Deceased Patient' },
   { key: 'deniedOrder', label: 'Did Not Order' },
 ]
-const DEFAULT_SETTINGS = { types: { flagged: true, unknownPatient: true, deniedOrder: true }, minAmount: 0 }
+const DEFAULT_SETTINGS = { types: { flagged: true, unknownPatient: true, deceasedPatient: true, deniedOrder: true }, minAmount: 0 }
 const STORE_KEY = 'medclaim_alert_settings'
 
 function loadSettings() {
@@ -60,15 +62,15 @@ export default function LiveAlerts() {
       <div className="flex items-center justify-between mb-5">
         <div className="flex items-center gap-3">
           <h2 className="text-base font-bold text-slate-900">Live Alerts</h2>
-          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-50 ring-1 ring-emerald-200 text-[11px] font-bold text-emerald-600">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 live-dot" /> LIVE
+          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-[#E9F3ED] ring-1 ring-[#D5E9DD] text-[11px] font-bold text-[#2E6B4F]">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#3A7D5C] live-dot" /> LIVE
           </span>
         </div>
         <div className="relative">
           <button onClick={() => setShowSettings((v) => !v)}
-                  className={`px-3.5 py-2 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-colors ${filtersActive ? 'border-ink text-ink bg-ink/5' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                  className={`px-3.5 py-2 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-colors ${filtersActive ? 'border-[#0A1F3D] text-[#0A1F3D] bg-[#0A1F3D]/5' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
             <Icon name="alerts" size={13} /> Alert Settings
-            {filtersActive && <span className="w-1.5 h-1.5 rounded-full bg-ink" />}
+            {filtersActive && <span className="w-1.5 h-1.5 rounded-full bg-[#0A1F3D]" />}
           </button>
 
           {showSettings && (
@@ -84,7 +86,7 @@ export default function LiveAlerts() {
                   {TYPE_OPTIONS.map((t) => (
                     <label key={t.key} className="flex items-center gap-2.5 cursor-pointer select-none">
                       <input type="checkbox" checked={settings.types[t.key] !== false} onChange={() => toggleType(t.key)}
-                             className="w-4 h-4 rounded border-slate-300 text-ink focus:ring-ink/30" />
+                             className="w-4 h-4 rounded border-slate-300 text-[#0A1F3D] focus:ring-[#0A1F3D]/30" />
                       <span className="text-sm text-slate-600">{t.label}</span>
                     </label>
                   ))}
@@ -94,7 +96,7 @@ export default function LiveAlerts() {
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
                   <input type="number" min="0" step="100" value={settings.minAmount}
                          onChange={(e) => setSettings((s) => ({ ...s, minAmount: Math.max(0, Number(e.target.value) || 0) }))}
-                         className="w-full pl-7 pr-3 py-2 rounded-lg border border-slate-200 text-sm text-slate-700 outline-none focus:border-ink focus:ring-2 focus:ring-ink/15" />
+                         className="w-full pl-7 pr-3 py-2 rounded-lg border border-slate-200 text-sm text-slate-700 outline-none focus:border-[#0A1F3D] focus:ring-2 focus:ring-[#0A1F3D]/15" />
                 </div>
                 <button onClick={resetSettings} className="mt-4 w-full py-2 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50">
                   Reset to defaults
@@ -106,7 +108,7 @@ export default function LiveAlerts() {
       </div>
 
       <div className="mc-card overflow-hidden">
-        <div className="px-5 py-3 bg-slate-50/70 border-b border-slate-100 text-xs font-medium text-ink flex items-center gap-2">
+        <div className="px-5 py-3 bg-slate-50/70 border-b border-slate-100 text-xs font-medium text-[#0A1F3D] flex items-center gap-2">
           <Icon name="bolt" size={13} /> New physician flags appear here automatically — updates instantly.
           {filtersActive && <span className="ml-auto text-slate-400 font-normal">{hidden} hidden by filters</span>}
         </div>

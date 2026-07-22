@@ -64,8 +64,17 @@ class Settings(BaseSettings):
     unbundling_min_codes: int = 3
     max_physician_flag_contribution: int = 20
     sse_keepalive_seconds: int = 15
+    # How often the vendor dispute reminder worker (backend/rules/reminders.py)
+    # checks for due day-7/day-13 reminders and day-15 expiry notices.
+    vendor_reminder_interval_seconds: int = 1800
     # --- NPI Watch notification loop ---
+    # base_url is the BACKEND origin — every /api/v1/... link emailed out (the
+    # physician confirm/dispute/fraud links, proof-of-work doc downloads) is
+    # built from this one. frontend_base_url is the React app's own origin —
+    # emailed links that land on an actual app page (the vendor's upload-docs
+    # portal link) must use this instead, or they 404 against the API server.
     base_url: str = "http://localhost:4001"
+    frontend_base_url: str = "http://localhost:4000"
     email_enabled: bool = False          # set True + add Azure creds to go live
     azure_communication_connection_string: str = ""
     from_email: str = "noreply@claimlens.com"
@@ -81,10 +90,17 @@ class Settings(BaseSettings):
     score_w_amount: float = 0.30
     score_w_breadth: float = 0.20        # distinct suppliers (NPI) / distinct NPIs (supplier)
     score_w_flagged: float = 0.20        # fraction of the entity's claims that are OIG-flagged
+    # Hours a physician has to undo a vendor-notifying claim action (dispute /
+    # fraud / deceased_patient / flag_supplier / unknown_patient). The vendor
+    # email + dispute case are deferred until this window closes (sent by the
+    # reminder worker), so an undone action never notifies the vendor at all.
+    # Set <= 0 for the old behavior: notify instantly, 60s undo. (demo: lower it)
+    vendor_notify_delay_hours: float = 24.0
     alert_action_types: list = [
         'flag_supplier',
         'unknown_patient',
-        'did_not_order'
+        'did_not_order',
+        'deceased_patient'
     ]
     escalation_action_types: list = [
         'did_not_order'

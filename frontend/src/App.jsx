@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
+import { useState, useEffect, useRef, useMemo } from 'react'
+import { Routes, Route, Navigate, useNavigate, useLocation, useParams, useOutletContext, Outlet } from 'react-router-dom'
 import VendorDisputePage from './vendor/VendorDisputePage'
 import VendorPortalInner from './vendor/VendorPortalInner'
 import { AlertsProvider } from './context/AlertsContext'
@@ -7,711 +7,336 @@ import { useAuth, DASHBOARD_PATH } from './context/AuthContext'
 import Shell from './components/Shell'
 import Login from './screens/Login'
 import LandingPage from './screens/LandingPage'
-import PayerSignup from './screens/PayerSignup'
-import PhysicianSignup from './screens/PhysicianSignup'
 import MfaSetup from './screens/MfaSetup'
 import MfaBackupCodes from './screens/MfaBackupCodes'
 import OtpLogin from './screens/OtpLogin'
 import Register from './screens/Register'
-import { Icon, StatCard, fmtUSD, fmtDate } from './components/ui'
-import SummaryCard from './components/SummaryCard'
-import ClaimsTable from './components/ClaimsTable'
-import FlaggedSuppliers from './components/FlaggedSuppliers'
+import { Icon, StatCard, fmtUSD, fmtDate, timeAgo, normalizeSearchQuery, buildDisputeTimeline, COMPLIANCE_ACTION_LABEL, PFilterTh } from './components/ui'
 import PlanHome from './plan/screens/PlanHome'
-import NPILeaderboard from './plan/screens/NPILeaderboard'
+import NPILeaderboard, { AllPhysicians } from './plan/screens/NPILeaderboard'
 import NPIDetail from './plan/screens/NPIDetail'
-import SupplierWatchlist from './plan/screens/SupplierWatchlist'
+import SupplierWatchlist, { AllVendors } from './plan/screens/SupplierWatchlist'
 import SupplierDetail from './plan/screens/SupplierDetail'
 import SummaryCardSkeleton from './components/SummaryCardSkeleton'
-import TableSkeleton from './components/TableSkeleton'
-import AnalyticsPanel from './components/AnalyticsPanel'
-import PhysicianOverview from './components/PhysicianOverview'
-import PhysicianAlerts from './components/PhysicianAlerts'
-import GhostBillingToast from './components/GhostBillingToast'
-import { StatCardGrid, PhysicianHeader, ReviewBanner } from './components/SummaryCard'
-import { PHYSICIAN_NPI, getPhysician, getFlaggedSuppliers, getNotificationsCount, markNotificationsSeen, getNpiWatchNotifications, getNpiWatchStats, getPlanDisputes, confirmDisputeResolution, decideDisputeClaim, subscribeDisputeStream, API_BASE } from './api'
+import { PHYSICIAN_NPI, getPhysician, getNotificationsCount, markNotificationsSeen, getNpiWatchNotifications, getNpiWatchStats, getPhysicianBellNotifications, getPlanDisputes, getPlanNotifications, confirmDisputeResolution, decideDisputeClaim, subscribeDisputeStream, submitComplianceAction, getSupplierById, API_BASE } from './api'
+import { PhysicianPortal, PhysDashboardScreen, PhysClaimsScreen, PhysClaimDetailScreen, PhysDisputesScreen, PhysDisputeDetailScreen } from './physician/PhysicianPortal'
 
-const PHYS_NAV = [
-  { id: 'summary', label: 'My Dashboard', icon: 'dashboard' },
-  { id: 'claims', label: 'My Claims', icon: 'claims' },
-  { id: 'alerts', label: 'My Disputes', icon: 'alertTri' },
-  { id: 'suppliers', label: 'Flagged Suppliers', icon: 'flag' },
-]
 const PLAN_NAV = [
   { id: 'home', label: 'Dashboard', icon: 'dashboard' },
-  { id: 'leaderboard', label: 'NPI Leaderboard', icon: 'leaderboard' },
-  { id: 'watchlist', label: 'Supplier Watchlist', icon: 'suppliers' },
+  { id: 'leaderboard', label: 'Physician Leaderboard', icon: 'leaderboard' },
+  { id: 'watchlist', label: 'Vendor Watchlist', icon: 'suppliers' },
   { id: 'disputes', label: 'NPI Disputes', icon: 'alertTri' },
 ]
-const PHYS_TITLES = { summary: 'My Dashboard', claims: 'Claims Under My NPI', alerts: 'My Disputes', disputeDetail: 'Dispute Detail', suppliers: 'Suppliers I Flagged' }
-const PLAN_TITLES = { home: 'Payer Portal', leaderboard: 'NPI Risk Leaderboard', detail: 'NPI Detail', watchlist: 'Supplier Watchlist', supplierDetail: 'Supplier Case', alerts: 'Live Alerts', disputes: 'NPI Disputes' }
+const PLAN_TITLES = { home: 'Payer Portal', leaderboard: 'Physician Risk Leaderboard', physicians: 'All Physicians', detail: 'NPI Detail', watchlist: 'Vendor Watchlist', vendors: 'All Vendors', supplierDetail: 'Vendor Case', alerts: 'Live Alerts', disputes: 'NPI Disputes', disputeDetail: 'Dispute Detail' }
 
-// ─── Physician portal ──────────────────────────────────────────────────────
-function PhysicianPortalInner() {
-  const { user, logout } = useAuth()
-  const navigate = useNavigate()
-  const npi = user?.npi || PHYSICIAN_NPI
-
-  const [screen, setScreen] = useState(() => {
-    const p = new URLSearchParams(window.location.search)
-    return (p.get('preview') === '1' && p.get('screen')) || 'summary'
-  })
-  const [physician, setPhysician] = useState(null)
-  const [summary, setSummary] = useState(null)
-  const [flaggedSuppliers, setFlaggedSuppliers] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
-  const [supplierFilter, setSupplierFilter] = useState(null)   // active supplier filter on My Claims
-  const [history, setHistory] = useState([])                   // backtrack stack of prior views
-  const [npiAlerts, setNpiAlerts] = useState([])
-  const [npiStats, setNpiStats] = useState(null)
-  const [npiAlertsLoading, setNpiAlertsLoading] = useState(false)
-  const [confirmingCaseId, setConfirmingCaseId] = useState(null)
-  const [decidingCaseId, setDecidingCaseId] = useState(null)
-  const [decideError, setDecideError] = useState(null)
-  const [decideResult, setDecideResult] = useState(null)
-  const [selectedDispute, setSelectedDispute] = useState(null)
-  const [disputeFilter, setDisputeFilter] = useState('ALL')  // ALL | OPEN | RESOLVED — set by clicking the KPI tiles or the status dropdown
-  const [disputeTypeFilter, setDisputeTypeFilter] = useState('ALL')  // ALL | DISPUTE | FRAUD_REPORT
-  const [disputeSortOrder, setDisputeSortOrder] = useState('NONE')   // NONE | DAYS_ASC | DAYS_DESC
-  const [disputeSearch, setDisputeSearch] = useState('')
-
-  // Navigate forward, recording the current view so the header back button can restore it.
-  function navTo(s, filter = null) {
-    setHistory((h) => [...h, { screen, supplierFilter }])
-    setSupplierFilter(filter)
-    setScreen(s)
-  }
-  function goBack() {
-    setHistory((h) => {
-      if (h.length === 0) return h
-      const prev = h[h.length - 1]
-      setScreen(prev.screen)
-      setSupplierFilter(prev.supplierFilter)
-      return h.slice(0, -1)
-    })
-  }
-
-  // From Flagged Suppliers: jump to My Claims filtered to that supplier.
-  function selectSupplier(name) { navTo('claims', name) }
-
-  async function loadData() {
-    setLoading(true); setError(null)
-    try {
-      const [p, s] = await Promise.all([getPhysician(npi), getFlaggedSuppliers(npi)])
-      setPhysician(p.physician); setSummary(p.summary); setFlaggedSuppliers(s)
-      getNpiWatchStats().then(setNpiStats).catch(() => {})
-    } catch (e) { setError(e.message) } finally { setLoading(false) }
-  }
-  useEffect(() => { loadData() }, [npi])
-
-  async function loadAlerts() {
-    setNpiAlertsLoading(true)
-    try {
-      const [a, s] = await Promise.all([getNpiWatchNotifications(), getNpiWatchStats()])
-      setNpiAlerts(a.notifications); setNpiStats(s)
-    } catch { /* keep last state */ } finally { setNpiAlertsLoading(false) }
-  }
-  useEffect(() => { if (screen === 'alerts') loadAlerts() }, [screen])
-
-  // Live push — a vendor responding (to us or Medicare), or a case reopening,
-  // refreshes the feed immediately instead of only on next screen entry.
-  useEffect(() => {
-    const es = subscribeDisputeStream('/api/v1/physician/npi-watch/alerts/stream', () => {
-      Promise.all([getNpiWatchNotifications(), getNpiWatchStats()]).then(([a, s]) => {
-        setNpiAlerts(a.notifications); setNpiStats(s)
-        setSelectedDispute((prev) => (prev ? a.notifications.find((n) => n.notification_id === prev.notification_id) || prev : prev))
-      }).catch(() => {})
-    })
-    return () => es.close()
-  }, [])
-
-  // Also refresh on entering the detail screen directly — the live-push effect
-  // above only fires once mounted, so this covers the gap between mount and
-  // the first SSE event.
-  useEffect(() => {
-    if (screen !== 'disputeDetail') return
-    let cancelled = false
-    Promise.all([getNpiWatchNotifications(), getNpiWatchStats()]).then(([a, s]) => {
-      if (cancelled) return
-      setNpiAlerts(a.notifications); setNpiStats(s)
-      setSelectedDispute((prev) => (prev ? a.notifications.find((n) => n.notification_id === prev.notification_id) || prev : prev))
-    }).catch(() => {})
-    return () => { cancelled = true }
-  }, [screen])
-
-  async function handleConfirmResolution(caseId, confirmed) {
-    setConfirmingCaseId(caseId)
-    try {
-      await confirmDisputeResolution(caseId, confirmed)
-      const [a, s] = await Promise.all([getNpiWatchNotifications(), getNpiWatchStats()])
-      setNpiAlerts(a.notifications); setNpiStats(s)
-      // Keep the open detail screen in sync with the freshly confirmed/rejected case.
-      setSelectedDispute((prev) => (prev ? a.notifications.find((n) => n.notification_id === prev.notification_id) || prev : prev))
-    } catch { /* keep the card as-is; physician can retry */ }
-    finally { setConfirmingCaseId(null) }
-  }
-
-  async function handleDecideClaim(caseId, actionType) {
-    setDecidingCaseId(caseId)
-    setDecideError(null)
-    setDecideResult(null)
-    try {
-      const result = await decideDisputeClaim(caseId, actionType)
-      setDecideResult({ caseId, actionType })
-      const [a, s] = await Promise.all([getNpiWatchNotifications(), getNpiWatchStats()])
-      setNpiAlerts(a.notifications); setNpiStats(s)
-      setSelectedDispute((prev) => (prev ? a.notifications.find((n) => n.notification_id === prev.notification_id) || prev : prev))
-    } catch (e) {
-      setDecideError(e.message || 'Could not record your decision. Please try again.')
-    } finally {
-      setDecidingCaseId(null)
-    }
-  }
-
-  async function handleActioned() {
-    try {
-      const [p, s] = await Promise.all([getPhysician(npi), getFlaggedSuppliers(npi)])
-      setPhysician(p.physician); setSummary(p.summary); setFlaggedSuppliers(s)
-    } catch { /* keep last good state */ }
-  }
-
-  const pendingCount = summary?.pendingReview ?? 0
-  const subtitle = physician?.specialty
-    ? `${physician.specialty}${physician.city ? ' · ' + physician.city : ''}`
-    : 'Physician'
-
-  const PHYS_LABEL = { summary: 'My Dashboard', claims: 'My Claims', alerts: 'My Disputes', disputeDetail: 'Dispute Detail', suppliers: 'Flagged Suppliers' }
-  const physBreadcrumbs = (() => {
-    if (screen === 'summary') return []
-    const trail = []
-    // Walk history backwards to find the path back to dashboard
-    for (let i = history.length - 1; i >= 0; i--) {
-      const h = history[i]
-      if (h.screen === 'summary') { trail.push({ label: 'My Dashboard', onClick: () => { setScreen('summary'); setHistory(history.slice(0, i)) } }); break }
-      const lbl = PHYS_LABEL[h.screen]
-      if (lbl) trail.push({ label: lbl, onClick: () => { setScreen(h.screen); setSupplierFilter(h.supplierFilter); setHistory(history.slice(0, i)) } })
-    }
-    if (!trail.find(c => c.label === 'My Dashboard')) trail.push({ label: 'My Dashboard', onClick: () => { setScreen('summary'); setHistory([]) } })
-    const items = trail.reverse()
-    items.push({ label: PHYS_LABEL[screen], active: true })
-    return items
-  })()
-
-  return (
-    <>
-    <GhostBillingToast />
-    <Shell navItems={PHYS_NAV} activeId={screen} onNavigate={(s) => navTo(s)}
-           canGoBack={history.length > 0 && screen !== 'summary'} onBack={goBack}
-           title={PHYS_TITLES[screen]} user={user} subtitle={subtitle}
-           notifCount={npiStats?.open ?? pendingCount} bellTitle="Open disputes"
-           onBellClick={() => navTo('alerts')}
-           breadcrumbs={physBreadcrumbs}
-           onLogout={async () => { await logout(); navigate('/welcome', { replace: true }) }}>
-      {screen === 'claims' ? (
-        <ClaimsTable npi={npi} onActioned={handleActioned}
-                     supplierFilter={supplierFilter} onSupplierFilterChange={setSupplierFilter} />
-      ) : error ? (
-        <div className="max-w-screen-xl mx-auto px-7 py-7">
-          <div className="mc-card border-rose-200 bg-rose-50/50 px-6 py-5">
-            <div className="text-sm font-semibold text-rose-600">Couldn't load dashboard data</div>
-            <div className="text-xs text-slate-500 mt-1">{error}. Is the backend running on :8000?</div>
-            <button onClick={loadData} className="mt-3 text-xs font-semibold px-3 py-1.5 rounded-lg btn-navy">Retry</button>
-          </div>
-        </div>
-      ) : screen === 'summary' ? (
-        loading ? <SummaryCardSkeleton />
-          : <>
-              <div className="w-full px-4 sm:px-7 pt-4 sm:pt-7 pb-0 flex flex-col gap-3 sm:gap-4">
-                <PhysicianHeader physician={physician} />
-                <StatCardGrid summary={summary} pendingCount={pendingCount}
-                              setActiveScreen={(s) => navTo(s)} />
-              </div>
-              <PhysicianAlerts />
-              <div className="w-full px-4 sm:px-7 pt-4 sm:pt-6">
-                <PhysicianOverview npi={npi} />
-              </div>
-            </>
-      ) : screen === 'alerts' ? (
-        npiAlertsLoading ? (
-          <div className="flex justify-center py-20">
-            <div className="animate-spin h-7 w-7 rounded-full border-2 border-navy border-t-transparent" />
-          </div>
-        ) : (
-          <div className="max-w-screen-xl mx-auto px-4 sm:px-7 py-6 space-y-6">
-            {npiStats && (
-              <div className="grid grid-cols-3 gap-3">
-                <StatCard icon="claims" label="Total Disputes" value={npiStats.total}
-                          accent="navy" spark={false} onClick={() => setDisputeFilter('ALL')} />
-                <StatCard icon="clock" label="Open" value={npiStats.open}
-                          accent="amber" spark={false} onClick={() => setDisputeFilter('OPEN')} />
-                <StatCard icon="check" label="Resolved" value={npiStats.resolved}
-                          accent="teal" spark={false} onClick={() => setDisputeFilter('RESOLVED')} />
-              </div>
-            )}
-            {npiAlerts.length > 0 && (
-              <div className="flex flex-wrap items-center gap-3">
-                <select value={disputeTypeFilter} onChange={(e) => setDisputeTypeFilter(e.target.value)}
-                        className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-[12px] font-semibold text-slate-700 outline-none focus:border-navy/40 focus:ring-2 focus:ring-navy/10">
-                  <option value="ALL">All Types</option>
-                  <option value="DISPUTE">Disputes</option>
-                  <option value="FRAUD_REPORT">Fraud Reports</option>
-                </select>
-                <select value={disputeFilter} onChange={(e) => setDisputeFilter(e.target.value)}
-                        className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-[12px] font-semibold text-slate-700 outline-none focus:border-navy/40 focus:ring-2 focus:ring-navy/10">
-                  <option value="ALL">All Statuses</option>
-                  <option value="OPEN">Open</option>
-                  <option value="RESOLVED">Resolved</option>
-                </select>
-                <select value={disputeSortOrder} onChange={(e) => setDisputeSortOrder(e.target.value)}
-                        className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-[12px] font-semibold text-slate-700 outline-none focus:border-navy/40 focus:ring-2 focus:ring-navy/10">
-                  <option value="NONE">Default Order</option>
-                  <option value="DAYS_ASC">Days Left: Low to High</option>
-                  <option value="DAYS_DESC">Days Left: High to Low</option>
-                </select>
-                {(disputeFilter !== 'ALL' || disputeTypeFilter !== 'ALL' || disputeSortOrder !== 'NONE' || disputeSearch) && (
-                  <button onClick={() => { setDisputeFilter('ALL'); setDisputeTypeFilter('ALL'); setDisputeSortOrder('NONE'); setDisputeSearch('') }}
-                          className="text-[12px] font-semibold text-slate-500 hover:text-rose-500 transition-colors flex items-center gap-1">
-                    <Icon name="x" size={11} stroke={2.5} /> Clear all
-                  </button>
-                )}
-                <div className="relative ml-auto w-full sm:w-auto sm:min-w-[220px]">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"><Icon name="search" size={13} /></span>
-                  <input
-                    type="text"
-                    value={disputeSearch}
-                    onChange={(e) => setDisputeSearch(e.target.value)}
-                    placeholder="Search claim #, vendor, or NPI…"
-                    className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-slate-200 bg-white text-[12px] font-medium text-slate-700 placeholder-slate-400 outline-none focus:border-navy/40 focus:ring-2 focus:ring-navy/10"
-                  />
-                </div>
-              </div>
-            )}
-            {(() => {
-              const OPEN_STATUSES = ['OPEN', 'PENDING_PHYSICIAN_CONFIRMATION']
-              const RESOLVED_STATUSES = ['RESPONDED_TO_MEDICARE', 'RESOLVED_BY_PHYSICIAN']
-              const filtered = npiAlerts.filter((n) => {
-                const matchType = disputeTypeFilter === 'ALL' || n.dispute?.dispute_type === disputeTypeFilter
-                const matchStatus = disputeFilter === 'ALL'
-                  || (disputeFilter === 'OPEN' && OPEN_STATUSES.includes(n.dispute?.status))
-                  || (disputeFilter === 'RESOLVED' && RESOLVED_STATUSES.includes(n.dispute?.status))
-                const q = disputeSearch.trim().toLowerCase()
-                const matchSearch = !q
-                  || n.claim_number?.toLowerCase().includes(q)
-                  || n.vendor_name?.toLowerCase().includes(q)
-                  || n.vendor_npi?.toLowerCase().includes(q)
-                  || n.patient_name_partial?.toLowerCase().includes(q)
-                  || n.dispute?.physician_notes?.toLowerCase().includes(q)
-                return matchType && matchStatus && matchSearch
-              })
-              if (disputeSortOrder === 'DAYS_ASC') {
-                filtered.sort((a, b) => (a.dispute?.days_remaining ?? 0) - (b.dispute?.days_remaining ?? 0))
-              } else if (disputeSortOrder === 'DAYS_DESC') {
-                filtered.sort((a, b) => (b.dispute?.days_remaining ?? 0) - (a.dispute?.days_remaining ?? 0))
-              }
-              if (npiAlerts.length === 0) {
-                return (
-                  <div className="mc-card px-6 py-8 text-center text-slate-400 text-sm">
-                    No disputes yet. When you dispute a claim or report fraud from My Claims, it will appear here for tracking.
-                  </div>
-                )
-              }
-              if (filtered.length === 0) {
-                return <div className="mc-card px-6 py-8 text-center text-slate-400 text-sm">No disputes match these filters.</div>
-              }
-              return (
-              <div className="space-y-3">
-                {filtered.map((n) => {
-                  return (
-                    <div key={n.notification_id}
-                         onClick={() => { setSelectedDispute(n); setDecideError(null); setDecideResult(null); navTo('disputeDetail') }}
-                         className="mc-card px-5 py-4 cursor-pointer hover:border-slate-300 transition-colors">
-                      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2 mb-1 flex-wrap">
-                            <span className="font-semibold text-sm text-ink">{n.claim_number}</span>
-                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                              n.status === 'PENDING'       ? 'bg-amber-100 text-amber-700'   :
-                              n.status === 'CONFIRMED'     ? 'bg-emerald-100 text-emerald-700' :
-                              n.status === 'DISPUTED'      ? 'bg-rose-100 text-rose-700'     :
-                              n.status === 'FRAUD_REPORTED'? 'bg-red-100 text-red-700'       :
-                              'bg-slate-100 text-slate-600'
-                            }`}>{n.status}</span>
-                          </div>
-                          <div className="text-xs text-slate-500 space-y-0.5">
-                            <div><span className="font-medium text-slate-700">{n.vendor_name}</span>{n.vendor_type ? ` · ${n.vendor_type}` : ''}</div>
-                            <div>Patient: {n.patient_name_partial || '—'} · DOS: {n.dos_from ? fmtDate(n.dos_from) : '—'}{n.dos_to && n.dos_to !== n.dos_from ? ` – ${fmtDate(n.dos_to)}` : ''}</div>
-                            <div>Billed: {n.amount_billed != null ? fmtUSD(n.amount_billed) : '—'} · Role: {n.physician_npi_role || '—'}</div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Vendor response tracking, compact — click the card for the full detail + decision */}
-                      <div className="mt-3 pt-3 border-t border-slate-100">
-                        <DisputeStatusPanel d={n.dispute} compact />
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-              )
-            })()}
-          </div>
-        )
-      ) : screen === 'disputeDetail' ? (
-        <DisputeDetailScreenPhysician
-          dispute={selectedDispute}
-          confirmingCaseId={confirmingCaseId}
-          onConfirm={handleConfirmResolution}
-          decidingCaseId={decidingCaseId}
-          decideError={decideError}
-          decideResult={decideResult}
-          onDecide={handleDecideClaim}
-        />
-      ) : (
-        loading ? <TableSkeleton /> : <FlaggedSuppliers suppliers={flaggedSuppliers} onSelectSupplier={selectSupplier} />
-      )}
-    </Shell>
-    </>
-  )
+// ─── Payer portal routing ────────────────────────────────────────────────────
+// The URL is the single source of truth for which payer screen is showing.
+// Each screen maps to a real path under /payer, so navigation, refresh, deep
+// links, and the browser back/forward buttons all Just Work — no hand-rolled
+// history stack. Top-level screens are static paths; the three detail screens
+// carry their entity id as a path param.
+const PLAN_SCREEN_PATH = {
+  home: '/payer/dashboard',
+  leaderboard: '/payer/leaderboard',
+  physicians: '/payer/physicians',
+  watchlist: '/payer/watchlist',
+  vendors: '/payer/vendors',
+  disputes: '/payer/disputes',
 }
 
-// ─── Dispute vendor-response status — shared between the My Disputes list
-// (compact, no actions) and the Dispute Detail screen (full, with the
-// confirm/reject decision when a vendor response is pending physician review).
-function DisputeStatusPanel({ d, compact = false, busy = false, onConfirm }) {
-  if (!d) {
-    return <span className="text-[11px] font-medium text-slate-400">Awaiting vendor notification</span>
+// pathname (+ query) → { screen, npi?, vendorId?, caseId?, preview? }. The
+// preview short-circuit keeps the hover-thumbnail iframes (…?preview=1&screen=X)
+// working — they render a screen by name without a real path.
+function parsePlanRoute(location) {
+  const q = new URLSearchParams(location.search)
+  if (q.get('preview') === '1' && q.get('screen')) return { screen: q.get('screen'), preview: true }
+  const rest = location.pathname.replace(/^\/payer\/?/, '').replace(/\/+$/, '')
+  const [seg, id] = rest.split('/')
+  switch (seg) {
+    case '':
+    case 'dashboard':   return { screen: 'home' }
+    case 'leaderboard': return { screen: 'leaderboard' }
+    case 'physicians':  return { screen: 'physicians' }
+    case 'npi':         return { screen: 'detail', npi: id }
+    case 'watchlist':   return { screen: 'watchlist' }
+    case 'vendors':     return { screen: 'vendors' }
+    case 'vendor':      return { screen: 'supplierDetail', vendorId: id }
+    case 'disputes':    return id ? { screen: 'disputeDetail', caseId: id } : { screen: 'disputes' }
+    default:            return { screen: 'home' }
   }
+}
 
-  if (d.status === 'PENDING_PHYSICIAN_CONFIRMATION') {
-    if (compact) {
-      return (
-        <span className="text-[11px] font-semibold text-navy flex items-center gap-1.5">
-          <Icon name="clock" size={12} /> Vendor responded — tap to review and decide
-        </span>
-      )
-    }
-    return (
-      <div className="space-y-3">
-        <span className="text-[13px] font-bold text-navy flex items-center gap-1.5">
-          <Icon name="clock" size={14} /> Vendor says this is resolved — your confirmation needed
-          {d.physician_confirmation_due_date ? ` (by ${fmtDate(d.physician_confirmation_due_date)})` : ''}
-        </span>
-        {d.vendor_response && <p className="text-[13px] text-slate-600 italic">"{d.vendor_response}"</p>}
-        {d.docs?.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {d.docs.map((doc) => (
-              <a key={doc.stored_name} href={doc.download_url} target="_blank" rel="noreferrer"
-                 className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 text-[11px] font-medium text-slate-600 hover:bg-slate-200 transition-colors">
-                <Icon name="doc" size={11} /> {doc.filename}
-              </a>
-            ))}
-          </div>
-        )}
-        <p className="text-[12px] text-slate-500">
-          Review what the vendor said above, then decide: did this actually resolve your dispute?
-        </p>
-        <div className="flex gap-2">
-          <button onClick={() => onConfirm(d.case_id, true)} disabled={busy}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-[13px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors disabled:opacity-50">
-            ✓ Confirm Resolved
-          </button>
-          <button onClick={() => onConfirm(d.case_id, false)} disabled={busy}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-[13px] font-bold bg-rose-600 hover:bg-rose-700 text-white transition-colors disabled:opacity-50">
-            ✗ Not Resolved — Still Disputing
-          </button>
-        </div>
-      </div>
-    )
-  }
 
-  if (d.status === 'RESPONDED_TO_MEDICARE' || d.status === 'RESOLVED_BY_PHYSICIAN') {
-    return (
-      <div className="space-y-1">
-        <span className={`font-semibold text-emerald-600 flex items-center gap-1.5 ${compact ? 'text-[11px]' : 'text-[13px]'}`}>
-          <Icon name="check" size={compact ? 12 : 14} />
-          {compact ? 'Vendor responded' : `Resolved — ${d.status.replace(/_/g, ' ')}`}
-        </span>
-        {d.vendor_response && <p className={`text-slate-600 italic ${compact ? 'text-xs' : 'text-[13px]'}`}>"{d.vendor_response}"</p>}
-        {d.docs?.length > 0 && (
-          <div className="flex flex-wrap gap-2 mt-1.5">
-            {d.docs.map((doc) => (
-              <a key={doc.stored_name} href={doc.download_url} target="_blank" rel="noreferrer"
-                 className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-100 text-[11px] font-medium text-slate-600 hover:bg-slate-200 transition-colors">
-                <Icon name="doc" size={11} /> {doc.filename}
-              </a>
-            ))}
-          </div>
-        )}
-      </div>
-    )
-  }
 
-  if (d.status === 'NON_RESPONSIVE' || d.deadline_passed) {
+// Latest timestamp touching a dispute case — its last event if any were
+// recorded (vendor response, escalation, etc.), else the newest of
+// opened/notified/responded/closed. Drives the "NPI Disputes" list's default
+// order so the most recently active cases surface first instead of whatever
+// order the API happened to return.
+function mostRecentActivity(d) {
+  const times = [d.opened_at, d.billing_provider_notified_at, d.vendor_responded_at, d.closed_at]
+    .filter(Boolean)
+    .map((t) => new Date(t).getTime())
+  const lastEvent = d.events?.length ? d.events[d.events.length - 1].created_at : null
+  if (lastEvent) times.push(new Date(lastEvent).getTime())
+  return times.length ? Math.max(...times) : 0
+}
+
+// ─── NPI Disputes table — badges/chips (payer/compliance view) ──────────────
+
+function planDisputeTypeBadge(type) {
+  if (type === 'FRAUD_REPORT') {
     return (
-      <span className="text-[11px] font-medium text-red-600 flex items-center gap-1.5">
-        <Icon name="alertTri" size={12} /> Overdue — escalated to compliance
+      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold text-white whitespace-nowrap"
+            style={{ background: 'linear-gradient(180deg,#B95951,#9A3F39)' }}>
+        Fraud Report
       </span>
     )
   }
-
+  if (type === 'DECEASED_PATIENT') {
+    return (
+      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap"
+            style={{ background: 'linear-gradient(180deg,#F2EEF7,#EAE3F2)', color: '#5F4E80' }}>
+        Deceased Patient
+      </span>
+    )
+  }
   return (
-    <span className="text-[11px] font-medium text-amber-600 flex items-center gap-1.5">
-      <Icon name="clock" size={12} /> Awaiting vendor response{d.days_remaining != null ? ` · ${d.days_remaining}d left` : ''}
+    <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap"
+          style={{ background: 'linear-gradient(180deg,#EBF3F8,#E9F0F6)', color: '#35607D' }}>
+      Dispute
     </span>
   )
 }
 
-// ─── Physician-side dispute detail — click-through from My Disputes, mirrors
-// the vendor portal's own Dispute Detail screen so both sides of the same
-// case get an equivalent full view instead of everything crammed into a card.
-function DisputeDetailScreenPhysician({ dispute: n, confirmingCaseId, onConfirm, decidingCaseId, decideError, decideResult, onDecide }) {
-  if (!n) return <div className="px-7 py-8 text-slate-400">No dispute selected.</div>
-  const d = n.dispute
-  const busy = !!d && confirmingCaseId === d.case_id
-
+const PLAN_STATUS_LABEL = {
+  OPEN: 'Open',
+  NON_RESPONSIVE: 'Non Responsive',
+  PENDING_PHYSICIAN_CONFIRMATION: 'Pending Physician Confirmation',
+  PENDING_PHYSICIAN_REVIEW: 'Awaiting Physician Review',
+  RESPONDED_TO_MEDICARE: 'Responded to Medicare',
+  RESOLVED_BY_PHYSICIAN: 'Resolved by Physician',
+  REFERRED_TO_PAYER: 'Physician Declined — Your Review',
+  CLOSED: 'Closed',
+  REFERRED_OIG: 'Referred to OIG',
+}
+function planDisputeStatusBadge(status) {
+  const label = PLAN_STATUS_LABEL[status] || status?.replace(/_/g, ' ') || '—'
+  // Needs the payer's attention — vendor never responded, or the physician
+  // declined the docs and handed the case over. Solid red.
+  if (status === 'NON_RESPONSIVE' || status === 'REFERRED_TO_PAYER') {
+    return (
+      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold text-white whitespace-nowrap"
+            style={{ background: 'linear-gradient(180deg,#B95951,#9A3F39)' }}>
+        {label}
+      </span>
+    )
+  }
+  if (status === 'OPEN') {
+    return (
+      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap"
+            style={{ background: 'linear-gradient(180deg,#FDF6E9,#FBF3E4)', color: '#8A6A34' }}>
+        {label}
+      </span>
+    )
+  }
+  // Awaiting the physician's move (vendor uploaded docs / legacy confirmation) — blue.
+  if (status === 'PENDING_PHYSICIAN_CONFIRMATION' || status === 'PENDING_PHYSICIAN_REVIEW') {
+    return (
+      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap"
+            style={{ background: 'linear-gradient(180deg,#EBF3F8,#E9F0F6)', color: '#35607D' }}>
+        {label}
+      </span>
+    )
+  }
+  // RESPONDED_TO_MEDICARE / RESOLVED_BY_PHYSICIAN / CLOSED / REFERRED_OIG — resolved
   return (
-    <div className="px-4 sm:px-7 py-5 space-y-5">
-      <div className="mc-card p-5 space-y-4">
-        <div className="flex items-center justify-between flex-wrap gap-2">
-          <div>
-            <h2 className="text-[15px] font-bold text-slate-900">Claim {n.claim_number}</h2>
-            <div className="flex items-center gap-2 mt-1 flex-wrap">
-              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${n.status === 'FRAUD_REPORTED' ? 'bg-rose-100 text-rose-700' : 'bg-orange-100 text-orange-700'}`}>
-                {n.status?.replace(/_/g, ' ')}
-              </span>
-              {d && (
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                  d.status === 'PENDING_PHYSICIAN_CONFIRMATION' ? 'bg-blue-100 text-blue-700' :
-                  d.status === 'RESPONDED_TO_MEDICARE' || d.status === 'RESOLVED_BY_PHYSICIAN' ? 'bg-emerald-100 text-emerald-700' :
-                  d.status === 'NON_RESPONSIVE' ? 'bg-red-100 text-red-700' :
-                  'bg-amber-100 text-amber-700'
-                }`}>
-                  {d.status?.replace(/_/g, ' ')}
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-[12px]">
-          {[
-            ['Vendor', `${n.vendor_name || '—'}${n.vendor_type ? ` · ${n.vendor_type}` : ''}`],
-            ['Patient', n.patient_name_partial || '—'],
-            ['Date of Service', n.dos_from ? `${fmtDate(n.dos_from)}${n.dos_to && n.dos_to !== n.dos_from ? ` – ${fmtDate(n.dos_to)}` : ''}` : '—'],
-            ['Billed', n.amount_billed != null ? fmtUSD(n.amount_billed) : '—'],
-          ].map(([label, value]) => (
-            <div key={label}>
-              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">{label}</div>
-              <div className="font-medium text-slate-700">{value}</div>
-            </div>
-          ))}
-        </div>
-
-      </div>
-
-      <div className="mc-card p-5">
-        <h3 className="text-[13px] font-bold text-slate-900 mb-3">Timeline</h3>
-        {d ? (
-          <PhysicianDisputeTimeline d={d} busy={busy} onConfirm={onConfirm} />
-        ) : (
-          <span className="text-[12px] font-medium text-slate-400">Awaiting vendor notification</span>
-        )}
-      </div>
-
-      {d && VENDOR_RESPONDED_STATUSES.includes(d.status) && (
-        <DisputeReviewPanel
-          caseId={d.case_id}
-          decidingCaseId={decidingCaseId}
-          decideError={decideError}
-          decideResult={decideResult}
-          onDecide={onDecide}
-        />
-      )}
-    </div>
+    <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap"
+          style={{ background: 'linear-gradient(180deg,#EEF6F1,#E9F3ED)', color: '#2E6B4F' }}>
+      {label}
+    </span>
   )
 }
 
-// Chronological history of a single dispute case, from the physician's side —
-// every step that happened (reported → vendor notified → vendor responded,
-// with their notes/docs → your confirmation decision), not just the current
-// status snapshot. Mirrors DisputeDetailModal's timeline (payer/compliance view).
-function PhysicianDisputeTimeline({ d, busy, onConfirm }) {
-  const past = [
-    { at: d.opened_at, label: d.dispute_type === 'FRAUD_REPORT' ? 'You reported this as fraud' : 'You disputed this claim', note: d.physician_notes },
-    d.billing_provider_notified_at && { at: d.billing_provider_notified_at, label: 'Vendor notified — 15 days to respond' },
-    // "Responded to Medicare" is between the vendor and Medicare — their note/docs
-    // for that submission aren't shown here, just the fact that it happened. Only
-    // the "resolved with you directly" path shows the vendor's note/docs, since
-    // those are what the physician actually needs to judge before confirming.
-    d.vendor_responded_at && (
-      d.provider_response_type === 'RESPONDED_TO_MEDICARE'
-        ? { at: d.vendor_responded_at, label: 'Vendor responded to Medicare' }
-        : { at: d.vendor_responded_at, label: 'Vendor resolved this with you directly', detail: d.vendor_response, docs: d.docs }
-    ),
-    d.status === 'RESOLVED_BY_PHYSICIAN' && { at: d.closed_at || d.vendor_responded_at, label: 'You confirmed this was resolved' },
-    d.status === 'NON_RESPONSIVE' && { at: d.response_due_date, label: 'Vendor did not respond in time — escalated to compliance' },
-  ].filter(Boolean).sort((a, b) => new Date(a.at) - new Date(b.at))
-
-  // Live/pending steps have no timestamp yet — rendered after the dated history.
-  const pending =
-    d.status === 'PENDING_PHYSICIAN_CONFIRMATION' ? 'confirm'
-    : d.status === 'OPEN' && !d.deadline_passed      ? 'awaiting'
-    : null
-
-  return (
-    <div className="space-y-3">
-      {past.map((t, i) => (
-        <div key={i} className="flex gap-3">
-          <div className="flex flex-col items-center flex-shrink-0 pt-0.5">
-            <div className="w-2 h-2 rounded-full bg-navy" />
-            {(i < past.length - 1 || pending) && <div className="w-px flex-1 bg-slate-200 mt-1" />}
-          </div>
-          <div className="pb-3 min-w-0">
-            <div className="flex items-baseline gap-2 flex-wrap">
-              <span className="text-[12px] font-semibold text-slate-800">{t.label}</span>
-              <span className="text-[11px] text-slate-400">{fmtDate(t.at)}</span>
-            </div>
-            {t.note && <p className="text-[12px] text-slate-500 italic mt-0.5">"{t.note}"</p>}
-            {t.detail && <p className="text-[12px] text-slate-600 mt-0.5">"{t.detail}"</p>}
-            {t.docs?.length > 0 && (
-              <div className="flex flex-wrap gap-2 mt-1.5">
-                {t.docs.map((doc) => (
-                  <a key={doc.stored_name} href={doc.download_url} target="_blank" rel="noreferrer"
-                     className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-100 text-[11px] font-medium text-slate-600 hover:bg-slate-200 transition-colors">
-                    <Icon name="doc" size={11} /> {doc.filename}
-                  </a>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      ))}
-
-      {pending === 'confirm' && (
-        <div className="flex gap-3">
-          <div className="flex flex-col items-center flex-shrink-0 pt-0.5">
-            <div className="w-2 h-2 rounded-full bg-navy ring-4 ring-navy/15" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-baseline gap-2 flex-wrap">
-              <span className="text-[12px] font-semibold text-navy">Your confirmation needed</span>
-              {d.physician_confirmation_due_date && <span className="text-[11px] text-slate-400">by {fmtDate(d.physician_confirmation_due_date)}</span>}
-            </div>
-            <p className="text-[12px] text-slate-500 mt-0.5">Did the vendor's response above actually resolve this dispute?</p>
-            <div className="flex gap-2 mt-2">
-              <button onClick={() => onConfirm(d.case_id, true)} disabled={busy}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors disabled:opacity-50">
-                ✓ Confirm Resolved
-              </button>
-              <button onClick={() => onConfirm(d.case_id, false)} disabled={busy}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-bold bg-rose-600 hover:bg-rose-700 text-white transition-colors disabled:opacity-50">
-                ✗ Not Resolved
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {pending === 'awaiting' && (
-        <div className="flex gap-3">
-          <div className="flex flex-col items-center flex-shrink-0 pt-0.5">
-            <div className="w-2 h-2 rounded-full bg-slate-300" />
-          </div>
-          <span className="text-[12px] font-medium text-slate-400">
-            Awaiting vendor response{d.days_remaining != null ? ` · ${d.days_remaining}d left` : ''}
-          </span>
-        </div>
-      )}
-    </div>
-  )
+function planDaysChip(d) {
+  const resolved = !['OPEN', 'NON_RESPONSIVE'].includes(d.status)
+  if (resolved) {
+    return <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11.5px] font-bold" style={{ background: '#F1F4F9', color: '#46586F' }}>—</span>
+  }
+  if (d.deadline_passed) {
+    return <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11.5px] font-bold" style={{ background: '#F7EBEA', color: '#8A423D' }}>Overdue</span>
+  }
+  if (d.days_remaining <= 7) {
+    return <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11.5px] font-bold" style={{ background: '#FBF3E4', color: '#8A6A34' }}>{d.days_remaining}d</span>
+  }
+  return <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11.5px] font-bold" style={{ background: '#F1F4F9', color: '#46586F' }}>{d.days_remaining}d</span>
 }
 
-// Mirrors the same 5 actions from My Claims (ClaimsTable.jsx's ACTIONS array).
-// Only shown for NON_RESPONSIVE, where the vendor never responded and nothing
-// has actually been decided yet — the physician still needs to make an
-// independent call. Excluded for RESPONDED_TO_MEDICARE (out of the physician's
-// hands once escalated) and RESOLVED_BY_PHYSICIAN (the Confirm/Reject buttons
-// in the timeline above already ARE the physician's decision on this — a
-// second "Confirm" here would just be asking the same question twice).
-const VENDOR_RESPONDED_STATUSES = ['NON_RESPONSIVE']
-const REVIEW_ACTIONS = [
-  { type: 'confirm',        label: 'Confirm',         desc: 'The claim is legitimate — this resolves it for good.', cls: 'bg-emerald-50/70 text-emerald-600 ring-emerald-200 hover:bg-emerald-100' },
-  { type: 'dispute',        label: 'Dispute',         desc: "Still not right — you don't accept the vendor's explanation.", cls: 'bg-rose-50/70 text-rose-500 ring-rose-200 hover:bg-rose-100' },
-  { type: 'flag_supplier',  label: 'Flag Supplier',   desc: 'The vendor itself looks unknown or suspicious.', cls: 'bg-amber-50/70 text-amber-600 ring-amber-200 hover:bg-amber-100' },
-  { type: 'unknown_patient',label: 'Unknown Patient',  desc: "You still don't recognize this patient.", cls: 'bg-slate-50 text-slate-500 ring-slate-200 hover:bg-slate-100' },
-  { type: 'fraud',          label: 'Report Fraud',    desc: 'The vendor response confirms this is fraudulent.', cls: 'bg-slate-800 text-white ring-slate-800 hover:bg-slate-900' },
+function needsEscalation(d) {
+  return d.status === 'NON_RESPONSIVE' || d.status === 'REFERRED_TO_PAYER' || !!d.deadline_passed
+}
+
+// Tabs follow the case lifecycle, not the report type: a physician marking a
+// claim (fraud/dispute/deceased/flags), the vendor's response (docs uploaded,
+// or window expired unanswered), and the physician's approve/decline verdict.
+// Filtering keys off the backend's `group` field; `category` still drives the
+// per-item icon (fraud shield, deceased heart, flag, dispute bubble).
+const PLAN_NOTIF_TABS = [
+  { id: 'all', label: 'All' },
+  { id: 'reported', label: 'Reported' },
+  { id: 'response', label: 'Vendor response' },
+  { id: 'decision', label: 'Decisions' },
 ]
 
-function DisputeReviewPanel({ caseId, decidingCaseId, decideError, decideResult, onDecide }) {
-  const busy = decidingCaseId === caseId
-  const justDecided = decideResult?.caseId === caseId ? decideResult.actionType : null
+// Payer/compliance bell — same recent-activity idea as the vendor portal's
+// notification dropdown, styled with this portal's own slate/rose palette
+// (ProfileMenu's panel look) instead of the vendor theme's design tokens.
+// Dispute-case notifications only.
+function PlanNotifBell({ count, notifications, open, onToggle, onMarkRead, onSelect, marking }) {
+  const [tab, setTab] = useState('all')
+  const ref = useRef(null)
+
+  useEffect(() => {
+    function onDoc(e) { if (ref.current && !ref.current.contains(e.target)) onToggle(false) }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [onToggle])
+
+  const filtered = tab === 'all' ? notifications : notifications.filter((n) => n.group === tab)
 
   return (
-    <div className="mc-card p-5 space-y-3">
-      <div>
-        <h3 className="text-[13px] font-bold text-slate-900">Your Decision</h3>
-        <p className="text-[12px] text-slate-500 mt-0.5">
-          Now that you've reviewed the vendor's response, apply the same call you'd make on any claim in My Claims.
-        </p>
-      </div>
+    <div ref={ref} className="relative">
+      <button onClick={() => onToggle(!open)} title="Recent activity"
+              className="relative w-10 h-10 rounded-[10px] border flex items-center justify-center transition-colors"
+              style={{ borderColor: '#C7D0DE', background: 'linear-gradient(180deg,#fff,#F6F8FB)', color: '#46586F', boxShadow: 'inset 0 1px 0 #fff, 0 1px 2px rgba(10,31,61,.04)' }}>
+        <Icon name="alerts" size={18} />
+        {count > 0 && (
+          <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full text-white text-[9.5px] font-bold flex items-center justify-center"
+                style={{ background: '#A6453F', border: '2px solid #fff' }}>
+            {count > 9 ? '9+' : count}
+          </span>
+        )}
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-2 w-[400px] max-w-[calc(100vw-16px)] bg-white rounded-xl z-50 overflow-hidden border border-slate-200"
+             style={{ boxShadow: '0 8px 24px rgba(15,23,42,0.10), 0 2px 6px rgba(15,23,42,0.06)' }}>
+          <div className="flex items-center justify-between px-4 pt-3.5 pb-3 border-b border-slate-100">
+            <span className="text-[13px] font-bold text-slate-800">Notifications</span>
+            <button onClick={onMarkRead} disabled={marking || count === 0}
+                    className="text-[11.5px] font-semibold text-slate-500 hover:text-slate-800 disabled:text-slate-300 disabled:cursor-default">
+              Mark all read
+            </button>
+          </div>
 
-      {justDecided && (
-        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-50 ring-1 ring-emerald-200 text-[12px] font-medium text-emerald-700">
-          <Icon name="check" size={13} /> Recorded as "{REVIEW_ACTIONS.find((a) => a.type === justDecided)?.label}" — visible in My Claims.
+          <>
+              <div className="flex gap-1 px-3 py-2.5">
+                {PLAN_NOTIF_TABS.map((t) => (
+                  <button key={t.id} onClick={() => setTab(t.id)}
+                          className={`px-2.5 py-1 rounded-lg text-[12px] font-semibold ${tab === t.id ? 'bg-slate-100 text-slate-800' : 'text-slate-400 hover:text-slate-600'}`}>
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+              <div className="max-h-[340px] overflow-y-auto px-2 pb-2.5">
+                {filtered.length === 0 ? (
+                  <div className="py-8 text-center text-[12.5px] text-slate-400">No notifications yet.</div>
+                ) : filtered.map((n) => {
+                  const fraud = n.category === 'fraud'
+                  const flag = n.category === 'flag'
+                  const deceased = n.category === 'deceased'
+                  const iconName = deceased ? 'heartOff' : fraud ? 'shieldAlert' : flag ? 'flag' : 'message'
+                  const bg = deceased ? '#F2EEF7' : fraud ? '#F7EBEA' : flag ? '#FBF3E4' : '#E9F0F6'
+                  const fg = deceased ? '#7A6899' : fraud ? '#A6453F' : flag ? '#8A6A34' : '#5A9BC9'
+                  return (
+                    <button key={n.id} onClick={() => onSelect(n)}
+                            className={`w-full flex gap-2.5 text-left px-2 py-2.5 rounded-lg hover:bg-slate-50 ${!n.read ? 'bg-slate-50/80' : ''}`}>
+                      <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: bg }}>
+                        <Icon name={iconName} size={14} style={{ color: fg }} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[12.5px] font-semibold text-slate-800 truncate">{n.title}</span>
+                          <span className="text-[10.5px] text-slate-400 flex-shrink-0">{timeAgo(n.created_at)}</span>
+                        </div>
+                        <div className="text-[11.5px] text-slate-500 mt-0.5 line-clamp-2">{n.description}</div>
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+          </>
         </div>
       )}
-      {decideError && (
-        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-rose-50 ring-1 ring-rose-200 text-[12px] font-medium text-rose-700">
-          <Icon name="alertTri" size={13} /> {decideError}
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
-        {REVIEW_ACTIONS.map((a) => (
-          <button key={a.type} onClick={() => onDecide(caseId, a.type)} disabled={busy}
-                  className={`text-left p-3 rounded-xl ring-1 ring-inset transition-all disabled:opacity-50 ${a.cls}`}>
-            <div className="text-[12px] font-bold mb-0.5">{a.label}</div>
-            <p className="text-[10px] leading-snug opacity-80">{a.desc}</p>
-          </button>
-        ))}
-      </div>
     </div>
   )
-}
-
-function PhysicianPortal() {
-  return <AlertsProvider><PhysicianPortalInner /></AlertsProvider>
 }
 
 // ─── Plan portal ─────────────────────────────────────────────────────────────
+// NPI Disputes table — column-header dropdown options (Type/Status filter, Days Left sort).
+const PLAN_DISPUTE_TYPE_OPTIONS = [
+  { id: 'ALL',              label: 'All Types' },
+  { id: 'DISPUTE',          label: 'Dispute' },
+  { id: 'FRAUD_REPORT',     label: 'Fraud Report' },
+  { id: 'DECEASED_PATIENT', label: 'Deceased Patient' },
+]
+const PLAN_DISPUTE_STATUS_OPTIONS = [
+  { id: 'all',      label: 'All Statuses' },
+  { id: 'open',      label: 'Open' },
+  { id: 'resolved', label: 'Resolved' },
+]
+const PLAN_DISPUTE_SORT_OPTIONS = [
+  { id: 'NONE',       label: 'Default Order' },
+  { id: 'DAYS_ASC',   label: 'Overdue First' },
+  { id: 'DAYS_DESC',  label: 'Days Left: High to Low' },
+]
+
 function PlanPortalInner() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
-  const [screen, setScreen] = useState(() => {
-    const p = new URLSearchParams(window.location.search)
-    return (p.get('preview') === '1' && p.get('screen')) || 'home'
-  })
-  const [selectedNPI, setSelectedNPI] = useState(null)
-  const [selectedSupplier, setSelectedSupplier] = useState(null)
-  const [lbBand, setLbBand] = useState(() => {
-    const p = new URLSearchParams(window.location.search)
-    return (p.get('preview') === '1' && p.get('band')) || 'all'
-  })
+  const location = useLocation()
+  const route = parsePlanRoute(location)
+  const screen = route.screen
+  const lbBand = new URLSearchParams(location.search).get('band') || 'all'
+
+  // Ephemeral UI state (not worth a URL): notifications, the two search boxes,
+  // and the NPI Disputes list + its column filters.
   const [notif, setNotif] = useState(0)
+  const [planNotifications, setPlanNotifications] = useState([])
+  const [notifOpen, setNotifOpen] = useState(false)
+  const [notifMarking, setNotifMarking] = useState(false)
   const [search, setSearch] = useState('')      // top-nav search → filters the supplier watchlist
-  const [npiBack, setNpiBack] = useState(null)   // NPI-detail return target; null = leaderboard
-  const [history, setHistory] = useState([])     // backtrack stack of prior views
-  const [npiInitialPattern, setNpiInitialPattern] = useState(null)  // fraud-pattern modal to reopen when backing into NPI detail
   const [planDisputes, setPlanDisputes] = useState([])
   const [planDisputesLoading, setPlanDisputesLoading] = useState(false)
-  const [disputeStatusFilter, setDisputeStatusFilter] = useState('open')
+  const [disputeStatusFilter, setDisputeStatusFilter] = useState('all')  // open | resolved | all — backend-side, column-header dropdown
+  const [disputeTypeFilter, setDisputeTypeFilter] = useState('ALL')      // ALL | DISPUTE | FRAUD_REPORT — client-side, column-header dropdown
+  const [disputeSortOrder, setDisputeSortOrder] = useState('NONE')       // NONE | DAYS_ASC | DAYS_DESC — client-side, column-header dropdown
   const [disputesRefreshKey, setDisputesRefreshKey] = useState(0)
-  const [disputeTypeFilter, setDisputeTypeFilter] = useState('ALL')  // ALL | DISPUTE | FRAUD_REPORT
-  const [disputeSortOrder, setDisputeSortOrder] = useState('NONE')   // NONE | DAYS_ASC | DAYS_DESC
   const [disputeSearch, setDisputeSearch] = useState('')   // filters the NPI Disputes list — distinct from the top-nav NPI/supplier lookup
-  const [selectedDispute, setSelectedDispute] = useState(null)
+  const [fetchedSupplier, setFetchedSupplier] = useState(null)   // vendor row fetched by id on a deep-linked /payer/vendor/:id
+
+  // ── Selected entities, derived from the URL ──
+  // In-session navigation hands the full row over via navigate(..,{state}) so
+  // the detail screen paints instantly. A deep link / refresh has no state:
+  // NPI detail rebuilds from just the id (it refetches internally), the vendor
+  // case fetches its row by id (see effect below), and the dispute is found in
+  // the loaded list (which the effect below force-loads with status=all).
+  const npiRowRef = useRef(null)   // NPILeaderboard/AllPhysicians call setSelectedNPI(r) then setActiveScreen('detail'); the adapter stashes r here
+  // Memoized so NPIDetail (whose fetch effect keys on this prop) doesn't refetch
+  // on every parent re-render — the object is only rebuilt when the id or the
+  // nav-state hint actually changes.
+  const selectedNPI = useMemo(
+    () => (route.npi ? { npi: route.npi, ...(location.state?.row || {}) } : null),
+    [route.npi, location.state],
+  )
+  const npiBack = location.state?.backTo ? { to: location.state.backTo, label: location.state.backLabel } : null
+  const npiInitialPattern = location.state?.pattern || null
+  const selectedSupplier = route.vendorId
+    ? (location.state?.supplier
+        || (fetchedSupplier && String(fetchedSupplier.id) === String(route.vendorId) ? fetchedSupplier : null))
+    : null
+  const selectedDispute = route.caseId
+    ? (planDisputes.find((d) => String(d.case_id) === String(route.caseId)) || location.state?.dispute || null)
+    : null
 
   useEffect(() => {
     const refresh = () => getNotificationsCount().then(setNotif).catch(() => {})
@@ -720,12 +345,59 @@ function PlanPortalInner() {
     return () => clearInterval(t)
   }, [])
 
+  useEffect(() => {
+    getPlanNotifications().then(setPlanNotifications).catch(() => {})
+  }, [])
+
+  function refreshPlanNotifications() {
+    getPlanNotifications().then(setPlanNotifications).catch(() => {})
+  }
+
+  // Opening the bell (not just the explicit "Mark all read" button inside it)
+  // should clear the unread badge — mirrors clicking into an inbox. Also
+  // refetches the list so the dropdown never shows a stale page-load snapshot.
+  function toggleNotif(next) {
+    setNotifOpen(next)
+    if (next) {
+      refreshPlanNotifications()
+      markAllPlanNotificationsRead()
+    }
+  }
+
+  function markAllPlanNotificationsRead() {
+    setNotifMarking(true)
+    markNotificationsSeen()
+      .then(() => {
+        setNotif(0)
+        setPlanNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
+      })
+      .catch(() => {})
+      .finally(() => setNotifMarking(false))
+  }
+
+  // A notification pointing at a dispute case opens the same detail modal the
+  // "NPI Disputes" table's rows do — refetch with status=all since the case
+  // may not be in whatever status bucket the disputes list is currently filtered to.
+  function selectPlanNotification(n) {
+    setNotifOpen(false)
+    if (!n.case_id) { go('home'); return }
+    getPlanDisputes('all').then((fresh) => {
+      const match = fresh.disputes.find((d) => d.case_id === n.case_id)
+      if (match) openDispute(match)
+      else go('disputes')
+    }).catch(() => go('disputes'))
+  }
+
   // Live push — any dispute-case change (vendor responded, physician confirmed/
   // rejected, new dispute opened) bumps disputesRefreshKey so the effect below
   // refetches immediately instead of waiting for the next tab click.
   useEffect(() => {
     const es = subscribeDisputeStream('/plan/alerts/stream', (evt) => {
-      if (evt.type === 'dispute_updated') setDisputesRefreshKey((k) => k + 1)
+      if (evt.type === 'dispute_updated') {
+        setDisputesRefreshKey((k) => k + 1)
+        getNotificationsCount().then(setNotif).catch(() => {})
+        refreshPlanNotifications()
+      }
     })
     return () => es.close()
   }, [])
@@ -740,440 +412,522 @@ function PlanPortalInner() {
         .then(d => setPlanDisputes(d.disputes))
         .catch(() => {})
         .finally(() => setPlanDisputesLoading(false))
+    } else if (screen === 'disputeDetail') {
+      // Load the full set (status=all) so the URL-derived selectedDispute
+      // resolves on a deep link / refresh, and re-resolves live whenever a
+      // dispute_updated SSE event bumps disputesRefreshKey while the case is open.
+      getPlanDisputes('all').then(d => setPlanDisputes(d.disputes)).catch(() => {})
     }
   }, [screen, disputeStatusFilter, disputesRefreshKey])
 
-  // Snapshot the current view onto the backtrack stack before navigating forward, so the
-  // header back button can restore the exact prior screen + selection.
-  function pushHist(extra = {}) {
-    setHistory((h) => [...h, { screen, selectedNPI, selectedSupplier, lbBand, npiBack, npiPattern: null, ...extra }])
-  }
-  // Pop the stack and restore the previous view (incl. any fraud-pattern modal that was
-  // open on the NPI detail we're returning to).
-  function goBack() {
-    setHistory((h) => {
-      if (h.length === 0) return h
-      const prev = h[h.length - 1]
-      setScreen(prev.screen)
-      setSelectedNPI(prev.selectedNPI)
-      setSelectedSupplier(prev.selectedSupplier)
-      setLbBand(prev.lbBand)
-      setNpiBack(prev.npiBack)
-      setNpiInitialPattern(prev.npiPattern || null)
-      setSearch('')
-      return h.slice(0, -1)
-    })
-  }
+  // Vendor case reached by deep link / refresh (no row handed over in nav
+  // state) — resolve the row from the watchlist list so the header/KPIs render.
+  useEffect(() => {
+    if (screen === 'supplierDetail' && route.vendorId && !location.state?.supplier) {
+      getSupplierById(route.vendorId).then(setFetchedSupplier).catch(() => {})
+    }
+  }, [screen, route.vendorId, location.state])
 
+  // ── Navigation — every transition is a real URL change (navigate), so the
+  // browser owns history: back/forward, refresh, and deep links all work with
+  // no hand-rolled stack. In-session jumps hand the already-loaded row to the
+  // detail screen via location state so it paints without a refetch flash; a
+  // deep link / refresh arrives with no state and the screen refetches by id.
   function go(s, band = 'all') {
-    pushHist()
-    if (s !== 'detail') { setSelectedNPI(null); setNpiBack(null) }
-    if (s === 'leaderboard') setLbBand(band)
-    setNpiInitialPattern(null)
     setSearch('')
-    setScreen(s)
+    if (s === 'leaderboard' && band && band !== 'all') { navigate(`/payer/leaderboard?band=${band}`); return }
+    const path = PLAN_SCREEN_PATH[s] || '/payer/dashboard'
+    if (location.pathname !== path) navigate(path)
   }
+  function goBack() { navigate(-1) }
 
   function openNpi(row, back = null) {
-    pushHist()
-    setNpiInitialPattern(null)
-    setSelectedNPI(row); setNpiBack(back); setScreen('detail')
+    if (!row?.npi) return
+    navigate(`/payer/npi/${row.npi}`, { state: { row, backTo: back?.to, backLabel: back?.label } })
   }
-  // sup = supplier row; fromPattern = the fraud-pattern modal open when this was clicked,
-  // so backing out of the Supplier Case can reopen that modal.
+  // sup = supplier row; fromPattern = the fraud-pattern modal open when this was
+  // clicked, carried along best-effort for the view behind the vendor case.
   function openSupplier(sup, fromPattern = null) {
-    pushHist({ npiPattern: fromPattern })
-    setSelectedSupplier(sup); setScreen('supplierDetail')
+    if (!sup?.id) return
+    navigate(`/payer/vendor/${sup.id}`, { state: { supplier: sup, pattern: fromPattern } })
   }
-  // Open NPI detail from a physician row on a supplier case, remembering the supplier
-  // so NPI detail can offer a "← Back to {supplier}" link.
+  // Open NPI detail from a physician row on a supplier case, remembering the
+  // supplier so NPI detail can offer a "← Back to {supplier}" link.
   function openNpiFromSupplier(physRow) {
-    pushHist()
-    setNpiInitialPattern(null)
-    // physRow may be a full { npi, name } object or just an NPI string
     const npiVal = typeof physRow === 'string' ? physRow : physRow?.npi
-    setSelectedNPI({ npi: npiVal, name: typeof physRow === 'object' ? physRow?.name : undefined })
-    setNpiBack({ to: 'supplierDetail', label: selectedSupplier?.name })
-    setScreen('detail')
+    if (!npiVal) return
+    const row = typeof physRow === 'object' ? { npi: npiVal, name: physRow?.name } : { npi: npiVal }
+    navigate(`/payer/npi/${npiVal}`, { state: { row, backTo: 'supplierDetail', backLabel: selectedSupplier?.name } })
   }
-  // Opens a new NPI detail from within the current NPI detail (e.g. Cross-NPI modal click).
-  // Saves the currently open fraud-pattern modal so pressing Back reopens it automatically.
+  // Open a new NPI detail from within the current one (e.g. Cross-NPI modal click).
   function openNpiFromDetail(npiRow, fromPattern = null) {
-    pushHist({ npiPattern: fromPattern })
-    setNpiInitialPattern(null)
-    setSelectedNPI(npiRow)
-    setNpiBack(null)
-    setScreen('detail')
+    if (!npiRow?.npi) return
+    navigate(`/payer/npi/${npiRow.npi}`, { state: { row: npiRow, pattern: fromPattern } })
   }
-  // Pop exactly N entries off the history stack in one shot (used by breadcrumb clicks).
-  function goBackN(n) {
-    if (n <= 0) return
-    setHistory((h) => {
-      const idx = Math.max(0, h.length - n)
-      const prev = h[idx]
-      if (!prev) return h
-      setScreen(prev.screen)
-      setSelectedNPI(prev.selectedNPI)
-      setSelectedSupplier(prev.selectedSupplier)
-      setLbBand(prev.lbBand)
-      setNpiBack(prev.npiBack)
-      setNpiInitialPattern(prev.npiPattern || null)
-      setSearch('')
-      return h.slice(0, idx)
+  // Open the Dispute Detail screen (payer/compliance view).
+  function openDispute(d) {
+    if (!d?.case_id) return
+    navigate(`/payer/disputes/${d.case_id}`, { state: { dispute: d } })
+  }
+  // Re-fetch after a compliance action so the new event/status show up — the
+  // URL-derived selectedDispute updates as soon as planDisputes is replaced.
+  function refreshSelectedDispute(caseId) {
+    return getPlanDisputes('all').then((fresh) => {
+      setPlanDisputes(fresh.disputes)
+      return fresh.disputes.find((x) => x.case_id === caseId)
     })
   }
 
   const fromSupplier = npiBack?.to === 'supplierDetail'
 
-  // Build a clean breadcrumb trail: walk history backwards, de-duplicate by screen key,
-  // stop at the first 'home' entry — so bouncing through Dashboard mid-session doesn't
-  // pollute the path (e.g. home→watchlist→home→leaderboard→detail shows just
-  // Dashboard > NPI Leaderboard > Dr. X, not the full round-trip).
+  // Breadcrumbs are now a fixed per-screen hierarchy derived straight from the
+  // route — no history walking. Each ancestor crumb navigates to its own path;
+  // the detail screens sit under whichever parent they were reached from (an
+  // NPI opened from a vendor case hangs under Vendor Watchlist, else under the
+  // Physician Leaderboard).
   const breadcrumbs = (() => {
-    if (screen === 'home') return []
-    const LABEL = { home: 'Dashboard', leaderboard: 'NPI Leaderboard', watchlist: 'Supplier Watchlist' }
-    const toLabel = (s, npi, sup) =>
-      LABEL[s] || (s === 'detail' ? (npi?.name || 'NPI Detail') : s === 'supplierDetail' ? (sup?.name || 'Supplier Case') : null)
-
-    const trail = []  // built in reverse
-    const seen = new Set()
-    for (let i = history.length - 1; i >= 0; i--) {
-      const h = history[i]
-      const key = h.screen === 'detail' ? `d:${h.selectedNPI?.npi}` : h.screen === 'supplierDetail' ? `s:${h.selectedSupplier?.id}` : h.screen
-      if (seen.has(key)) continue
-      seen.add(key)
-      const label = toLabel(h.screen, h.selectedNPI, h.selectedSupplier)
-      if (!label) continue
-      const stepsBack = history.length - i
-      trail.push({ label, onClick: () => goBackN(stepsBack), active: false })
-      if (h.screen === 'home') break
+    const crumb = (label, path) => ({ label, onClick: () => navigate(path) })
+    const dash = crumb('Dashboard', '/payer/dashboard')
+    switch (screen) {
+      case 'leaderboard': return [dash, { label: 'Physician Leaderboard', active: true }]
+      case 'physicians':  return [dash, crumb('Physician Leaderboard', '/payer/leaderboard'), { label: 'All Physicians', active: true }]
+      case 'detail':      return [dash,
+        fromSupplier ? crumb('Vendor Watchlist', '/payer/watchlist') : crumb('Physician Leaderboard', '/payer/leaderboard'),
+        { label: selectedNPI?.name || 'NPI Detail', active: true }]
+      case 'watchlist':   return [dash, { label: 'Vendor Watchlist', active: true }]
+      case 'vendors':     return [dash, crumb('Vendor Watchlist', '/payer/watchlist'), { label: 'All Vendors', active: true }]
+      case 'supplierDetail': return [dash, crumb('Vendor Watchlist', '/payer/watchlist'), { label: selectedSupplier?.name || 'Vendor Case', active: true }]
+      case 'disputes':    return [dash, { label: 'NPI Disputes', active: true }]
+      case 'disputeDetail': return [dash, crumb('NPI Disputes', '/payer/disputes'), { label: 'Dispute Detail', active: true }]
+      default: return []
     }
-    // If we never reached a 'home' entry, prepend a non-clickable Dashboard anchor.
-    if (!trail.find((c) => c.label === 'Dashboard')) trail.push({ label: 'Dashboard', active: false })
-
-    const items = trail.reverse()
-    const curLabel = toLabel(screen, selectedNPI, selectedSupplier)
-    if (curLabel) items.push({ label: curLabel, active: true })
-    return items
   })()
+
+  // On the leaderboard (dashboard-overview) screen the header shows a personal
+  // greeting instead of breadcrumbs — the in-page greeting block used to live
+  // there and was moved up here to reclaim vertical space for the table.
+  const investigatorName = (user?.full_name || 'Investigator').trim()
+  const todayLabel = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+  const headerGreeting = screen === 'leaderboard'
+    ? { title: `Hey ${investigatorName}`, sub: todayLabel }
+    : undefined
 
   return (
     <Shell navItems={PLAN_NAV}
-           activeId={screen === 'detail' ? (fromSupplier ? 'watchlist' : 'leaderboard') : screen === 'supplierDetail' ? 'watchlist' : screen}
+           layout="navbar-plain"
+           transparentHeader iconOnlyNav
+           activeId={screen === 'detail' ? (fromSupplier ? 'watchlist' : 'leaderboard') : screen === 'physicians' ? 'leaderboard' : screen === 'supplierDetail' || screen === 'vendors' ? 'watchlist' : screen === 'disputeDetail' ? 'disputes' : screen}
            onNavigate={go}
-           canGoBack={history.length > 0 && screen !== 'home'} onBack={goBack}
+           canGoBack={screen !== 'home'} onBack={goBack}
            title={PLAN_TITLES[screen]} user={user} subtitle="Payer" showSearch
-           searchValue={search} onSearchChange={setSearch}
+           searchValue={screen === 'disputes' ? disputeSearch : search}
+           onSearchChange={screen === 'disputes' ? setDisputeSearch : setSearch}
+           searchPlainMode={screen === 'disputes'}
+           searchPlaceholder={screen === 'disputes' ? 'Search claim #, vendor, NPI…' : undefined}
            onOpenNpi={(row) => openNpi(row, null)}
            onOpenSupplier={openSupplier}
            breadcrumbs={breadcrumbs}
-           notifCount={notif} bellTitle="New physician alerts"
+           headerGreeting={headerGreeting}
+           notifCount={notif} bellTitle="New activity"
            onBellClick={() => { markNotificationsSeen().then(() => setNotif(0)).catch(() => {}); go('home') }}
+           bellSlot={
+             <PlanNotifBell
+               count={notif}
+               notifications={planNotifications}
+               open={notifOpen}
+               onToggle={toggleNotif}
+               onMarkRead={markAllPlanNotificationsRead}
+               marking={notifMarking}
+               onSelect={selectPlanNotification}
+             />
+           }
            onLogout={async () => { await logout(); navigate('/welcome', { replace: true }) }}>
       {screen === 'home' && <PlanHome setActiveScreen={go}
           onOpenNpi={(npiObj) => openNpi(npiObj, null)}
-          onOpenSupplier={openSupplier} />}
-      {screen === 'leaderboard' && <NPILeaderboard search={search} setSelectedNPI={setSelectedNPI} setActiveScreen={(s) => { if (s === 'detail') { pushHist(); setNpiBack(null) } setScreen(s) }} initialBand={lbBand} />}
+          onOpenSupplier={openSupplier}
+          onOpenActivityFeed={() => setNotifOpen(true)} />}
+      {screen === 'leaderboard' && <NPILeaderboard search={search}
+          setSelectedNPI={(r) => { npiRowRef.current = r }}
+          setActiveScreen={(s, band) => { if (s === 'detail') openNpi(npiRowRef.current, null); else go(s, band) }}
+          initialBand={lbBand} />}
+      {screen === 'physicians' && <AllPhysicians search={search}
+          setSelectedNPI={(r) => { npiRowRef.current = r }}
+          setActiveScreen={(s) => { if (s === 'detail') openNpi(npiRowRef.current, null); else go(s) }} />}
       {screen === 'detail' && <NPIDetail npi={selectedNPI}
           onBack={goBack}
-          backLabel={fromSupplier ? `Back to ${npiBack.label || 'supplier'}` : null}
+          backLabel={fromSupplier ? `Back to ${npiBack.label || 'vendor'}` : null}
           initialPattern={npiInitialPattern}
           onOpenNpi={openNpiFromDetail}
           onOpenSupplier={openSupplier} />}
-      {screen === 'watchlist' && <SupplierWatchlist search={search} onSelect={openSupplier} />}
+      {screen === 'watchlist' && <SupplierWatchlist search={search} onSelect={openSupplier}
+          onViewAll={() => go('vendors')} />}
+      {screen === 'vendors' && <AllVendors search={search} onSelect={openSupplier} />}
       {screen === 'supplierDetail' && <SupplierDetail supplier={selectedSupplier} onBack={goBack} onSelectPhysician={openNpiFromSupplier} />}
-      {screen === 'disputes' && (
-        <div className="max-w-screen-xl mx-auto px-4 sm:px-7 py-6 space-y-4">
-          <div className="flex items-center justify-between flex-wrap gap-3">
-            <div className="flex gap-1">
-              {[
-                { id: 'open',     label: 'Open' },
-                { id: 'resolved', label: 'Resolved' },
-                { id: 'all',      label: 'All' },
-              ].map((t) => (
-                <button
-                  key={t.id}
-                  onClick={() => { setDisputeStatusFilter(t.id); setDisputesRefreshKey((k) => k + 1) }}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                    disputeStatusFilter === t.id
-                      ? 'bg-navy text-white'
-                      : 'bg-white border border-slate-200 text-slate-600 hover:border-slate-300'
-                  }`}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
-            <div className="flex items-center gap-3">
-              {!planDisputesLoading && (
-                <p className="text-sm text-slate-500">{planDisputes.length} dispute{planDisputes.length !== 1 ? 's' : ''}</p>
-              )}
-              <button
-                onClick={() => setDisputesRefreshKey((k) => k + 1)}
-                disabled={planDisputesLoading}
-                title="Refresh"
-                className="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:border-slate-300 hover:text-navy transition-colors disabled:opacity-50"
-              >
-                <Icon name="refresh" size={14} />
-              </button>
-            </div>
-          </div>
+      {screen === 'disputes' && (() => {
+        const q = normalizeSearchQuery(disputeSearch)
+        const filteredDisputes = planDisputes.filter((d) => {
+          const matchType = disputeTypeFilter === 'ALL' || d.dispute_type === disputeTypeFilter
+          const matchSearch = !q
+            || d.claim_number?.toLowerCase().includes(q)
+            || d.vendor_name?.toLowerCase().includes(q)
+            || d.vendor_npi?.toLowerCase().includes(q)
+            || d.physician_npi?.toLowerCase().includes(q)
+            || d.physician_notes?.toLowerCase().includes(q)
+          return matchType && matchSearch
+        })
+        if (disputeSortOrder === 'DAYS_ASC') {
+          filteredDisputes.sort((a, b) => (a.days_remaining ?? 0) - (b.days_remaining ?? 0))
+        } else if (disputeSortOrder === 'DAYS_DESC') {
+          filteredDisputes.sort((a, b) => (b.days_remaining ?? 0) - (a.days_remaining ?? 0))
+        } else {
+          // "Default Order" = most recently active case first, not whatever
+          // order the API happened to return.
+          filteredDisputes.sort((a, b) => mostRecentActivity(b) - mostRecentActivity(a))
+        }
 
-          {planDisputes.length > 0 && (
-            <div className="flex flex-wrap items-center gap-3">
-              <select value={disputeTypeFilter} onChange={(e) => setDisputeTypeFilter(e.target.value)}
-                      className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-[12px] font-semibold text-slate-700 outline-none focus:border-navy/40 focus:ring-2 focus:ring-navy/10">
-                <option value="ALL">All Types</option>
-                <option value="DISPUTE">Disputes</option>
-                <option value="FRAUD_REPORT">Fraud Reports</option>
-              </select>
-              <select value={disputeSortOrder} onChange={(e) => setDisputeSortOrder(e.target.value)}
-                      className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-[12px] font-semibold text-slate-700 outline-none focus:border-navy/40 focus:ring-2 focus:ring-navy/10">
-                <option value="NONE">Default Order</option>
-                <option value="DAYS_ASC">Days Left: Low to High</option>
-                <option value="DAYS_DESC">Days Left: High to Low</option>
-              </select>
-              {(disputeTypeFilter !== 'ALL' || disputeSortOrder !== 'NONE' || disputeSearch) && (
-                <button onClick={() => { setDisputeTypeFilter('ALL'); setDisputeSortOrder('NONE'); setDisputeSearch('') }}
-                        className="text-[12px] font-semibold text-slate-500 hover:text-rose-500 transition-colors flex items-center gap-1">
-                  <Icon name="x" size={11} stroke={2.5} /> Clear
-                </button>
-              )}
-              <div className="relative ml-auto w-full sm:w-auto sm:min-w-[240px]">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"><Icon name="search" size={13} /></span>
-                <input
-                  type="text"
-                  value={disputeSearch}
-                  onChange={(e) => setDisputeSearch(e.target.value)}
-                  placeholder="Search claim #, vendor, NPI…"
-                  className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-slate-200 bg-white text-[12px] font-medium text-slate-700 placeholder-slate-400 outline-none focus:border-navy/40 focus:ring-2 focus:ring-navy/10"
-                />
+        const openDetail = (d) => {
+          openDispute(d)
+          // Refresh in the background in case the vendor/physician changed this
+          // case's status in a separate session since the list was last fetched.
+          // Replacing planDisputes re-resolves the URL-derived selectedDispute.
+          getPlanDisputes(disputeStatusFilter).then((fresh) => {
+            setPlanDisputes(fresh.disputes)
+          }).catch(() => {})
+        }
+
+        return (
+        <div className="w-full h-full flex flex-col min-h-0 px-4 sm:px-7 py-6">
+          <div className="mc-card overflow-hidden flex flex-col flex-1 min-h-0">
+
+            {planDisputesLoading ? (
+              <div className="flex justify-center py-16">
+                <div className="animate-spin h-7 w-7 rounded-full border-2 border-navy border-t-transparent" />
               </div>
-            </div>
-          )}
+            ) : filteredDisputes.length === 0 ? (
+              <div className="px-6 py-10 text-center text-slate-400 text-sm">No disputes match these filters.</div>
+            ) : (
+              <>
+                {/* Mobile card view (< sm) — the table's columns don't fit a phone
+                    width, so each dispute becomes a stacked card instead. */}
+                <div className="sm:hidden flex-1 min-h-0 overflow-y-auto divide-y divide-slate-100">
+                  {filteredDisputes.map((d) => (
+                    <div key={d.case_id} onClick={() => openDetail(d)}
+                         className="px-4 py-3.5 cursor-pointer active:bg-slate-50 transition-colors">
+                      <div className="flex items-start justify-between gap-2 mb-1.5">
+                        <span className="font-mono text-xs text-slate-700 truncate">{d.claim_number}</span>
+                        {planDaysChip(d)}
+                      </div>
+                      <div className="font-bold text-[13.5px] text-slate-900 truncate mb-2">{d.vendor_name || d.vendor_npi}</div>
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {planDisputeTypeBadge(d.dispute_type)}
+                          {planDisputeStatusBadge(d.status)}
+                        </div>
+                        <span className="text-xs text-slate-400">{d.response_due_date ? fmtDate(d.response_due_date) : '—'}</span>
+                      </div>
+                      <button onClick={(e) => { e.stopPropagation(); openDetail(d) }}
+                              className={`mt-2.5 w-full justify-center ${needsEscalation(d) ? 'take-action-btn' : 'view-btn'}`}>
+                        {needsEscalation(d) ? 'Escalate' : 'View'} →
+                      </button>
+                    </div>
+                  ))}
+                </div>
 
-          {planDisputesLoading ? (
-            <div className="flex justify-center py-20">
-              <div className="animate-spin h-7 w-7 rounded-full border-2 border-navy border-t-transparent" />
-            </div>
-          ) : planDisputes.length === 0 ? (
-            <div className="mc-card px-6 py-8 text-center text-slate-400 text-sm">No disputes match this filter.</div>
-          ) : (() => {
-            const q = disputeSearch.trim().toLowerCase()
-            const filteredDisputes = planDisputes.filter((d) => {
-              const matchType = disputeTypeFilter === 'ALL' || d.dispute_type === disputeTypeFilter
-              const matchSearch = !q
-                || d.claim_number?.toLowerCase().includes(q)
-                || d.vendor_name?.toLowerCase().includes(q)
-                || d.vendor_npi?.toLowerCase().includes(q)
-                || d.physician_npi?.toLowerCase().includes(q)
-                || d.physician_notes?.toLowerCase().includes(q)
-              return matchType && matchSearch
-            })
-            if (disputeSortOrder === 'DAYS_ASC') {
-              filteredDisputes.sort((a, b) => (a.days_remaining ?? 0) - (b.days_remaining ?? 0))
-            } else if (disputeSortOrder === 'DAYS_DESC') {
-              filteredDisputes.sort((a, b) => (b.days_remaining ?? 0) - (a.days_remaining ?? 0))
-            }
-            if (filteredDisputes.length === 0) {
-              return <div className="mc-card px-6 py-8 text-center text-slate-400 text-sm">No disputes match these filters.</div>
-            }
-            return (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                    <th className="text-left py-2.5 pr-4">Claim #</th>
-                    <th className="text-left py-2.5 pr-4">Vendor</th>
-                    <th className="text-left py-2.5 pr-4">Type</th>
-                    <th className="text-left py-2.5 pr-4">Status</th>
-                    <th className="text-right py-2.5 pr-4">Due Date</th>
-                    <th className="text-right py-2.5">Days Left</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {filteredDisputes.map((d) => {
-                    const overdue = d.deadline_passed
-                    const warn    = !overdue && d.days_remaining <= 3
-                    const caution = !overdue && !warn && d.days_remaining <= 7
-                    const daysClass = overdue ? 'text-red-600 font-bold' : warn ? 'text-rose-600 font-semibold' : caution ? 'text-amber-600 font-medium' : 'text-slate-700'
-                    const resolved = !['OPEN', 'NON_RESPONSIVE'].includes(d.status)
-                    const statusCls = d.status === 'NON_RESPONSIVE' ? 'bg-red-100 text-red-700'
-                      : resolved ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
-                    return (
-                      <tr key={d.case_id} onClick={() => {
-                          setSelectedDispute(d)
-                          // Refresh in the background in case the vendor/physician changed this
-                          // case's status in a separate session since the list was last fetched.
-                          getPlanDisputes(disputeStatusFilter).then((fresh) => {
-                            setPlanDisputes(fresh.disputes)
-                            const match = fresh.disputes.find((x) => x.case_id === d.case_id)
-                            if (match) setSelectedDispute((prev) => (prev?.case_id === d.case_id ? match : prev))
-                          }).catch(() => {})
-                        }}
-                          className="hover:bg-slate-50 transition-colors cursor-pointer">
-                        <td className="py-3 pr-4 font-mono text-xs text-slate-700">{d.claim_number}</td>
-                        <td className="py-3 pr-4">
-                          <div className="font-medium text-ink">{d.vendor_name || d.vendor_npi}</div>
-                          <div className="text-xs text-slate-400">{d.vendor_npi}</div>
-                        </td>
-                        <td className="py-3 pr-4">
-                          <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600">{d.dispute_type || '—'}</span>
-                        </td>
-                        <td className="py-3 pr-4">
-                          <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${statusCls}`}>{d.status?.replace(/_/g, ' ')}</span>
-                        </td>
-                        <td className="py-3 pr-4 text-right text-xs text-slate-500">{d.response_due_date ? fmtDate(d.response_due_date) : '—'}</td>
-                        <td className={`py-3 text-right text-xs ${daysClass}`}>
-                          {resolved ? '—' : overdue ? 'OVERDUE' : `${d.days_remaining}d`}
-                        </td>
+                {/* Desktop table view (sm+) */}
+                <div className="hidden sm:block flex-1 min-h-0 overflow-auto">
+                  <table className="w-full text-sm">
+                    <thead className="sticky top-0 z-10">
+                      <tr className="border-b border-slate-200 text-[10.5px] font-bold text-slate-400 uppercase tracking-wide bg-slate-50">
+                        <th className="text-left py-3 px-3.5">Claim #</th>
+                        <th className="text-left py-3 px-3.5">Vendor</th>
+                        <th className="text-left py-3 px-3.5">Due Date</th>
+                        <PFilterTh label="Type" options={PLAN_DISPUTE_TYPE_OPTIONS} value={disputeTypeFilter} onChange={setDisputeTypeFilter} />
+                        <PFilterTh label="Status" options={PLAN_DISPUTE_STATUS_OPTIONS} value={disputeStatusFilter} onChange={setDisputeStatusFilter} defaultValue="all" />
+                        <PFilterTh label="Days Left" options={PLAN_DISPUTE_SORT_OPTIONS} value={disputeSortOrder} onChange={setDisputeSortOrder} defaultValue="NONE" />
+                        <th className="py-3 px-3.5"></th>
                       </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-            )
-          })()}
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {filteredDisputes.map((d) => (
+                        <tr key={d.case_id} onClick={() => openDetail(d)}
+                            className="hover:bg-slate-50 transition-colors cursor-pointer">
+                          <td className="py-3.5 px-3.5 font-mono text-xs text-slate-700 whitespace-nowrap">{d.claim_number}</td>
+                          <td className="py-3.5 px-3.5">
+                            <div className="font-bold text-[13.5px] text-slate-900 truncate max-w-[220px]">{d.vendor_name || d.vendor_npi}</div>
+                          </td>
+                          <td className="py-3.5 px-3.5 text-xs text-slate-500 whitespace-nowrap">{d.response_due_date ? fmtDate(d.response_due_date) : '—'}</td>
+                          <td className="py-3.5 px-3.5">{planDisputeTypeBadge(d.dispute_type)}</td>
+                          <td className="py-3.5 px-3.5">{planDisputeStatusBadge(d.status)}</td>
+                          <td className="py-3.5 px-3.5 whitespace-nowrap">{planDaysChip(d)}</td>
+                          <td className="py-3.5 px-3.5 whitespace-nowrap">
+                            <button onClick={(e) => { e.stopPropagation(); openDetail(d) }}
+                                    className={needsEscalation(d) ? 'take-action-btn' : 'view-btn'}>
+                              {needsEscalation(d) ? 'Escalate' : 'View'} →
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </div>
         </div>
-      )}
-      {selectedDispute && (
-        <DisputeDetailModal dispute={selectedDispute} onClose={() => setSelectedDispute(null)} />
-      )}
+        )
+      })()}
+      {screen === 'disputeDetail' && <DisputeDetailScreen dispute={selectedDispute} onActioned={refreshSelectedDispute} />}
     </Shell>
   )
 }
 
-// ─── Dispute detail modal (payer/compliance view) ────────────────────────────
-const RESPONSE_TYPE_LABELS = {
-  RESPONDED_TO_MEDICARE:      'Responded to Medicare',
-  RESOLVED_WITH_PHYSICIAN:    'Resolved with physician',
-  PHYSICIAN_CHANGED_RESPONSE: 'Physician changed response',
-  NONE:                       'No response type recorded',
+// ─── Dispute detail screen (payer/compliance view) — click-through from NPI
+// Disputes, mirrors the physician/vendor portals' own Dispute Detail screens
+// so this is a full page reached via the header back button, not a modal
+// stacked over the list. ─────────────────────────────────────────────────────
+// Icon/tone per timeline entry `type` (see buildDisputeTimeline) — everything
+// defaults to the neutral slate-blue dot; only escalation-flavored entries
+// (overdue escalation, confirmation-window expiry, a rejected resolution)
+// get the alarming red treatment, matching the reference mockup's
+// .tl-dot / .tl-dot.escalate split.
+const TL_DOT_STYLE = {
+  rejected:  { icon: 'x',        bg: '#F7EBEA', fg: '#A6453F' },
+  expired:   { icon: 'clock',    bg: '#F7EBEA', fg: '#A6453F' },
+  escalated: { icon: 'alertTri', bg: '#F7EBEA', fg: '#A6453F' },
+  fraud:     { icon: 'shield',   bg: '#E9F0F6', fg: '#5B84C4' },
+  dispute:   { icon: 'shield',   bg: '#E9F0F6', fg: '#5B84C4' },
+  deceased:  { icon: 'heartOff', bg: '#F2EEF7', fg: '#7A6899' },
+  notified:  { icon: 'doc',      bg: '#E9F0F6', fg: '#5B84C4' },
+  confirmed: { icon: 'check',    bg: '#E9F0F6', fg: '#5B84C4' },
+  compliance:{ icon: 'check',    bg: '#E9F0F6', fg: '#5B84C4' },
+}
+const TL_DOT_DEFAULT = { icon: 'doc', bg: '#E9F0F6', fg: '#5B84C4' }
+
+// The four decisions compliance can log against an escalated (NON_RESPONSIVE)
+// case — mirrors backend/routers/dashboard.py's COMPLIANCE_ACTION_LABEL keys.
+const COMPLIANCE_ACTIONS = [
+  { id: 'REFER_TO_MEDICARE',   icon: 'shield', tone: 'error'   },
+  { id: 'SUSPEND_SUPPLIER',    icon: 'flag',   tone: 'warning' },
+  { id: 'REQUEST_DOCS',        icon: 'doc',    tone: 'neutral' },
+  { id: 'CLOSE_INVESTIGATION', icon: 'check',  tone: 'success' },
+]
+const ACTION_TONE = {
+  error:   { bg: '#F7EBEA', fg: '#A6453F' },
+  warning: { bg: '#FBF3E4', fg: '#8A6A34' },
+  neutral: { bg: '#F1F4F9', fg: '#647089' },
+  success: { bg: '#E9F3ED', fg: '#2E6B4F' },
 }
 
-function DisputeDetailModal({ dispute: d, onClose }) {
-  const timeline = [
-    { at: d.opened_at, label: 'Physician disputed', note: d.physician_notes },
-    d.billing_provider_notified_at && { at: d.billing_provider_notified_at, label: 'Vendor notified' },
-    d.vendor_responded_at && {
-      at: d.vendor_responded_at,
-      label: 'Vendor responded',
-      note: RESPONSE_TYPE_LABELS[d.provider_response_type] || d.provider_response_type,
-      detail: d.vendor_response,
-    },
-    d.closed_at && { at: d.closed_at, label: 'Case closed', note: d.resolution_notes },
-  ].filter(Boolean).sort((a, b) => new Date(a.at) - new Date(b.at))
+function DisputeDetailScreen({ dispute: d, onActioned }) {
+  const [selectedAction, setSelectedAction] = useState(null)
+  const [actionNotes, setActionNotes] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState(null)
 
-  const resolved = !['OPEN', 'NON_RESPONSIVE'].includes(d.status)
-  const statusCls = d.status === 'NON_RESPONSIVE' ? 'bg-red-100 text-red-700'
-    : resolved ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+  if (!d) return <div className="px-7 py-8 text-slate-400">No dispute selected.</div>
+
+  // Full multi-round history from the event log (see buildDisputeTimeline in
+  // components/ui.jsx) — compliance gets neutral third-person wording and sees
+  // every vendor response's note/docs regardless of which path it took, unlike
+  // the physician's own view which hides the Medicare-path content.
+  const rawTimeline = [
+    ...(d.events?.length
+      ? buildDisputeTimeline(d, null)
+      : [{
+          at: d.opened_at,
+          label: d.dispute_type === 'FRAUD_REPORT' ? 'Physician reported this as fraud'
+            : d.dispute_type === 'DECEASED_PATIENT' ? 'Physician reported the patient as deceased'
+            : 'Physician disputed this claim',
+          note: d.physician_notes,
+          type: d.dispute_type === 'FRAUD_REPORT' ? 'fraud' : d.dispute_type === 'DECEASED_PATIENT' ? 'deceased' : 'dispute',
+        }]),
+    d.billing_provider_notified_at && { at: d.billing_provider_notified_at, label: 'Vendor notified', type: 'notified' },
+  ].filter(Boolean).sort((a, b) => new Date(a.at) - new Date(b.at))
+  // Defensive de-dup — a case whose escalation trigger fired more than once
+  // (e.g. two read paths racing before the status flip committed) would
+  // otherwise show the same "escalated to compliance" line twice.
+  const timeline = rawTimeline.filter((t, i) => i === 0 || t.label !== rawTimeline[i - 1].label || t.at !== rawTimeline[i - 1].at)
+
+  // REFERRED_TO_PAYER and PENDING_PHYSICIAN_REVIEW are NOT resolved — the first
+  // needs the payer's action, the second is mid-flight awaiting the physician.
+  const resolved = ['RESOLVED_BY_PHYSICIAN', 'RESPONDED_TO_MEDICARE', 'CLOSED', 'REFERRED_OIG'].includes(d.status)
+  const needsDecision = d.status === 'NON_RESPONSIVE' || d.status === 'REFERRED_TO_PAYER'
+  const statusCls = needsDecision ? 'bg-[#F7EBEA] text-[#8A423D]'
+    : resolved ? 'bg-[#E9F3ED] text-[#2E6B4F]' : 'bg-[#FBF3E4] text-[#8A6A34]'
+
+  async function submitDecision() {
+    if (!selectedAction || submitting) return
+    setSubmitting(true)
+    setSubmitError(null)
+    try {
+      await submitComplianceAction(d.case_id, selectedAction, actionNotes)
+      await onActioned?.(d.case_id)
+      setSelectedAction(null)
+      setActionNotes('')
+    } catch (e) {
+      setSubmitError(e.message)
+    } finally {
+      setSubmitting(false)
+    }
+  }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="absolute inset-0 bg-black/50" />
-      <div className="relative mc-card w-full max-w-2xl max-h-[85vh] overflow-y-auto p-6 space-y-5" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h2 className="text-[15px] font-bold text-slate-900">Case #{d.case_id} — Claim {d.claim_number}</h2>
-            <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${d.dispute_type === 'FRAUD_REPORT' ? 'bg-rose-100 text-rose-700' : 'bg-orange-100 text-orange-700'}`}>
-                {d.dispute_type === 'FRAUD_REPORT' ? 'FRAUD REPORT' : 'DISPUTE'}
-              </span>
-              <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold ${statusCls}`}>{d.status?.replace(/_/g, ' ')}</span>
+    <div className="h-full flex flex-col min-h-0 px-4 sm:px-7 py-4">
+      <div className="w-full flex flex-col flex-1 min-h-0">
+
+        {/* Banner */}
+        <div className="mc-card p-4 sm:p-5 mb-4 flex-shrink-0">
+          <h2 className="text-[17px] font-bold text-slate-900 mb-2.5">Case #{d.case_id} — Claim {d.claim_number}</h2>
+          <div className="flex items-center gap-2 flex-wrap mb-4">
+            {(() => {
+              const t = d.dispute_type
+              const meta = t === 'FRAUD_REPORT'
+                ? { label: 'Fraud Report', icon: 'shield', cls: 'text-white', style: { background: 'linear-gradient(180deg,#B95951,#9A3F39)' } }
+                : t === 'DECEASED_PATIENT'
+                ? { label: 'Deceased Patient', icon: 'heartOff', cls: '', style: { background: 'linear-gradient(180deg,#F2EEF7,#EAE3F2)', color: '#5F4E80' } }
+                : { label: 'Dispute', icon: 'message', cls: 'text-amber-700 bg-amber-50 ring-1 ring-inset ring-amber-200', style: undefined }
+              return (
+                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap ${meta.cls}`} style={meta.style}>
+                  <Icon name={meta.icon} size={11} />
+                  {meta.label}
+                </span>
+              )
+            })()}
+            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap ${statusCls}`}>
+              {needsDecision && <Icon name={d.status === 'REFERRED_TO_PAYER' ? 'alertTri' : 'x'} size={11} />}
+              {PLAN_STATUS_LABEL[d.status] || d.status?.replace(/_/g, ' ')}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-y-3 gap-x-5 pt-3.5 border-t border-slate-100 text-[13px]">
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Vendor</div>
+              <div className="font-semibold text-slate-800">{d.vendor_name || d.vendor_npi || '—'}</div>
+            </div>
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Physician NPI</div>
+              <div className="font-semibold text-slate-800">{d.physician_npi || '—'}</div>
+            </div>
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Response Due</div>
+              <div className="font-semibold text-slate-800">{d.response_due_date ? fmtDate(d.response_due_date) : '—'}</div>
+            </div>
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Days Left</div>
+              <div className={`font-bold ${d.deadline_passed ? 'text-[#A6453F]' : 'text-slate-800'}`}>
+                {resolved ? '—' : d.deadline_passed ? 'Overdue' : `${d.days_remaining}d`}
+              </div>
             </div>
           </div>
-          <button onClick={onClose} aria-label="Close" className="flex-shrink-0 w-8 h-8 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 flex items-center justify-center transition-colors">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
-          </button>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 text-[12px]">
-          <div>
-            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">Vendor</div>
-            <div className="font-medium text-slate-700">{d.vendor_name || d.vendor_npi || '—'}</div>
-          </div>
-          <div>
-            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">Physician NPI</div>
-            <div className="font-medium text-slate-700">{d.physician_npi || '—'}</div>
-          </div>
-          <div>
-            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">Response Due</div>
-            <div className="font-medium text-slate-700">{d.response_due_date ? fmtDate(d.response_due_date) : '—'}</div>
-          </div>
-          <div>
-            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">Days Left</div>
-            <div className={`font-medium ${d.deadline_passed ? 'text-red-600' : 'text-slate-700'}`}>
-              {resolved ? '—' : d.deadline_passed ? 'OVERDUE' : `${d.days_remaining}d`}
-            </div>
-          </div>
-        </div>
+        <div className={`grid grid-cols-1 ${needsDecision ? 'lg:grid-cols-[1fr_340px] xl:grid-cols-[1fr_380px] 2xl:grid-cols-[1fr_420px]' : ''} gap-4 items-stretch flex-1 min-h-0`}>
+          <div className="flex flex-col gap-4 min-w-0 min-h-0">
 
-        {d.claim && (
-          <div>
-            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Claim Details</div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-[12px]">
-              {[
-                ['Patient',          d.claim.patient_name_partial || '—'],
-                ['Service',          d.claim.service_description || '—'],
-                ['HCPCS Codes',      Array.isArray(d.claim.hcpcs_codes) ? (d.claim.hcpcs_codes.join(', ') || '—') : (d.claim.hcpcs_codes || '—')],
-                ['Date of Service',  d.claim.dos_from || d.claim.dos_to ? `${fmtDate(d.claim.dos_from)} — ${fmtDate(d.claim.dos_to)}` : '—'],
-                ['Amount Billed',    fmtUSD(d.claim.amount_billed)],
-                ['Amount Paid',      fmtUSD(d.claim.amount_paid)],
-                ['Physician',        d.claim.physician_name || '—'],
-                ['Physician Role',   d.claim.physician_npi_role || '—'],
-                ['Practice',         d.claim.physician_practice || '—'],
-              ].map(([label, value]) => (
-                <div key={label}>
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">{label}</div>
-                  <div className="font-medium text-slate-700">{value}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        <div>
-          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Timeline</div>
-          <div className="space-y-3">
-            {timeline.map((t, i) => (
-              <div key={i} className="flex gap-3">
-                <div className="flex flex-col items-center flex-shrink-0 pt-0.5">
-                  <div className="w-2 h-2 rounded-full bg-navy" />
-                  {i < timeline.length - 1 && <div className="w-px flex-1 bg-slate-200 mt-1" />}
-                </div>
-                <div className="pb-3 min-w-0">
-                  <div className="flex items-baseline gap-2 flex-wrap">
-                    <span className="text-[12px] font-semibold text-slate-800">{t.label}</span>
-                    <span className="text-[11px] text-slate-400">{fmtDate(t.at)}</span>
-                  </div>
-                  {t.note && <p className="text-[12px] text-slate-500 italic mt-0.5">"{t.note}"</p>}
-                  {t.detail && <p className="text-[12px] text-slate-600 mt-0.5">{t.detail}</p>}
+            {/* Claim details */}
+            {d.claim && (
+              <div className="mc-card p-4 sm:p-5 flex-shrink-0">
+                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-4">Claim Details</div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-[13px]">
+                  {[
+                    ['Patient',          d.claim.patient_name_partial || '—'],
+                    ['Service',          d.claim.service_description || '—'],
+                    ['HCPCS Codes',      Array.isArray(d.claim.hcpcs_codes) ? (d.claim.hcpcs_codes.join(', ') || '—') : (d.claim.hcpcs_codes || '—')],
+                    ['Date of Service',  d.claim.dos_from || d.claim.dos_to ? `${fmtDate(d.claim.dos_from)} — ${fmtDate(d.claim.dos_to)}` : '—'],
+                    ['Amount Billed',    fmtUSD(d.claim.amount_billed)],
+                    ['Amount Paid',      fmtUSD(d.claim.amount_paid)],
+                    ['Physician',        d.claim.physician_name || '—'],
+                    ['Physician Role',   d.claim.physician_npi_role || '—'],
+                    ['Practice',         d.claim.physician_practice || '—'],
+                  ].map(([label, value]) => (
+                    <div key={label}>
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">{label}</div>
+                      <div className="font-semibold text-slate-800">{value}</div>
+                    </div>
+                  ))}
                 </div>
               </div>
-            ))}
-          </div>
-        </div>
+            )}
 
-        {d.vendor_docs?.length > 0 && (
-          <div>
-            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Vendor's Supporting Documents</div>
-            <div className="flex flex-wrap gap-2">
-              {d.vendor_docs.map((doc) => (
-                <a
-                  key={doc.stored_name}
-                  href={`${API_BASE}/api/v1/vendor/disputes/${d.case_id}/docs/${doc.stored_name}`}
-                  target="_blank" rel="noreferrer"
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-50 ring-1 ring-slate-200 text-[11px] font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
-                >
-                  <Icon name="doc" size={12} /> {doc.filename}
-                </a>
-              ))}
+            {/* Timeline — absorbs the leftover height; long histories scroll inside the card */}
+            <div className="mc-card p-4 sm:p-5 flex-1 min-h-0 flex flex-col overflow-hidden">
+              <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-4 flex-shrink-0">Timeline</div>
+              <div className="flex-1 min-h-0 overflow-y-auto pr-1">
+                {timeline.map((t, i) => {
+                  const style = TL_DOT_STYLE[t.type] || TL_DOT_DEFAULT
+                  return (
+                    <div key={i} className="flex gap-3.5 relative pb-5 last:pb-0">
+                      {i < timeline.length - 1 && <div className="absolute left-[11px] top-6 bottom-0 w-px bg-slate-200" />}
+                      <div className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 z-10" style={{ background: style.bg }}>
+                        <Icon name={style.icon} size={11} stroke={2.4} style={{ color: style.fg }} />
+                      </div>
+                      <div className="min-w-0 pt-0.5">
+                        <div className="flex items-baseline gap-2 flex-wrap">
+                          <span className="text-[13.5px] font-bold text-slate-800">{t.label}</span>
+                        </div>
+                        <div className="text-[11.5px] text-slate-400 mt-0.5">{fmtDate(t.at)}</div>
+                        {t.note && <p className="text-[12.5px] text-slate-500 mt-1.5 border-l-2 border-slate-300 pl-2.5">"{t.note}"</p>}
+                        {t.detail && <p className="text-[12.5px] text-slate-500 mt-1.5 border-l-2 border-slate-300 pl-2.5">"{t.detail}"</p>}
+                        {t.docs?.length > 0 && (
+                          <div className="flex flex-wrap gap-2 mt-1.5">
+                            {t.docs.map((doc) => (
+                              <a key={doc.stored_name} href={doc.download_url} target="_blank" rel="noreferrer"
+                                 className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-50 ring-1 ring-slate-200 text-[11px] font-semibold text-slate-700 hover:bg-slate-100 transition-colors">
+                                <Icon name="doc" size={12} /> {doc.filename}
+                              </a>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
             </div>
           </div>
-        )}
+
+          {/* Compliance action — for a case that now needs the payer: the vendor
+              never responded (NON_RESPONSIVE) or the physician declined the docs
+              (REFERRED_TO_PAYER). Once suspended/closed, the decision shows in the
+              timeline instead. */}
+          {needsDecision && (
+            <div className="mc-card p-5 min-h-0 overflow-y-auto">
+              <div className="font-extrabold text-[15px] text-slate-900 mb-1">Compliance action</div>
+              <div className="text-[12px] text-slate-500 mb-4">
+                {d.status === 'REFERRED_TO_PAYER'
+                  ? "The physician declined the vendor's documents. Decide how to proceed."
+                  : 'Recorded on this case once submitted.'}
+              </div>
+
+              {COMPLIANCE_ACTIONS.map((opt) => {
+                const isSel = selectedAction === opt.id
+                const tone = ACTION_TONE[opt.tone]
+                return (
+                  <div key={opt.id} onClick={() => setSelectedAction(opt.id)}
+                       className="flex items-center gap-3 border-[1.5px] rounded-xl px-3.5 py-3 mb-2 cursor-pointer transition-colors"
+                       style={isSel ? { borderColor: tone.fg, background: tone.bg } : { borderColor: '#E1E6EE' }}>
+                    <div className="w-[30px] h-[30px] rounded-[9px] flex items-center justify-center flex-shrink-0" style={{ background: tone.bg }}>
+                      <Icon name={opt.icon} size={14} stroke={2} style={{ color: tone.fg }} />
+                    </div>
+                    <div className="text-[13px] font-bold text-slate-800">{COMPLIANCE_ACTION_LABEL[opt.id]}</div>
+                  </div>
+                )
+              })}
+
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mt-4 mb-2">Notes (optional)</label>
+              <textarea value={actionNotes} onChange={(e) => setActionNotes(e.target.value)}
+                        placeholder="Add context for this decision…"
+                        className="w-full border border-slate-300 rounded-[10px] p-2.5 text-[13px] outline-none focus:border-[#5B84C4] focus:ring-2 focus:ring-[#5B84C4]/15 resize-y min-h-[60px]" />
+
+              {submitError && <div className="text-[12px] text-rose-600 mt-2">{submitError}</div>}
+
+              <button onClick={submitDecision} disabled={!selectedAction || submitting}
+                      className="w-full flex items-center justify-center gap-2 mt-4 py-3 rounded-xl font-bold text-[13.5px] text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                      style={{ background: 'linear-gradient(180deg,#12335E,#0A1F3D)' }}>
+                {submitting ? 'Submitting…' : 'Submit decision'} <Icon name="chevronRight" size={13} />
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
@@ -1201,10 +955,24 @@ function FullScreenLoader() {
 
 // NOTE: the old TOTP "force /mfa/setup" gate was removed — login now uses Email OTP,
 // which has no setup step. The /mfa/* screens remain in the codebase (deactivated).
+//
+// POST_LOGIN_REDIRECT_KEY: an unauthenticated hit on a deep link (e.g. a vendor
+// clicking "Upload documentation" in an emailed dispute notice, which now points
+// straight at /vendor/portal?case=...) would otherwise just bounce to /login and
+// lose that destination. Stash the full path+query here before bouncing; Login.jsx
+// and OtpLogin.jsx both check it once auth completes and prefer it over their
+// normal post-login destination. sessionStorage (not router state) so it survives
+// the login -> /otp/login -> dashboard hop chain intact.
+const POST_LOGIN_REDIRECT_KEY = 'post_login_redirect'
+
 function Protected({ role, children }) {
   const { user, loading } = useAuth()
+  const location = useLocation()
   if (loading) return <FullScreenLoader />
-  if (!user) return <Navigate to="/login" replace />
+  if (!user) {
+    try { sessionStorage.setItem(POST_LOGIN_REDIRECT_KEY, location.pathname + location.search) } catch { /* ignore */ }
+    return <Navigate to="/login" replace />
+  }
   if (role && user.role !== role) return <Navigate to={DASHBOARD_PATH[user.role] || '/login'} replace />
   return children
 }
@@ -1258,12 +1026,17 @@ export default function App() {
         <Route path="/otp/login" element={<OtpLogin />} />
         {/* Public registration (physician + payer). */}
         <Route path="/register" element={<Register />} />
-        <Route path="/payer/signup" element={<PayerSignup />} />
-        <Route path="/physician/signup" element={<PhysicianSignup />} />
         {/* Deactivated TOTP screens — kept reachable directly, no longer in the login flow. */}
         <Route path="/mfa/setup" element={<Protected><MfaSetup /></Protected>} />
         <Route path="/mfa/backup-codes" element={<Protected><MfaBackupCodes /></Protected>} />
-        <Route path="/physician/*" element={<Protected role="physician"><PhysicianPortal /></Protected>} />
+        <Route path="/physician" element={<Protected role="physician"><PhysicianPortal /></Protected>}>
+          <Route index element={<Navigate to="dashboard" replace />} />
+          <Route path="dashboard" element={<PhysDashboardScreen />} />
+          <Route path="claims" element={<PhysClaimsScreen />} />
+          <Route path="claims/:claimId" element={<PhysClaimDetailScreen />} />
+          <Route path="disputes" element={<PhysDisputesScreen />} />
+          <Route path="disputes/:notifId" element={<PhysDisputeDetailScreen />} />
+        </Route>
         <Route path="/payer/*" element={<Protected role="plan_investigator"><PlanPortal /></Protected>} />
         {/* Back-compat: old /plan/* links redirect to the new /payer/* path. */}
         <Route path="/plan/*" element={<Navigate to="/payer/dashboard" replace />} />

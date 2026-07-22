@@ -33,7 +33,7 @@ OTP_BCRYPT_ROUNDS = 10
 # These accounts log in with their normal email + password, but instead of a random
 # emailed OTP they use the fixed code below (no email sent). Frontend shows the normal
 # "Check your email" screen; the user enters 123456.
-STUB_OTP_EMAILS = {"payer@mediclaim.com", "physician@mediclaim.com"}
+STUB_OTP_EMAILS = {"payer@mediclaim.com", "physician@mediclaim.com", "vendor@mediclaim.com"}
 STUB_OTP_CODE = "123456"
 
 

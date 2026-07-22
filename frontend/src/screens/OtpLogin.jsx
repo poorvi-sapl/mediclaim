@@ -5,6 +5,17 @@ import { otpVerify, otpResend } from '../api'
 import AuthLayout, { Spinner, CodeInput } from '../components/AuthLayout'
 import { DASHBOARD_PATH } from '../context/AuthContext'
 
+// Same pending-redirect handoff as Login.jsx — a stub/no-OTP login never
+// reaches this screen, so the deep-link check has to live here too for the
+// real-OTP path (see Protected in App.jsx for where this key gets set).
+function consumePostLoginRedirect() {
+  try {
+    const dest = sessionStorage.getItem('post_login_redirect')
+    if (dest) sessionStorage.removeItem('post_login_redirect')
+    return dest
+  } catch { return null }
+}
+
 export default function OtpLogin() {
   const navigate = useNavigate()
   const { refreshUser } = useAuth()
@@ -39,8 +50,10 @@ export default function OtpLogin() {
   async function onSuccess(res) {
     ;['otp_pending_token', 'otp_resend_token', 'otp_masked_email'].forEach(k => sessionStorage.removeItem(k))
     try { await refreshUser() } catch { /* gate will re-check */ }
-    // After OTP verification, land on the welcome page; the user enters their portal from there.
-    navigate('/welcome', { replace: true })
+    // Same fallback chain as the no-OTP login path in Login.jsx — a pending deep
+    // link first, then backend's redirect, then the frontend's own role map, so
+    // a gap in any one alone can't strand the user on the wrong screen.
+    navigate(consumePostLoginRedirect() || res.redirect || DASHBOARD_PATH[res.role] || '/', { replace: true })
   }
 
   function handleError(e) {

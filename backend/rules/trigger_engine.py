@@ -35,12 +35,55 @@ from typing import List
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
-from ..models import Physician, Claim, ClaimNotification, DisputeCase, NpiProfile, SupplierProfile
+from ..models import Action, Physician, Claim, ClaimNotification, DisputeCase, DisputeCaseEvent, NpiProfile, SupplierProfile
 from ..utils.tokens import generate_response_token
 from ..utils.email import send_vendor_dispute_email
 from ..sse import broadcast_alert
 
 log = logging.getLogger("rules.trigger_engine")
+
+
+def record_dispute_event(db, case: DisputeCase, event_type: str, actor: str,
+                          response_type: str = None, note: str = None, docs: list = None) -> DisputeCaseEvent:
+    """Append one row to the case's history log. Call this at every state
+    transition instead of only overwriting DisputeCase's own snapshot columns —
+    that's what lets a case with more than one vendor-response round (resolve
+    with physician -> rejected -> respond to Medicare) keep its full history
+    instead of the later round silently erasing the earlier one. Caller is
+    still responsible for committing (this only adds to the session)."""
+    event = DisputeCaseEvent(
+        case_id=case.case_id, event_type=event_type, actor=actor,
+        response_type=response_type, note=note, docs=docs,
+        created_at=datetime.utcnow(),
+    )
+    db.add(event)
+    return event
+
+
+def serialize_dispute_events(db, case_id: int, base_url: str) -> list:
+    """Full history for one case, oldest first, for the timeline UIs on all
+    three portals. Doc download links reuse the same vendor-docs route the
+    single-snapshot vendor_docs field already used, keyed by this case_id."""
+    events = (
+        db.query(DisputeCaseEvent)
+        .filter(DisputeCaseEvent.case_id == case_id)
+        .order_by(DisputeCaseEvent.created_at.asc())
+        .all()
+    )
+    return [
+        {
+            "event_type":    e.event_type,
+            "actor":         e.actor,
+            "response_type": e.response_type,
+            "note":          e.note,
+            "created_at":    e.created_at.isoformat() if e.created_at else None,
+            "docs": [
+                {**doc, "download_url": f"{base_url}/api/v1/vendor/disputes/{case_id}/docs/{doc.get('stored_name')}"}
+                for doc in (e.docs or [])
+            ],
+        }
+        for e in events
+    ]
 
 
 def broadcast_dispute_event(case: DisputeCase, event_type: str) -> None:
@@ -70,34 +113,49 @@ def broadcast_dispute_event(case: DisputeCase, event_type: str) -> None:
 
 def escalate_overdue_disputes(db: Session) -> int:
     """Flips any OPEN dispute whose response_due_date has passed to NON_RESPONSIVE.
-    Idempotent, cheap (single UPDATE), safe to call at the top of any read path."""
+    Idempotent, safe to call at the top of any read path. Loads matching rows
+    (instead of a single bulk UPDATE) so each one gets its own history-log
+    entry and live-push notification — this runs rarely enough (only cases
+    that just crossed their deadline) that the extra per-row work is fine."""
     now = datetime.now(timezone.utc).replace(tzinfo=None)
-    updated = (
+    cases = (
         db.query(DisputeCase)
         .filter(DisputeCase.status == "OPEN", DisputeCase.response_due_date < now)
-        .update({"status": "NON_RESPONSIVE"}, synchronize_session=False)
+        .all()
     )
-    if updated:
+    for case in cases:
+        case.status = "NON_RESPONSIVE"
+        record_dispute_event(db, case, "NON_RESPONSIVE", "SYSTEM")
+    if cases:
         db.commit()
-    return updated
+        for case in cases:
+            broadcast_dispute_event(case, "escalated_non_responsive")
+    return len(cases)
 
 
 def escalate_unconfirmed_physician_resolutions(db: Session) -> int:
     """Flips any PENDING_PHYSICIAN_CONFIRMATION case whose confirmation window has
     passed back to OPEN, with escalation_unlocked=True so the vendor's next response
-    can also pick RESPONDED_TO_MEDICARE. Idempotent, cheap (single UPDATE)."""
+    can also pick RESPONDED_TO_MEDICARE. Idempotent; see escalate_overdue_disputes
+    for why this loads rows instead of a single bulk UPDATE."""
     now = datetime.now(timezone.utc).replace(tzinfo=None)
-    updated = (
+    cases = (
         db.query(DisputeCase)
         .filter(
             DisputeCase.status == "PENDING_PHYSICIAN_CONFIRMATION",
             DisputeCase.physician_confirmation_due_date < now,
         )
-        .update({"status": "OPEN", "escalation_unlocked": True}, synchronize_session=False)
+        .all()
     )
-    if updated:
+    for case in cases:
+        case.status = "OPEN"
+        case.escalation_unlocked = True
+        record_dispute_event(db, case, "CONFIRMATION_EXPIRED", "SYSTEM")
+    if cases:
         db.commit()
-    return updated
+        for case in cases:
+            broadcast_dispute_event(case, "confirmation_expired")
+    return len(cases)
 
 # Maps synthetic claim dict field names → physician_npi_role values
 _NPI_ROLE_FIELDS = {
@@ -113,6 +171,15 @@ _STATUS_MAP = {
     "CONFIRM":      "CONFIRMED",
     "DISPUTE":      "DISPUTED",
     "FRAUD_REPORT": "FRAUD_REPORTED",
+    # Deceased-patient cases ride the FRAUD_REPORTED notification status —
+    # chk_cn_status has no separate value for them, and the case's own
+    # dispute_type ('DECEASED_PATIENT') is the source of truth for its kind.
+    "DECEASED_PATIENT": "FRAUD_REPORTED",
+    # Flag / reassign(unknown-patient) cases ride the generic DISPUTED
+    # notification status — chk_cn_status has no separate value; the case's
+    # dispute_type ('FLAG' / 'UNKNOWN_PATIENT') carries the real kind.
+    "FLAG":            "DISPUTED",
+    "UNKNOWN_PATIENT": "DISPUTED",
 }
 
 
@@ -138,6 +205,11 @@ def process_incoming_claim(claim: dict, db: Session) -> List[ClaimNotification]:
 
         notification = ClaimNotification(
             claim_number=claim.get("claim_number"),
+            # Set when the ingest path created a real claims-table row for this
+            # payload — links the notification to it the same way the My Claims
+            # action path does, so downstream joins/remasks work identically.
+            claim_id=claim.get("claim_row_id"),
+            claim_ccn=claim.get("claim_ccn"),
             physician_npi=npi,
             physician_npi_role=role,
             vendor_npi=claim.get("vendor_npi"),
@@ -166,6 +238,35 @@ def process_incoming_claim(claim: dict, db: Session) -> List[ClaimNotification]:
         db.refresh(n)
 
     return notifications
+
+
+# NPI-Watch email response -> My Claims action_type. Keeps the email path and the
+# My Claims path recording the same decision vocabulary.
+_RESPONSE_TO_ACTION = {"CONFIRM": "confirm", "DISPUTE": "dispute", "FRAUD_REPORT": "fraud"}
+
+
+def record_decision_action(db, claim, npi, action_type, note=None, when=None, broadcast=False):
+    """Single source of truth for recording a physician's claim decision: writes the
+    Action logbook row and flips Claim.reviewed=True. Every decision path — the My
+    Claims POST /actions handler and the NPI-Watch email response
+    (respond_to_notification) — goes through here, so a decided claim can never again
+    end up without its Action row / reviewed flag while its ClaimNotification says it
+    was decided. Does NOT commit — the caller owns the transaction. Returns the row."""
+    action = Action(
+        claim_id=claim.id,
+        npi=npi,
+        action_type=action_type,
+        note=note,
+        vendor_id=claim.vendor_id,
+        vendor_name=claim.vendor_name,
+        patient_name=claim.patient_name,
+        claim_amount=claim.claim_amount,
+        broadcast=broadcast,
+        created_at=when or datetime.utcnow(),
+    )
+    db.add(action)
+    claim.reviewed = True
+    return action
 
 
 def respond_to_notification(
@@ -207,6 +308,25 @@ def respond_to_notification(
     notification.physician_response = response
     notification.response_at = datetime.utcnow()
 
+    # Mirror the My Claims decision on the backing claim: record the Action logbook
+    # row + mark the claim reviewed, so a claim decided from an NPI-Watch email link
+    # doesn't stay "unreviewed" with an empty timeline while its notification says it
+    # was decided. Only when the notification is backed by a real Claim row, and only
+    # if that claim hasn't already been actioned (avoids a duplicate if the physician
+    # also acted from My Claims).
+    if notification.claim_id:
+        claim = db.query(Claim).filter(Claim.id == notification.claim_id).first()
+        already = db.query(Action.id).filter(
+            Action.claim_id == notification.claim_id,
+            Action.npi == notification.physician_npi,
+        ).first()
+        if claim and not already:
+            atype = _RESPONSE_TO_ACTION[response]
+            record_decision_action(
+                db, claim, notification.physician_npi, atype,
+                note=_CLAIM_ACTION_NOTES.get(atype), when=notification.response_at,
+            )
+
     dispute_case = None
     if response in ("DISPUTE", "FRAUD_REPORT"):
         dispute_case = DisputeCase(
@@ -219,6 +339,8 @@ def respond_to_notification(
             status="OPEN",
         )
         db.add(dispute_case)
+        db.flush()  # assigns case_id for the event FK below
+        record_dispute_event(db, dispute_case, "DISPUTE_OPENED", "PHYSICIAN", note=dispute_case.physician_notes)
 
     db.commit()
     db.refresh(notification)
@@ -258,20 +380,34 @@ def respond_to_notification(
 
 
 _CLAIM_ACTION_TO_DISPUTE_TYPE = {
-    "dispute": "DISPUTE",
-    # 'fraud' is not a reachable action_type from My Claims today (ClaimsTable.jsx has
-    # no Report Fraud button, and actions.py's VALID_ACTION_TYPES doesn't include it) —
-    # kept here so this function is ready if that ever changes.
-    "fraud":   "FRAUD_REPORT",
+    "dispute":          "DISPUTE",
+    "fraud":            "FRAUD_REPORT",
+    "deceased_patient": "DECEASED_PATIENT",
+    "flag_supplier":    "FLAG",
+    "unknown_patient":  "UNKNOWN_PATIENT",
+}
+
+# Internal record only — the physician's real reason, visible to the physician and
+# payer. The vendor NEVER sees these; its email/notification is the neutral
+# "proof-of-work documents needed" wording (see send_vendor_dispute_email).
+_CLAIM_ACTION_NOTES = {
+    "dispute":          "Physician disputed this claim via claim review.",
+    "fraud":            "Physician reported this claim as fraud via claim review.",
+    "deceased_patient": "Physician reported the patient as deceased — services could not have been provided.",
+    "flag_supplier":    "Physician flagged this vendor via claim review.",
+    "unknown_patient":  "Physician does not recognize the patient on this claim.",
 }
 
 
 def _mask_patient_name(full_name: str) -> str:
-    """"John Smith" -> "J*** S***" — same partial-mask convention used elsewhere
-    for patient_name_partial. Falls back for missing/blank names."""
+    """"John Smith" -> "J. Smith" — first name reduced to its initial, surname
+    shown in full. Falls back for missing/blank names."""
     if not full_name or not full_name.strip():
         return "Unknown Patient"
-    return " ".join(f"{part[0].upper()}***" for part in full_name.split() if part)
+    parts = [p for p in full_name.split() if p]
+    if len(parts) == 1:
+        return f"{parts[0][0].upper()}."
+    return f"{parts[0][0].upper()}. {' '.join(parts[1:])}"
 
 
 def notify_vendor_from_claim_action(
@@ -387,16 +523,13 @@ def notify_vendor_from_claim_action(
             physician_npi   = physician_npi,
             vendor_npi      = claim.vendor_npi,
             dispute_type    = dispute_type,
-            physician_notes = (
-                "Physician disputed this claim via claim review."
-                if action_type == "dispute"
-                else "Physician reported this claim as fraud via claim review."
-            ),
+            physician_notes = _CLAIM_ACTION_NOTES.get(action_type, "Physician flagged this claim via claim review."),
             response_due_date = datetime.utcnow() + timedelta(days=15),
             status            = "OPEN",
         )
         db.add(dispute_case)
         db.flush()
+        record_dispute_event(db, dispute_case, "DISPUTE_OPENED", "PHYSICIAN", note=dispute_case.physician_notes)
 
         db.commit()
         db.refresh(notification)

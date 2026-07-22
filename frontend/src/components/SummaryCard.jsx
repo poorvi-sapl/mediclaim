@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react'
 import { Icon, fmtUSD } from './ui'
+import { KpiCard } from './ui/kpi-card'
 
 /* ─── KPI Card Hover Preview (iframe thumbnail) ──────────────────── */
 const IS_PREVIEW = typeof window !== 'undefined' && window.location.search.includes('preview=1')
@@ -71,45 +72,13 @@ function HoverPreview({ children, url }) {
   )
 }
 
-function KpiTile({ icon, label, value, accent = 'slate', valueClass = '', loading, onClick }) {
-  const styles = {
-    slate:  { icon: 'bg-slate-100 text-slate-500',    chevDot: 'bg-slate-100 text-slate-400' },
-    navy:   { icon: 'bg-[#EEF2F7] text-[#1B3A5C]',   chevDot: 'bg-[#EEF2F7] text-[#1B3A5C]' },
-    amber:  { icon: 'bg-amber-50 text-amber-500',     chevDot: 'bg-amber-50 text-amber-400' },
-    emerald:{ icon: 'bg-emerald-50 text-emerald-600', chevDot: 'bg-emerald-50 text-emerald-500' },
-    rose:   { icon: 'bg-red-100 text-red-400',         chevDot: 'bg-red-100 text-red-400' },
-  }
-  const s = styles[accent] || styles.slate
-  const cls = `group mc-card p-3 sm:p-4 flex flex-col transition-all duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[0_10px_20px_-6px_rgba(15,23,42,0.15)] w-full text-left ${onClick ? 'cursor-pointer' : ''}`
-  const inner = (
-    <>
-      <div className="flex items-center justify-between mb-2 sm:mb-3">
-        <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center transition-all duration-200 group-hover:scale-110 group-hover:rotate-6 group-hover:brightness-90 group-hover:shadow-[0_4px_12px_-2px_rgba(0,0,0,0.18)] ${s.icon}`}>
-          <Icon name={icon} size={15} />
-        </div>
-        {onClick && (
-          <span className={`flex items-center justify-center w-5 h-5 sm:w-6 sm:h-6 rounded-full transition-all duration-200 group-hover:translate-x-0.5 ${s.chevDot}`}>
-            <Icon name="chevronRight" size={11} stroke={2.5} />
-          </span>
-        )}
-      </div>
-      <div className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">{label}</div>
-      {loading
-        ? <div className="h-6 sm:h-7 w-14 sm:w-16 rounded bg-slate-100 animate-pulse mt-1.5" />
-        : <div className={`text-xl sm:text-2xl font-bold tabular-nums mt-1 text-slate-900 ${valueClass}`}>{value}</div>}
-    </>
-  )
-  if (onClick) return <button onClick={onClick} className={cls}>{inner}</button>
-  return <div className={cls}>{inner}</div>
-}
-
 const DEFAULT_PHYSICIAN = { name: '', npi: '', specialty: '', city: '', state: '' }
 const DEFAULT_SUMMARY = { totalClaimsMonth: 0, totalAmountBilled: 0 }
 
 const HOW_IT_WORKS = [
-  { icon: 'check',  label: 'Confirm',         desc: 'Claim is legitimate and you recognize the supplier', iconCls: 'bg-emerald-50 text-emerald-600',  badge: 'bg-emerald-50 text-emerald-700 ring-emerald-200/60',  badgeLabel: 'Approve'  },
+  { icon: 'check',  label: 'Confirm',         desc: 'Claim is legitimate and you recognize the vendor',   iconCls: 'bg-emerald-50 text-emerald-600',  badge: 'bg-emerald-50 text-emerald-700 ring-emerald-200/60',  badgeLabel: 'Approve'  },
   { icon: 'x',      label: 'Dispute',          desc: 'Amount or service details are incorrect',            iconCls: 'bg-rose-50 text-rose-500',         badge: 'bg-rose-50 text-rose-600 ring-rose-200/60',          badgeLabel: 'Dispute'  },
-  { icon: 'flag',   label: 'Flag Supplier',    desc: 'Supplier is unknown or suspicious to you',           iconCls: 'bg-amber-50 text-amber-500',        badge: 'bg-amber-50 text-amber-700 ring-amber-200/60',        badgeLabel: 'Flag'     },
+  { icon: 'flag',   label: 'Flag Vendor',      desc: 'Vendor is unknown or suspicious to you',             iconCls: 'bg-amber-50 text-amber-500',        badge: 'bg-amber-50 text-amber-700 ring-amber-200/60',        badgeLabel: 'Flag'     },
   { icon: 'userx',  label: 'Unknown Patient',  desc: "You don't recognize the patient on this claim",      iconCls: 'bg-violet-50 text-violet-500',      badge: 'bg-violet-50 text-violet-700 ring-violet-200/60',      badgeLabel: 'Unknown'  },
 ]
 
@@ -148,7 +117,7 @@ export function ReviewBanner({ pendingCount = 0, unknownCount = 0, setActiveScre
           <div className="text-sm font-semibold text-slate-800">
             {pendingCount > 0 ? `You have ${pendingCount} claims that need a quick review.` : "You're all caught up — no claims pending review."}
           </div>
-          {unknownCount > 0 && <div className="text-xs text-slate-500 mt-0.5">{unknownCount} came from suppliers flagged on your account.</div>}
+          {unknownCount > 0 && <div className="text-xs text-slate-500 mt-0.5">{unknownCount} came from vendors flagged on your account.</div>}
         </div>
       </div>
       <button onClick={() => setActiveScreen('claims')}
@@ -168,22 +137,31 @@ export function StatCardGrid({ summary = DEFAULT_SUMMARY, pendingCount = 0, setA
   const now = new Date()
   const monthStart = isoLocal(new Date(now.getFullYear(), now.getMonth(), 1))
   const today = isoLocal(now)
-  const _base = `${window.location.origin}${window.location.pathname}?preview=1&screen=claims`
+  const _base = `${window.location.origin}/physician/claims?preview=1`
   const wrap = (url, tile) => IS_PREVIEW ? tile : <HoverPreview url={url}>{tile}</HoverPreview>
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
+    // vendor-theme scopes just this grid so the vendor portal's exact KpiCard
+    // recipe (--n-*/status CSS vars, .kpi/.kpi-badge/.kpi-track classes) applies
+    // here too, without pulling that theme into the rest of the physician portal.
+    <div className="vendor-theme grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
       {wrap(_base,
-        <KpiTile icon="claims" label="Claims This Month"       value={(summary.totalClaimsMonth || 0).toLocaleString()} accent="navy"
-                 onClick={() => goClaims({ reviewed: 'all' })} />
+        <KpiCard tone="default" label="Claims This Month" value={summary.totalClaimsMonth || 0}
+                 sub="Submitted this month" pct={summary.totalClaimsMonth > 0 ? 100 : 0}
+                 onClick={() => goClaims({ reviewed: 'all' })}
+                 icon={<Icon name="claims" size={16} stroke={2} />} />
       )}
       {wrap(_base,
-        <KpiTile icon="clock"  label="Pending Your Review"     value={pendingCount} accent="amber"
-                 valueClass={pendingCount > 0 ? 'text-amber-600' : ''}
-                 onClick={() => goClaims({ reviewed: 'unreviewed' })} />
+        <KpiCard tone="warning" label="Pending Your Review" value={pendingCount}
+                 sub={`${pendingCount} of ${summary.totalClaimsMonth || 0} claims`}
+                 pct={summary.totalClaimsMonth > 0 ? (pendingCount / summary.totalClaimsMonth) * 100 : 0}
+                 onClick={() => goClaims({ reviewed: 'unreviewed' })}
+                 icon={<Icon name="clock" size={16} stroke={2} />} />
       )}
       {wrap(_base,
-        <KpiTile icon="bolt"   label="Total Billed This Month" value={fmtUSD(summary.totalAmountBilled)} accent="rose"
-                 onClick={() => goClaims({ reviewed: 'all', dateFrom: monthStart, dateTo: today })} />
+        <KpiCard tone="ai" label="Total Billed This Month" value={fmtUSD(summary.totalAmountBilled)}
+                 sub="Total amount billed" pct={summary.totalAmountBilled > 0 ? 100 : 0}
+                 onClick={() => goClaims({ reviewed: 'all', dateFrom: monthStart, dateTo: today })}
+                 icon={<Icon name="bolt" size={16} stroke={2} />} />
       )}
     </div>
   )

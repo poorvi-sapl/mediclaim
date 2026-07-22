@@ -27,7 +27,7 @@ function GeoMap({ center, physicianLabel, patients, onMapLoad, focusedName }) {
       <div className="absolute top-3 left-3 z-10 flex items-center gap-0.5 bg-white rounded-xl shadow-md ring-1 ring-black/5 p-1">
         {[['roadmap', 'Map'], ['satellite', 'Satellite']].map(([id, lbl]) => (
           <button key={id} type="button" onClick={() => switchType(id)}
-                  className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-colors ${mapType === id ? 'bg-[#1E3A5F] text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'}`}>
+                  className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-colors ${mapType === id ? 'bg-[#0A1F3D] text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'}`}>
             {lbl}
           </button>
         ))}
@@ -42,7 +42,7 @@ function GeoMap({ center, physicianLabel, patients, onMapLoad, focusedName }) {
           <Fragment key={i}>
             <MarkerF position={{ lat: Number(p.lat), lng: Number(p.lng) }} title={`${p.name}${p.miles >= 0 ? ` · ${p.miles.toLocaleString()} miles` : ''}`} icon={focusedName === p.name ? YELLOW_PIN : BLUE_PIN} />
             <PolylineF path={[{ lat: Number(center.lat), lng: Number(center.lng) }, { lat: Number(p.lat), lng: Number(p.lng) }]}
-                       options={{ strokeColor: '#F87171', strokeWeight: 2, strokeOpacity: 0.75, geodesic: true }} />
+                       options={{ strokeColor: '#A6453F', strokeWeight: 2, strokeOpacity: 0.75, geodesic: true }} />
           </Fragment>
         ))}
       </GoogleMap>
@@ -64,23 +64,23 @@ function supplierFromEvidence(claims) {
 
 // Concise, plain-English "why" per pattern (≤ ~20 words, no red).
 function whyText(rule, ctx) {
-  const sup = ctx.supplierName || 'this supplier'
+  const sup = ctx.supplierName || 'this vendor'
   switch (rule) {
-    case 'oig_leie_hit': return `Supplier ${sup} appears on the federal OIG exclusion list. Medicare cannot reimburse.`
-    case 'cross_npi_supplier': return `Supplier ${sup} bills under ${ctx.physCount || 'multiple'} distinct physician NPIs — a coordinated fraud signal.`
+    case 'oig_leie_hit': return `Vendor ${sup} appears on the federal OIG exclusion list. Medicare cannot reimburse.`
+    case 'cross_npi_supplier': return `Vendor ${sup} bills under ${ctx.physCount || 'multiple'} distinct physician NPIs — a coordinated fraud signal.`
     case 'geographic_anomaly': return `Patients are located far from the physician's practice in ${ctx.practice?.city || '—'}, ${ctx.practice?.state || '—'}.`
     case 'duplicate_billing': return 'Same service billed twice for this patient within 30 days.'
     case 'volume_spike': return ctx.vol
       ? `Claims spiked ${ctx.vol.ratio}× above normal between ${fmtDate(ctx.vol.start)} and ${fmtDate(ctx.vol.end)}.`
       : 'Claim volume spiked sharply in a concentrated period.'
     case 'unbundling': return 'Single services split across multiple billing codes on the same date.'
-    case 'new_high_value_supplier': return `Supplier ${sup} appeared recently and immediately submitted high-value claims — no prior billing history under this NPI.`
+    case 'new_high_value_supplier': return `Vendor ${sup} appeared recently and immediately submitted high-value claims — no prior billing history under this NPI.`
     case 'upcoding': return 'Claims here are billed well above the national median for their service category.'
     case 'deceased_patient': return 'Claims filed for patients with no prior activity in over six months — consistent with billing after patient death.'
     case 'impossible_day': return 'This physician billed an implausible number of claims on a single day.'
     case 'modifier_abuse': return 'Near-identical services billed separately for the same patient on the same date — consistent with modifier abuse to bypass duplicate checks.'
     case 'rapid_cycling': return 'This physician billed an unusually high number of distinct patients in a single day.'
-    case 'supplier_concentration': return `A single supplier accounts for the large majority of this physician's billing — ${sup}.`
+    case 'supplier_concentration': return `A single vendor accounts for the large majority of this physician's billing — ${sup}.`
     default: return ctx.explanation || 'This rule fired on the claims below.'
   }
 }
@@ -123,10 +123,10 @@ function duplicatePairs(claims) {
 }
 
 // Shared clickable-name styles.
-const LINK = 'font-semibold text-[#1E3A5F] hover:underline cursor-pointer'
+const LINK = 'font-semibold text-[#0A1F3D] hover:underline cursor-pointer'
 const SUMMARY = 'text-[12px] text-slate-400 text-center mt-4 leading-relaxed'
-const VIEWALL = 'w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-[13px] font-semibold text-slate-700 shadow-sm transition-all duration-150 hover:border-[#1E3A5F]/25 hover:bg-[#EEF2FF] hover:text-[#1E3A5F]'
-const RED_CARD = { background: '#FEF2F2', border: '1px solid #FECACA' }
+const VIEWALL = 'w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-[13px] font-semibold text-slate-700 shadow-sm transition-all duration-150 hover:border-[#0A1F3D]/25 hover:bg-[#E9F0F6] hover:text-[#0A1F3D]'
+const RED_CARD = { background: '#F7EBEA', border: '1px solid #EBD3D1' }
 
 function SupplierLink({ name, onOpenSupplier }) {
   return <button type="button" onClick={() => onOpenSupplier?.(name)} className={LINK}>{name}</button>
@@ -199,22 +199,22 @@ export default function FraudPatternPanel({ npi, label, rule, focusClaim, practi
       return (
         <div className="mt-4">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">OIG Excluded Suppliers</span>
-            <span className="text-[11px] font-semibold text-rose-600 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md tabular-nums">
-              {groups.length} supplier{groups.length !== 1 ? 's' : ''}
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">OIG Excluded Vendors</span>
+            <span className="text-[11px] font-semibold text-[#8A423D] bg-[#F7EBEA] border border-[#EBD3D1] px-2 py-0.5 rounded-md tabular-nums">
+              {groups.length} vendor{groups.length !== 1 ? 's' : ''}
             </span>
           </div>
           <div className="space-y-2">
             {groups.map((g) => (
               <button key={g.supplier} type="button" onClick={() => onOpenSupplier?.(g.supplier)}
-                      className="group w-full text-left flex items-center gap-3 px-4 py-3.5 rounded-xl bg-slate-50 border border-slate-100 hover:bg-rose-50/40 hover:border-rose-200/70 hover:-translate-y-px hover:shadow-sm transition-all duration-150">
-                <div className="w-2 h-2 rounded-full bg-rose-400 shrink-0" />
+                      className="group w-full text-left flex items-center gap-3 px-4 py-3.5 rounded-xl bg-slate-50 border border-slate-100 hover:bg-[#F7EBEA]/40 hover:border-[#EBD3D1] hover:-translate-y-px hover:shadow-sm transition-all duration-150">
+                <div className="w-2 h-2 rounded-full bg-[#A6453F] shrink-0" />
                 <div className="flex-1 min-w-0">
-                  <div className="text-[13px] font-semibold text-slate-800 truncate group-hover:text-[#1E3A5F]">{g.supplier}</div>
+                  <div className="text-[13px] font-semibold text-slate-800 truncate group-hover:text-[#0A1F3D]">{g.supplier}</div>
                   <div className="text-[11px] text-slate-500 mt-0.5 tabular-nums">{g.count} claim{g.count !== 1 ? 's' : ''} · {fmtUSD(g.total)} total</div>
                 </div>
                 <Icon name="chevronRight" size={13} stroke={2.2}
-                      className="text-slate-300 group-hover:text-[#1E3A5F] group-hover:translate-x-0.5 transition-all duration-150 shrink-0" />
+                      className="text-slate-300 group-hover:text-[#0A1F3D] group-hover:translate-x-0.5 transition-all duration-150 shrink-0" />
               </button>
             ))}
           </div>
@@ -252,7 +252,7 @@ export default function FraudPatternPanel({ npi, label, rule, focusClaim, practi
             <>
               <div className="flex items-center justify-between mb-3">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Unbundled Claim Groups</span>
-                <span className="text-[11px] font-semibold text-orange-600 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-md tabular-nums">
+                <span className="text-[11px] font-semibold text-[#8A6A34] bg-[#FBF3E4] border border-[#F0E0BE] px-2 py-0.5 rounded-md tabular-nums">
                   {groups.length} instance{groups.length !== 1 ? 's' : ''}
                 </span>
               </div>
@@ -274,7 +274,7 @@ export default function FraudPatternPanel({ npi, label, rule, focusClaim, practi
                         <button key={c.id} type="button" onClick={() => onHighlightClaim?.(c.id)}
                                 className="group w-full flex items-center justify-between gap-3 text-left">
                           <div className="flex items-center gap-2 min-w-0">
-                            <div className="w-1.5 h-1.5 rounded-full bg-orange-300 shrink-0" />
+                            <div className="w-1.5 h-1.5 rounded-full bg-[#D1A85C] shrink-0" />
                             <span className="text-[12px] text-slate-600 group-hover:text-slate-900 truncate">{c.description || c.category}</span>
                           </div>
                           <span className="text-[12px] font-semibold text-slate-700 tabular-nums shrink-0">{fmtUSD(c.amount, 2)}</span>
@@ -309,7 +309,7 @@ export default function FraudPatternPanel({ npi, label, rule, focusClaim, practi
       return (
         <div className="mt-4">
           <div className="flex items-center gap-2.5 rounded-xl bg-slate-50 border border-slate-200 px-4 py-3 mb-3">
-            <span className="w-7 h-7 rounded-lg bg-rose-50 text-rose-500 flex items-center justify-center flex-shrink-0"><Icon name="shield" size={15} /></span>
+            <span className="w-7 h-7 rounded-lg bg-[#F7EBEA] text-[#A6453F] flex items-center justify-center flex-shrink-0"><Icon name="shield" size={15} /></span>
             <div className="min-w-0">
               <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Practice Location</div>
               <div className="text-sm font-semibold text-slate-800 truncate">{practice?.city || '—'}, {practice?.state || '—'}</div>
@@ -317,11 +317,11 @@ export default function FraudPatternPanel({ npi, label, rule, focusClaim, practi
           </div>
           <div className="flex items-center justify-between gap-2 mb-1.5">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Distant Patients</span>
-            {furthest >= 0 && <span className="text-[11px] font-semibold text-amber-600 tabular-nums">furthest {furthest.toLocaleString()} mi</span>}
+            {furthest >= 0 && <span className="text-[11px] font-semibold text-[#8A6A34] tabular-nums">furthest {furthest.toLocaleString()} mi</span>}
           </div>
           <div className="space-y-2">
             {sorted.slice(0, 4).map((c) => (
-              <div key={c.id} className="rounded-xl border border-slate-200 bg-white px-3.5 py-3 transition-all duration-150 hover:border-[#1E3A5F]/30 hover:bg-slate-50/70 hover:shadow-sm">
+              <div key={c.id} className="rounded-xl border border-slate-200 bg-white px-3.5 py-3 transition-all duration-150 hover:border-[#0A1F3D]/30 hover:bg-slate-50/70 hover:shadow-sm">
                 <div className="flex items-center justify-between gap-3">
                   <button
                     type="button"
@@ -332,22 +332,22 @@ export default function FraudPatternPanel({ npi, label, rule, focusClaim, practi
                         mapRef.current.setZoom(7)
                       }
                     }}
-                    className="text-sm font-semibold text-slate-800 truncate hover:text-[#1E3A5F] hover:underline transition-colors cursor-pointer"
+                    className="text-sm font-semibold text-slate-800 truncate hover:text-[#0A1F3D] hover:underline transition-colors cursor-pointer"
                   >{c.patient}</button>
                   <span className="text-sm font-bold text-slate-900 tabular-nums flex-shrink-0">{fmtUSD(c.amount, 2)}</span>
                 </div>
                 {milesOf(c.why) >= 0 && (
                   <div className="mt-1.5">
-                    <span className="inline-flex items-center text-[11px] font-semibold text-blue-700 tabular-nums">{milesOf(c.why).toLocaleString()} mi from practice</span>
+                    <span className="inline-flex items-center text-[11px] font-semibold text-[#35607D] tabular-nums">{milesOf(c.why).toLocaleString()} mi from practice</span>
                   </div>
                 )}
                 <div className="relative group/sup mt-1 max-w-full">
                   <button type="button" onClick={() => onOpenSupplier?.(c.supplier)}
-                          className="block max-w-full truncate text-xs font-semibold text-[#1E3A5F] hover:underline cursor-pointer">{c.supplier}</button>
+                          className="block max-w-full truncate text-xs font-semibold text-[#0A1F3D] hover:underline cursor-pointer">{c.supplier}</button>
                   {/* hover popup — shows the full (untruncated) supplier name + a click hint */}
                   <div className="pointer-events-none absolute left-0 bottom-full mb-2 z-30 w-max max-w-[260px] rounded-lg bg-slate-900 px-3 py-2 text-[11px] leading-snug text-white shadow-xl opacity-0 translate-y-1 transition-all duration-150 group-hover/sup:opacity-100 group-hover/sup:translate-y-0">
                     <div className="font-semibold">{c.supplier}</div>
-                    <div className="mt-0.5 text-slate-300">Billing supplier · click to open the supplier case →</div>
+                    <div className="mt-0.5 text-slate-300">Billing vendor · click to open the vendor case →</div>
                     <span className="absolute left-4 top-full h-0 w-0 border-x-4 border-t-4 border-x-transparent border-t-slate-900" aria-hidden />
                   </div>
                 </div>
@@ -367,9 +367,9 @@ export default function FraudPatternPanel({ npi, label, rule, focusClaim, practi
           {pairs.slice(0, 3).map((p, i) => (
             <div key={i} className="rounded-lg px-4 py-3 mb-2" style={RED_CARD}>
               <div className="text-sm font-semibold text-slate-800">{p.patient}</div>
-              <div className="text-[13px] text-slate-500 mt-0.5">Supplier: <SupplierLink name={p.c1.supplier} onOpenSupplier={onOpenSupplier} /></div>
-              <button type="button" onClick={() => onHighlightClaim?.(p.c1.id)} className="block w-full text-left mt-2 text-[13px] text-slate-600 hover:text-[#1E3A5F] hover:underline">Claim 1: {fmtDate(p.c1.date)} · {p.c1.description || p.c1.category} · {fmtUSD(p.c1.amount, 2)}</button>
-              <button type="button" onClick={() => onHighlightClaim?.(p.c2.id)} className="block w-full text-left mt-0.5 text-[13px] text-slate-600 hover:text-[#1E3A5F] hover:underline">Claim 2: {fmtDate(p.c2.date)} · {p.c2.description || p.c2.category} · {fmtUSD(p.c2.amount, 2)}</button>
+              <div className="text-[13px] text-slate-500 mt-0.5">Vendor: <SupplierLink name={p.c1.supplier} onOpenSupplier={onOpenSupplier} /></div>
+              <button type="button" onClick={() => onHighlightClaim?.(p.c1.id)} className="block w-full text-left mt-2 text-[13px] text-slate-600 hover:text-[#0A1F3D] hover:underline">Claim 1: {fmtDate(p.c1.date)} · {p.c1.description || p.c1.category} · {fmtUSD(p.c1.amount, 2)}</button>
+              <button type="button" onClick={() => onHighlightClaim?.(p.c2.id)} className="block w-full text-left mt-0.5 text-[13px] text-slate-600 hover:text-[#0A1F3D] hover:underline">Claim 2: {fmtDate(p.c2.date)} · {p.c2.description || p.c2.category} · {fmtUSD(p.c2.amount, 2)}</button>
               <div className="text-[13px] font-medium text-slate-600 mt-1.5">{p.days} day{p.days !== 1 ? 's' : ''} apart</div>
             </div>
           ))}
@@ -386,14 +386,14 @@ export default function FraudPatternPanel({ npi, label, rule, focusClaim, practi
       return (
         <div className="mt-4">
           <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Upcoded claims</div>
-          <div className="divide-y divide-[#F3F4F6]">
+          <div className="divide-y divide-[#F1F4F9]">
             {sorted.slice(0, 5).map((c) => (
               <button key={c.id} type="button" onClick={() => onHighlightClaim?.(c.id)} className="block w-full text-left py-2.5 group">
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-sm font-semibold text-slate-800 truncate group-hover:underline">{c.patient}</span>
                   <span className="text-sm font-bold text-slate-800 tabular-nums flex-shrink-0">{fmtUSD(c.amount, 2)}</span>
                 </div>
-                <div className="text-[13px] text-slate-500 mt-0.5">{c.category}{multOf(c.why) ? <span className="text-amber-600"> · {multOf(c.why)}× above median</span> : null}</div>
+                <div className="text-[13px] text-slate-500 mt-0.5">{c.category}{multOf(c.why) ? <span className="text-[#8A6A34]"> · {multOf(c.why)}× above median</span> : null}</div>
               </button>
             ))}
           </div>
@@ -415,11 +415,11 @@ export default function FraudPatternPanel({ npi, label, rule, focusClaim, practi
       return (
         <div className="mt-4">
           <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Patients reappearing after long gaps</div>
-          <div className="divide-y divide-[#F3F4F6]">
+          <div className="divide-y divide-[#F1F4F9]">
             {uniq.slice(0, 5).map((c) => { const x = parse(c.why); return (
               <button key={c.id} type="button" onClick={() => onHighlightClaim?.(c.id)} className="block w-full text-left py-2.5 hover:underline">
                 <div className="text-sm font-semibold text-slate-800 truncate">{c.patient}</div>
-                <div className="text-[13px] text-slate-500 mt-0.5">Last seen: {x.last ? fmtDate(x.last) : '—'} · This claim: {fmtDate(c.date)} · <span className="text-amber-600">Gap: {x.gap || '—'} days</span></div>
+                <div className="text-[13px] text-slate-500 mt-0.5">Last seen: {x.last ? fmtDate(x.last) : '—'} · This claim: {fmtDate(c.date)} · <span className="text-[#8A6A34]">Gap: {x.gap || '—'} days</span></div>
               </button>
             ) })}
           </div>
@@ -439,7 +439,7 @@ export default function FraudPatternPanel({ npi, label, rule, focusClaim, practi
         <div className="mt-4">
           <div className="flex items-center justify-between mb-3">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Impossible Days</span>
-            <span className="text-[11px] font-semibold text-rose-600 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md tabular-nums">
+            <span className="text-[11px] font-semibold text-[#8A423D] bg-[#F7EBEA] border border-[#EBD3D1] px-2 py-0.5 rounded-md tabular-nums">
               {days.length} day{days.length !== 1 ? 's' : ''} detected
             </span>
           </div>
@@ -450,16 +450,16 @@ export default function FraudPatternPanel({ npi, label, rule, focusClaim, practi
                 <div key={d} className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
                   <div className="flex items-center justify-between gap-3 mb-2">
                     <span className="text-[13px] font-semibold text-slate-800">{fmtDate(d)}</span>
-                    <span className="text-[11px] font-bold text-rose-600 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md tabular-nums">
+                    <span className="text-[11px] font-bold text-[#8A423D] bg-[#F7EBEA] border border-[#EBD3D1] px-2 py-0.5 rounded-md tabular-nums">
                       {n} claims
                     </span>
                   </div>
                   <div className="h-1.5 w-full bg-slate-200 rounded-full overflow-hidden">
-                    <div className="h-full rounded-full bg-rose-400 transition-all duration-300" style={{ width: `${pct}%` }} />
+                    <div className="h-full rounded-full bg-[#A6453F] transition-all duration-300" style={{ width: `${pct}%` }} />
                   </div>
                   <div className="flex items-center justify-between mt-1.5">
                     <span className="text-[10px] text-slate-400">normal ~{NORMAL}/day</span>
-                    <span className="text-[10px] font-semibold text-rose-500">{Math.round(n / NORMAL)}× above normal</span>
+                    <span className="text-[10px] font-semibold text-[#A6453F]">{Math.round(n / NORMAL)}× above normal</span>
                   </div>
                 </div>
               )
@@ -484,8 +484,8 @@ export default function FraudPatternPanel({ npi, label, rule, focusClaim, practi
           {pairs.slice(0, 4).map(([a, b], i) => (
             <div key={i} className="rounded-lg px-4 py-3 mb-2" style={RED_CARD}>
               <div className="text-sm font-semibold text-slate-800">{a.patient} <span className="font-normal text-slate-500">· {fmtDate(a.date)}</span></div>
-              <button type="button" onClick={() => onHighlightClaim?.(a.id)} className="block w-full text-left mt-1.5 text-[13px] text-slate-600 hover:text-[#1E3A5F] hover:underline">{a.description || a.category} · {fmtUSD(a.amount, 2)}</button>
-              <button type="button" onClick={() => onHighlightClaim?.(b.id)} className="block w-full text-left mt-0.5 text-[13px] text-slate-600 hover:text-[#1E3A5F] hover:underline">{b.description || b.category} · {fmtUSD(b.amount, 2)}</button>
+              <button type="button" onClick={() => onHighlightClaim?.(a.id)} className="block w-full text-left mt-1.5 text-[13px] text-slate-600 hover:text-[#0A1F3D] hover:underline">{a.description || a.category} · {fmtUSD(a.amount, 2)}</button>
+              <button type="button" onClick={() => onHighlightClaim?.(b.id)} className="block w-full text-left mt-0.5 text-[13px] text-slate-600 hover:text-[#0A1F3D] hover:underline">{b.description || b.category} · {fmtUSD(b.amount, 2)}</button>
             </div>
           ))}
           <div className={SUMMARY}>{pairs.length} pair{pairs.length !== 1 ? 's' : ''} flagged</div>
@@ -503,7 +503,7 @@ export default function FraudPatternPanel({ npi, label, rule, focusClaim, practi
         <div className="mt-4">
           <div className="flex items-center justify-between mb-3">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">High-Turnover Days</span>
-            <span className="text-[11px] font-semibold text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md tabular-nums">
+            <span className="text-[11px] font-semibold text-[#8A6A34] bg-[#FBF3E4] border border-[#F0E0BE] px-2 py-0.5 rounded-md tabular-nums">
               {days.length} day{days.length !== 1 ? 's' : ''} flagged
             </span>
           </div>
@@ -516,13 +516,13 @@ export default function FraudPatternPanel({ npi, label, rule, focusClaim, practi
                     <span className="text-[13px] font-semibold text-slate-800">{fmtDate(d)}</span>
                     <div className="flex items-center gap-2 shrink-0">
                       <span className="text-[11px] text-slate-400 tabular-nums">{e.n} claims</span>
-                      <span className="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md tabular-nums">
+                      <span className="text-[11px] font-bold text-[#8A6A34] bg-[#FBF3E4] border border-[#F0E0BE] px-2 py-0.5 rounded-md tabular-nums">
                         {e.pts.size} patients
                       </span>
                     </div>
                   </div>
                   <div className="h-1.5 w-full bg-slate-200 rounded-full overflow-hidden">
-                    <div className="h-full rounded-full bg-amber-400 transition-all duration-300" style={{ width: `${pct}%` }} />
+                    <div className="h-full rounded-full bg-[#D1A85C] transition-all duration-300" style={{ width: `${pct}%` }} />
                   </div>
                 </div>
               )
@@ -554,10 +554,10 @@ export default function FraudPatternPanel({ npi, label, rule, focusClaim, practi
             <div className="text-[13px] text-slate-500 mt-0.5">{dom} of {tot} claims</div>
           </div>
           <div className="mt-3 font-mono text-[11px] sm:text-[12px] space-y-1 overflow-hidden">
-            <div className="truncate"><span className="text-[#1E3A5F]">{bar(pct)}</span> <span className="text-slate-600">{sname.slice(0, 20)} {pct != null ? `${pct}%` : ''}</span></div>
+            <div className="truncate"><span className="text-[#0A1F3D]">{bar(pct)}</span> <span className="text-slate-600">{sname.slice(0, 20)} {pct != null ? `${pct}%` : ''}</span></div>
             <div className="truncate"><span className="text-slate-300">{bar(opct)}</span> <span className="text-slate-500">Others {opct != null ? `${opct}%` : ''}</span></div>
           </div>
-          <div className="text-center mt-3"><button type="button" onClick={() => onViewClaims?.({ flag: 'SUPPLIER_CONCENTRATION', label: 'Supplier concentration' })} className={VIEWALL}>View all claims →</button></div>
+          <div className="text-center mt-3"><button type="button" onClick={() => onViewClaims?.({ flag: 'SUPPLIER_CONCENTRATION', label: 'Vendor concentration' })} className={VIEWALL}>View all claims →</button></div>
         </div>
       )
     }
@@ -569,8 +569,8 @@ export default function FraudPatternPanel({ npi, label, rule, focusClaim, practi
       const sname = first?.supplier || claims[0]?.supplier
       return (
         <div className="mt-4">
-          <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Evidence — first claims from this supplier</div>
-          <div className="divide-y divide-[#F3F4F6]">
+          <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Evidence — first claims from this vendor</div>
+          <div className="divide-y divide-[#F1F4F9]">
             {sorted.slice(0, 5).map((c) => (
               <div key={c.id} className="py-3">
                 <div className="flex items-center justify-between gap-3">
@@ -583,7 +583,7 @@ export default function FraudPatternPanel({ npi, label, rule, focusClaim, practi
           </div>
           {claims.length > 5 && <div className="text-xs text-slate-400 pt-2">+ {claims.length - 5} more claims</div>}
           <div className={SUMMARY}>{claims.length} claims · {fmtUSD(sumAmt(claims))} · first seen {first ? fmtDate(first.date) : '—'}</div>
-          <div className="text-center mt-3"><button type="button" onClick={() => onViewClaims?.({ supplier: sname, label: sname })} className={VIEWALL}>View all claims from this supplier →</button></div>
+          <div className="text-center mt-3"><button type="button" onClick={() => onViewClaims?.({ supplier: sname, label: sname })} className={VIEWALL}>View all claims from this vendor →</button></div>
         </div>
       )
     }
@@ -601,7 +601,7 @@ export default function FraudPatternPanel({ npi, label, rule, focusClaim, practi
     return (
       <div className="mt-4">
         {focusClaim && (
-          <div className="mb-4 rounded-lg px-4 py-3" style={{ background: '#EFF6FF', border: '1px solid #BFDBFE' }}>
+          <div className="mb-4 rounded-lg px-4 py-3" style={{ background: '#E9F0F6', border: '1px solid #D2E1EB' }}>
             <div className="flex items-center justify-between gap-3">
               <div className="text-sm font-semibold text-slate-800 truncate">{focusClaim.patient}</div>
               <div className="text-sm font-bold text-slate-800 tabular-nums flex-shrink-0">{fmtUSD(focusClaim.amount, 2)}</div>
@@ -619,7 +619,7 @@ export default function FraudPatternPanel({ npi, label, rule, focusClaim, practi
       {/* Header */}
       <div className="flex items-center justify-between gap-3 pb-4 border-b border-slate-100">
         <div className="flex items-center gap-3 min-w-0">
-          <div className="w-9 h-9 rounded-xl bg-rose-50 text-rose-500 ring-1 ring-rose-100 flex items-center justify-center shrink-0">
+          <div className="w-9 h-9 rounded-xl bg-[#F7EBEA] text-[#A6453F] ring-1 ring-[#EBD3D1] flex items-center justify-center shrink-0">
             <Icon name="alertTri" size={16} />
           </div>
           <div className="min-w-0">
@@ -633,7 +633,7 @@ export default function FraudPatternPanel({ npi, label, rule, focusClaim, practi
         </button>
       </div>
 
-      {error && <div className="mt-4 text-sm text-rose-600">{error}</div>}
+      {error && <div className="mt-4 text-sm text-[#A6453F]">{error}</div>}
       {!ready && !error && <div className="mt-4 h-24 rounded-xl bg-slate-100 animate-pulse" />}
 
       {ready && (

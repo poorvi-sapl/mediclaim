@@ -1,4 +1,5 @@
 // Shared UI primitives for the MedClaim Analytics light theme.
+import { useState, useEffect, useRef } from 'react'
 
 const ICONS = {
   dashboard: <><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></>,
@@ -23,6 +24,22 @@ const ICONS = {
   chevronRight: <polyline points="9 18 15 12 9 6"/>,
   chevronDown:  <polyline points="6 9 12 15 18 9"/>,
   refresh: <><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></>,
+  quote: <><path d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z"/><path d="M15 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2h.75c0 2.25.25 4-2.75 4v3c0 1 0 1 1 1z"/></>,
+  message: <path d="M21 11.5a8.38 8.38 0 0 1-4.9 7.6 8.38 8.38 0 0 1-3.8.9 8.5 8.5 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 8-8.5h.5a8.48 8.48 0 0 1 8 8v.5z"/>,
+  sparkle: <><path d="M12 3l1.6 4.6L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.4L12 3z"/><path d="M19 3v3"/><path d="M20.5 4.5h-3"/></>,
+  shieldAlert: <><path d="M12 2l8 4v6c0 5-3.5 9-8 10-4.5-1-8-5-8-10V6l8-4z"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></>,
+  phone: <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/>,
+  mail: <><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><polyline points="22 6 12 13 2 6"/></>,
+  download: <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></>,
+  edit: <><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></>,
+  chevronUp: <polyline points="18 15 12 9 6 15"/>,
+  sort: <><polyline points="7 8 12 3 17 8"/><polyline points="7 16 12 21 17 16"/></>,
+  package: <><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.27 6.96 12 12.01l8.73-5.05"/><line x1="12" y1="22.08" x2="12" y2="12"/></>,
+  pill: <><path d="m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z"/><path d="m8.5 8.5 7 7"/></>,
+  heartOff: <><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/><line x1="4" y1="4" x2="20" y2="20"/></>,
+  hospital: <><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M12 8v8"/><path d="M8 12h8"/></>,
+  maximize: <><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M16 3h3a2 2 0 0 1 2 2v3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/><path d="M8 21H5a2 2 0 0 1-2-2v-3"/></>,
+  minimize: <><path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/></>,
 }
 
 export function Icon({ name, size = 18, stroke = 1.9, ...props }) {
@@ -36,6 +53,95 @@ export function Icon({ name, size = 18, stroke = 1.9, ...props }) {
 
 export const fmtUSD = (n, dp = 0) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: dp }).format(n || 0)
+
+// Strips "claim"/"#" noise so typing the on-screen label verbatim (e.g. "Claim
+// 26161007820", as shown next to every claim number in the UI) still matches
+// the bare claim_number field it's compared against, instead of silently
+// finding nothing because the word "claim" isn't part of the stored value.
+export const normalizeSearchQuery = (s) =>
+  (s || '').toLowerCase().replace(/\bclaim\b/g, '').replace(/#/g, '').replace(/\s+/g, ' ').trim()
+
+// Mirrors backend/routers/dashboard.py's COMPLIANCE_ACTION_LABEL exactly — the
+// four decisions compliance can log on an escalated case (payer portal's
+// Dispute Detail "Compliance action" panel), keyed by the action code stored
+// in the COMPLIANCE_ACTION event's response_type.
+export const COMPLIANCE_ACTION_LABEL = {
+  REFER_TO_MEDICARE:   'Referred to Medicare',
+  SUSPEND_SUPPLIER:    'Vendor enrollment suspended',
+  REQUEST_DOCS:        'Requested more documentation',
+  CLOSE_INVESTIGATION: 'Investigation closed',
+}
+
+// Turns a dispute case's event log (backend/models.py DisputeCaseEvent, one row
+// per state transition — opened, each vendor response, each physician confirm/
+// reject, each auto-escalation) into timeline entries worded for whichever
+// portal is looking at it. `who` is 'physician' | 'vendor' | null (payer/
+// compliance gets neutral third-person wording). Shared across all three
+// portals' timelines so the wording rules — e.g. only the physician and payer
+// see the vendor's "resolved with physician" note/docs, never the "responded
+// to Medicare" ones, since that submission is between the vendor and Medicare —
+// can't drift out of sync between the three implementations.
+// `type` on each entry is a portal-agnostic tag for step icon/color (see
+// PCTL_STEP_STYLE in App.jsx's physician timeline) — vendor/payer renderers
+// can ignore it, but adding it here once keeps all three consistent instead
+// of re-deriving it from label text per-portal.
+export function buildDisputeTimeline(d, who) {
+  const events = d.events || []
+  return events.map((e) => {
+    const at = e.created_at
+    switch (e.event_type) {
+      case 'DISPUTE_OPENED': {
+        // Vendor never sees this entry's real flavor or note — their portal is
+        // type-blind (dispute_type/notes arrive nulled from the backend), so
+        // for them this reads as a neutral documents-required kickoff.
+        if (who === 'vendor') {
+          return { at, label: 'Supporting documents requested for this claim', type: 'dispute' }
+        }
+        const kind = d.dispute_type === 'FRAUD_REPORT' ? 'fraud'
+          : d.dispute_type === 'DECEASED_PATIENT' ? 'deceased'
+          : 'dispute'
+        const verb = kind === 'fraud' ? 'reported this as fraud'
+          : kind === 'deceased' ? 'reported the patient as deceased'
+          : 'disputed this claim'
+        const label = who === 'physician' ? `You ${verb}` : `Physician ${verb}`
+        return { at, label, note: e.note, type: kind }
+      }
+      case 'VENDOR_RESPONDED': {
+        // The vendor's only response is uploading proof-of-work documents.
+        const label =
+          who === 'vendor' ? 'You uploaded proof-of-work documents'
+          : who === 'physician' ? 'Vendor uploaded proof-of-work documents'
+          : 'Vendor uploaded proof-of-work documents'
+        return { at, label, detail: e.note, docs: e.docs, type: 'vendorResponse' }
+      }
+      case 'PHYSICIAN_CONFIRMED':
+        return { at, label: who === 'physician' ? 'You approved the documents — case resolved' : 'Physician approved the documents — case resolved', type: 'confirmed' }
+      case 'PHYSICIAN_REJECTED':
+        return {
+          at,
+          label: who === 'physician' ? 'You declined the documents — referred to the payer'
+            : who === 'vendor' ? 'This claim has been referred for further review'
+            : "Physician declined the vendor's documents — referred to you",
+          note: e.note,
+          type: 'rejected',
+        }
+      case 'NON_RESPONSIVE':
+        return { at, label: who === 'vendor' ? 'Response window closed — escalated to compliance' : 'Vendor did not respond in time — escalated to compliance', type: 'escalated' }
+      case 'COMPLIANCE_ACTION':
+        return { at, label: COMPLIANCE_ACTION_LABEL[e.response_type] || 'Compliance action recorded', detail: e.note, type: 'compliance' }
+      case 'CONFIRMATION_EXPIRED':
+        return {
+          at,
+          label: who === 'physician' ? 'Your confirmation window expired — case reopened automatically'
+            : who === 'vendor' ? "Physician's confirmation window expired — case reopened"
+            : "Physician's confirmation window expired — case reopened automatically",
+          type: 'expired',
+        }
+      default:
+        return null
+    }
+  }).filter(Boolean)
+}
 
 // Backend sends naive UTC ISO strings (no 'Z'); mark them UTC so the browser
 // doesn't misread them as local time.
@@ -113,7 +219,7 @@ export function StatCard({ icon, label, value, accent = 'navy', valueClass = '',
 }
 
 const RISK_PILL = {
-  Critical: 'pill-critical', critical: 'pill-critical',
+  Critical: 'pill-solid-critical', critical: 'pill-solid-critical',
   High: 'pill-high', high: 'pill-high',
   Medium: 'pill-medium', medium: 'pill-medium',
   Low: 'pill-low', low: 'pill-low',
@@ -121,7 +227,12 @@ const RISK_PILL = {
 export function RiskPill({ band, score }) {
   const label = band || (score > 80 ? 'Critical' : score > 60 ? 'High' : score > 30 ? 'Medium' : 'Low')
   const cap = label.charAt(0).toUpperCase() + label.slice(1)
-  return <span className={`pill ${RISK_PILL[label] || 'pill-low'}`}>{score != null && <span className="tabular-nums">{score}</span>}{cap}</span>
+  return (
+    <span className={`pill ${RISK_PILL[label] || 'pill-low'}`}>
+      <Icon name="shieldAlert" size={11} stroke={2.4} />
+      {score != null && <span className="tabular-nums">{score}</span>}{cap}
+    </span>
+  )
 }
 
 const PLAN_STATUS = {
@@ -145,5 +256,64 @@ export function SearchInput({ value, onChange, placeholder, className = '' }) {
       <input value={value} onChange={onChange} placeholder={placeholder}
              className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-sm text-slate-700 placeholder-slate-400 outline-none focus:border-ink focus:ring-2 focus:ring-ink/15 transition" />
     </div>
+  )
+}
+
+// ─── Filter-dropdown table header ────────────────────────────────────────────
+// A table column header that IS the filter, opening a right-anchored dropdown on
+// click. Shared by the payer NPI-Disputes table and the physician My-Disputes
+// table (both use the unscoped .pselect-panel/.poption/.pbadge recipe). Mirrors
+// the vendor portal's own scoped FilterTh.
+const FILTER_TH_CLASS = 'text-left py-2.5 px-3.5 text-[10.5px] font-semibold uppercase tracking-[0.04em] text-slate-400 bg-slate-50 border-b border-slate-100 whitespace-nowrap'
+
+export function PFilterOptionsPanel({ options, value, onChange }) {
+  const [indicator, setIndicator] = useState({ top: 0, height: 0, opacity: 0 })
+  return (
+    <div className="pselect-panel">
+      <div className="poptions" onMouseLeave={() => setIndicator((i) => ({ ...i, opacity: 0 }))}>
+        <div className="phover-indicator" style={{ top: indicator.top, height: indicator.height, opacity: indicator.opacity }} />
+        {options.map((opt) => (
+          <div
+            key={opt.id}
+            className={`poption ${opt.id === value ? 'selected' : ''}`}
+            onMouseEnter={(e) => setIndicator({ top: e.currentTarget.offsetTop, height: e.currentTarget.offsetHeight, opacity: 1 })}
+            onClick={() => onChange(opt.id)}
+          >
+            <span className="poption-left truncate">
+              {opt.dot && <span className="pdot" style={{ background: opt.dot }} />}
+              {opt.label}
+            </span>
+            <Icon name="check" size={14} className="pcheck" />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+export function PFilterTh({ label, options, value, onChange, defaultValue = 'ALL' }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+  const active = value && value !== defaultValue
+
+  useEffect(() => {
+    if (!open) return
+    function onDocClick(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', onDocClick)
+    return () => document.removeEventListener('mousedown', onDocClick)
+  }, [open])
+
+  return (
+    <th ref={ref} className={FILTER_TH_CLASS} style={{ position: 'relative' }}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="inline-flex items-center gap-1 bg-transparent border-0 p-0 m-0 cursor-pointer"
+        style={{ color: open || active ? '#1B3A5C' : 'inherit', font: 'inherit' }}
+      >
+        {label}
+        <Icon name="chevronDown" size={10} className="text-slate-300" style={{ opacity: open || active ? 1 : 0.6, transition: 'transform .15s ease', transform: open ? 'rotate(180deg)' : 'none' }} />
+      </button>
+      {open && <PFilterOptionsPanel options={options} value={value} onChange={(id) => { onChange(id); setOpen(false) }} />}
+    </th>
   )
 }

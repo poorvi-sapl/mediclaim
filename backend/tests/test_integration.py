@@ -13,10 +13,15 @@ machinery as NPI Watch (trigger_engine.py), via notify_vendor_from_claim_action(
   6. test_auto_creates_physician_row_if_missing
   7. test_fraud_action_via_post_endpoint
 
+Plus 2 tests for the 24h undo-window deferral (backend/rules/reminders.py
+process_pending_vendor_notifications + routers/actions.py's undo window):
+  8. test_vendor_notify_deferred_until_window_closes
+  9. test_undo_within_window_prevents_vendor_notification
+
 Uses the live dev DB and FastAPI TestClient, matching the pattern in test_phase5.py.
 """
 
-from datetime import date
+from datetime import date, datetime, timedelta
 from unittest.mock import patch
 
 import pytest
@@ -24,9 +29,11 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from backend.auth import create_access_token
+from backend.config import get_settings
 from backend.database import SessionLocal, engine, Base
 from backend.main import app
 from backend.models import Action, Claim, ClaimNotification, DisputeCase, NpiProfile, Physician, SupplierProfile, User
+from backend.rules.reminders import process_pending_vendor_notifications
 from backend.rules.trigger_engine import notify_vendor_from_claim_action
 
 TEST_PHYSICIAN_NPI         = "9990000077"
@@ -84,6 +91,23 @@ def cleanup(db):
     _purge(db)
     yield
     _purge(db)
+
+
+@pytest.fixture(autouse=True)
+def _instant_vendor_notify(monkeypatch):
+    """Tests 1-7 below assert the vendor dispute case/email exist immediately
+    after POST /actions — they're testing the notify_vendor_from_claim_action
+    bridge itself (idempotency, error-handling, auto-created physician row),
+    not the 24h undo-window deferral added in routers/actions.py (that has its
+    own coverage further down: test_vendor_notify_deferred_* below). Force
+    instant notification and skip real SMTP for the duration of this module so
+    those assertions stay meaningful without threading a fake clock through
+    every test, and so test runs never hit the network.
+    get_settings() is @lru_cache()'d — this mutates the one live Settings
+    singleton the app itself reads, and monkeypatch restores it after each test."""
+    settings = get_settings()
+    monkeypatch.setattr(settings, "vendor_notify_delay_hours", 0.0)
+    monkeypatch.setattr(settings, "email_enabled", False)
 
 
 # ---------------------------------------------------------------------------
@@ -614,3 +638,74 @@ def test_fraud_action_via_post_endpoint(db):
     assert case.dispute_type == "FRAUD_REPORT"
 
     print(f"\n  [PASS] POST /actions action_type='fraud' -> 201, Action(fraud) + ClaimNotification(FRAUD_REPORTED) + DisputeCase(FRAUD_REPORT)")
+
+
+# ---------------------------------------------------------------------------
+# TEST 8 — with vendor_notify_delay_hours > 0 (the real default), the vendor
+# notification does NOT happen at POST /actions time; it only appears once the
+# reminder worker's process_pending_vendor_notifications() runs against an
+# action whose window has closed.
+# ---------------------------------------------------------------------------
+
+def test_vendor_notify_deferred_until_window_closes(db, monkeypatch):
+    monkeypatch.setattr(get_settings(), "vendor_notify_delay_hours", 24.0)
+    _insert_physician(db)
+    _make_vendor(db)
+    claim = _make_claim(db, "defer01")
+
+    resp = _post_action(claim.id, "dispute")
+    assert resp.status_code == 201
+
+    # Still inside the 24h window — nothing sent to the vendor yet.
+    notif = db.query(ClaimNotification).filter(ClaimNotification.claim_number == str(claim.id)).first()
+    assert notif is None
+
+    # A same-moment reminder pass must not jump the gun either.
+    process_pending_vendor_notifications(db)
+    notif = db.query(ClaimNotification).filter(ClaimNotification.claim_number == str(claim.id)).first()
+    assert notif is None
+
+    # Simulate the window closing by backdating the action, then re-run the pass.
+    action = db.query(Action).filter(Action.claim_id == claim.id).first()
+    action.created_at = datetime.utcnow() - timedelta(hours=25)
+    db.commit()
+
+    sent = process_pending_vendor_notifications(db)
+    assert sent == 1
+
+    notif = db.query(ClaimNotification).filter(ClaimNotification.claim_number == str(claim.id)).first()
+    assert notif is not None
+    assert notif.status == "DISPUTED"
+    case = db.query(DisputeCase).filter(DisputeCase.notification_id == notif.notification_id).first()
+    assert case is not None
+    assert case.status == "OPEN"
+
+    print(f"\n  [PASS] Vendor notification withheld until the 24h undo window closes, then sent by the reminder pass")
+
+
+# ---------------------------------------------------------------------------
+# TEST 9 — undoing a vendor-notifying action inside its window means the
+# vendor is never told anything — there's no Action row left to notify from.
+# ---------------------------------------------------------------------------
+
+def test_undo_within_window_prevents_vendor_notification(db, monkeypatch):
+    monkeypatch.setattr(get_settings(), "vendor_notify_delay_hours", 24.0)
+    _insert_physician(db)
+    _make_vendor(db)
+    claim = _make_claim(db, "undo01")
+
+    resp = _post_action(claim.id, "dispute")
+    assert resp.status_code == 201
+    action_id = resp.json()["id"]
+
+    undo_resp = client.delete(f"/actions/{action_id}", headers=_AUTH_HEADERS)
+    assert undo_resp.status_code == 200
+
+    assert db.query(Action).filter(Action.claim_id == claim.id).first() is None
+
+    # Even backdating can't resurrect a notification for an action that no longer exists.
+    process_pending_vendor_notifications(db)
+    notif = db.query(ClaimNotification).filter(ClaimNotification.claim_number == str(claim.id)).first()
+    assert notif is None
+
+    print(f"\n  [PASS] Undo within the 24h window deletes the Action -> reminder pass has nothing to notify the vendor about")

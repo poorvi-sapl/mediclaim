@@ -4,12 +4,39 @@ import { getNpiRiskList, getSuppliers } from '../api'
 import { Icon } from './ui'
 import { Shield, Check } from 'lucide-react'
 
-function Sidebar({ navItems, activeId, onNavigate, collapsed, onToggleCollapse, onClose }) {
+function Sidebar({ navItems, activeId, onNavigate, collapsed, onToggleCollapse, onClose, color = '#0d1f35', hoverExpand = false, brandName = 'MedClaim Analytics' }) {
   const navigate = useNavigate()
+
+  // Vendor portal's "Scientific Blue" moodboard sidebar: always collapsed to an
+  // icon rail, expands on hover via pure CSS (.app-sidebar in index.css) rather
+  // than a persisted collapsed/expanded state — no toggle button, no localStorage.
+  if (hoverExpand) {
+    return (
+      <aside className="app-sidebar flex-shrink-0 flex flex-col h-screen sticky top-0" style={{ backgroundColor: color }}>
+        <div className="as-brand flex items-center gap-2.5 h-16 px-3 flex-shrink-0 cursor-pointer" onClick={() => navigate('/')}>
+          <div className="bg-white p-1.5 rounded-lg shadow-sm relative flex-shrink-0">
+            <Shield size={18} className="text-[#1e3a8a]" fill="#1e3a8a" fillOpacity={0.1} />
+            <Check size={11} className="text-[#1e3a8a] absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" strokeWidth={3} />
+          </div>
+          <span className="as-brand-name text-[14px] font-bold text-white">{brandName}</span>
+        </div>
+        <nav className="flex-1 py-3 px-3 space-y-1 overflow-hidden">
+          {navItems.map((n) => (
+            <button key={n.id} onClick={() => onNavigate(n.id)} title={n.label}
+                    className={`as-item w-full ${activeId === n.id ? 'active' : ''}`}>
+              <Icon name={n.icon} size={18} stroke={activeId === n.id ? 2.2 : 1.9} />
+              <span className="as-label truncate">{n.label}</span>
+            </button>
+          ))}
+        </nav>
+      </aside>
+    )
+  }
+
   return (
     <aside
       className="flex-shrink-0 flex flex-col h-screen sticky top-0 transition-all duration-300 ease-in-out overflow-hidden"
-      style={{ backgroundColor: '#0d1f35', width: collapsed ? '64px' : onClose ? 'min(240px, 85vw)' : '240px' }}>
+      style={{ backgroundColor: color, width: collapsed ? '64px' : onClose ? 'min(240px, 85vw)' : '240px' }}>
 
       {/* Logo row — with optional mobile close button */}
       <div className={`h-16 flex items-center flex-shrink-0 transition-all duration-300 ${collapsed ? 'justify-center px-0' : 'px-4'}`}>
@@ -21,7 +48,7 @@ function Sidebar({ navItems, activeId, onNavigate, collapsed, onToggleCollapse, 
           </div>
           {!collapsed && (
             <span className="text-[15px] font-bold text-white tracking-tight whitespace-nowrap overflow-hidden">
-              MedClaim Analytics
+              {brandName}
             </span>
           )}
         </div>
@@ -76,7 +103,17 @@ function Sidebar({ navItems, activeId, onNavigate, collapsed, onToggleCollapse, 
 }
 
 // Physician portal keeps its notification bell.
-function NotifBell({ count = 0, onClick, title = 'Notifications' }) {
+function NotifBell({ count = 0, onClick, title = 'Notifications', variant }) {
+  // Vendor's "Scientific Blue" moodboard bell: a square .gicon-btn with a
+  // small solid .badge-dot count, instead of the generic rounded-icon style.
+  if (variant === 'vendor') {
+    return (
+      <button onClick={onClick} title={title} className={`gicon-btn ${onClick ? '' : 'cursor-default'}`}>
+        <Icon name="alerts" size={16} />
+        {count > 0 && <span className="badge-dot">{count > 9 ? '9+' : count}</span>}
+      </button>
+    )
+  }
   return (
     <button onClick={onClick} title={title}
             className={`relative w-9 h-9 rounded-xl hover:bg-slate-100 flex items-center justify-center text-slate-500 transition-colors ${onClick ? '' : 'cursor-default'}`}>
@@ -90,9 +127,10 @@ function NotifBell({ count = 0, onClick, title = 'Notifications' }) {
   )
 }
 
-function UserChip({ user, subtitle, infoRows, onLogout }) {
+function UserChip({ user, subtitle, infoRows, profileStats, profileActions, profileContacts, onLogout, variant, compact = false }) {
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
+  const isVendor = variant === 'vendor'
 
   const initials = (user?.full_name || user?.email || '?')
     .split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase()
@@ -106,39 +144,146 @@ function UserChip({ user, subtitle, infoRows, onLogout }) {
   return (
     <div ref={ref} className="relative flex items-center gap-2">
       {/* Clickable profile chip */}
-      <button onClick={() => setOpen(v => !v)}
-              className="flex items-center gap-2.5 pl-1.5 sm:pr-3 pr-1.5 py-1.5 rounded-xl border border-slate-200/80 bg-white shadow-sm hover:shadow-md hover:border-slate-300 transition-all duration-150">
-        {/* Avatar + online dot */}
-        <div className="relative flex-shrink-0">
-          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center text-white text-[12px] sm:text-[13px] font-bold"
-               style={{ background: 'linear-gradient(135deg, #1a3d7c 0%, #0d1f35 100%)' }}>
-            {initials}
+      {isVendor ? (
+        // Vendor's "Scientific Blue" moodboard profile chip: square navy
+        // avatar + stacked name/sub, no border/shadow/chevron wrapper.
+        // `compact` (navbar mode) drops the name/sub — avatar only, detail
+        // lives in the profile panel opened on click.
+        <button onClick={() => setOpen(v => !v)} className="profile-chip">
+          <div className="profile-avatar">{initials}</div>
+          {!compact && (
+            <div className="hidden sm:flex flex-col leading-tight text-left">
+              <span className="profile-name whitespace-nowrap">{user?.full_name || user?.email}</span>
+              <span className="profile-sub whitespace-nowrap">{subtitle}</span>
+            </div>
+          )}
+        </button>
+      ) : (
+        <button onClick={() => setOpen(v => !v)}
+                className="flex items-center gap-2.5 pl-1.5 sm:pr-3 pr-1.5 py-1.5 rounded-xl border border-slate-200/80 bg-white shadow-sm hover:shadow-md hover:border-slate-300 transition-all duration-150">
+          {/* Avatar + online dot */}
+          <div className="relative flex-shrink-0">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center text-white text-[12px] sm:text-[13px] font-bold"
+                 style={{ background: 'linear-gradient(135deg, #1a3d7c 0%, #0d1f35 100%)' }}>
+              {initials}
+            </div>
+            <span className="absolute bottom-0 right-0 w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-emerald-400 ring-2 ring-white" />
           </div>
-          <span className="absolute bottom-0 right-0 w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-emerald-400 ring-2 ring-white" />
-        </div>
-        {/* Name + subtitle — hidden on small screens */}
-        <div className="hidden sm:flex flex-col leading-tight text-left">
-          <span className="text-[13px] font-bold text-slate-800 whitespace-nowrap tracking-tight">
-            {user?.full_name || user?.email}
-          </span>
-          <span className="text-[11px] font-medium text-slate-500 whitespace-nowrap">{subtitle}</span>
-        </div>
-        {/* Chevron — hidden on small screens */}
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
-             strokeLinecap="round" strokeLinejoin="round"
-             className={`hidden sm:block text-slate-400 transition-transform duration-200 ml-0.5 ${open ? 'rotate-180' : ''}`}>
-          <polyline points="6 9 12 15 18 9"/>
-        </svg>
-      </button>
+          {/* Name + subtitle — hidden on small screens */}
+          <div className="hidden sm:flex flex-col leading-tight text-left">
+            <span className="text-[13px] font-bold text-slate-800 whitespace-nowrap tracking-tight">
+              {user?.full_name || user?.email}
+            </span>
+            <span className="text-[11px] font-medium text-slate-500 whitespace-nowrap">{subtitle}</span>
+          </div>
+          {/* Chevron — hidden on small screens */}
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+               strokeLinecap="round" strokeLinejoin="round"
+               className={`hidden sm:block text-slate-400 transition-transform duration-200 ml-0.5 ${open ? 'rotate-180' : ''}`}>
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        </button>
+      )}
 
-      {/* Logout button — desktop only (mobile uses the dropdown) */}
-      <button onClick={onLogout} title="Sign out"
-              className="hidden sm:flex w-8 h-8 rounded-lg border border-slate-200/80 bg-white shadow-sm hover:bg-rose-50 hover:border-rose-200 items-center justify-center text-slate-400 hover:text-rose-500 transition-all duration-150">
-        <Icon name="logout" size={14} />
-      </button>
+      {/* Logout button — desktop only (mobile uses the dropdown). Compact/navbar
+          mode skips this entirely — Sign out already lives inside the profile panel. */}
+      {isVendor ? (
+        !compact && (
+          <div className="hidden sm:block">
+            <button onClick={onLogout} title="Sign out" className="gicon-btn">
+              <Icon name="logout" size={14} />
+            </button>
+          </div>
+        )
+      ) : (
+        <button onClick={onLogout} title="Sign out"
+                className="hidden sm:flex w-8 h-8 rounded-lg border border-slate-200/80 bg-white shadow-sm hover:bg-rose-50 hover:border-rose-200 items-center justify-center text-slate-400 hover:text-rose-500 transition-all duration-150">
+          <Icon name="logout" size={14} />
+        </button>
+      )}
 
-      {/* Dropdown — right-0 on mobile (no separate logout btn), right-10 on desktop */}
-      {open && (
+      {/* Centered modal — vendor's "Provider profile panel" moodboard recipe: identity
+          header with a quick-contact circle, label-above-value stats, two primary
+          CTAs, then a grouped, dividered action list. Rendered centered over the
+          whole screen (not a corner dropdown) so it reads as a proper profile card. */}
+      {open && isVendor && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-[2px] p-4"
+             onClick={() => setOpen(false)}>
+          <div className="pp w-[340px] max-w-full relative" onClick={(e) => e.stopPropagation()}>
+            <button onClick={() => setOpen(false)} aria-label="Close"
+                    className="absolute top-3 right-3 w-7 h-7 flex items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors">
+              <Icon name="x" size={14} stroke={2.3} />
+            </button>
+            <div className="pp-id">
+              <div className="flex items-center gap-3">
+                <div className="pp-avatar">{initials}</div>
+                <div className="min-w-0">
+                  <div className="font-bold text-[15px] truncate" style={{ color: 'var(--navy-900)' }}>{user?.full_name || user?.email}</div>
+                  <div className="text-[12px] font-semibold truncate" style={{ color: 'var(--slate-blue)' }}>{subtitle}</div>
+                  {user?.npi && (
+                    <div className="text-[11px] font-medium truncate mt-0.5" style={{ color: 'var(--n-500)' }}>NPI {user.npi}</div>
+                  )}
+                </div>
+              </div>
+              {(profileContacts?.length > 0 || user?.email) && (
+                <div className="pp-contact">
+                  {(profileContacts || [{ icon: 'mail', href: `mailto:${user.email}`, title: user.email }]).map((c) => (
+                    c.href ? (
+                      <a key={c.icon} href={c.href} className="pp-contact-btn" title={c.title}>
+                        <Icon name={c.icon} size={15} />
+                      </a>
+                    ) : (
+                      <button key={c.icon} type="button" className="pp-contact-btn" title={c.title}
+                              onClick={() => { setOpen(false); c.onClick?.() }}>
+                        <Icon name={c.icon} size={15} />
+                      </button>
+                    )
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {profileStats?.length > 0 && (
+              <div className="pp-stats">
+                {profileStats.map((s) => (
+                  <div key={s.label} className="pp-stat">
+                    <div className="text-[10.5px]" style={{ color: 'var(--n-500)' }}>{s.label}</div>
+                    <div className="font-bold text-[16px] mt-1" style={{ color: s.tone ? `var(--${s.tone}-tx)` : 'var(--navy-900)' }}>{s.value}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {profileActions?.slice(0, 2).length > 0 && (
+              <div className="pp-cta">
+                {profileActions.slice(0, 2).map((a, i) => (
+                  <button key={a.label} type="button" className={`gbtn ${i === 0 ? 'gbtn-primary' : ''}`} style={{ flex: 1 }}
+                          onClick={() => { setOpen(false); a.onClick?.() }}>
+                    {a.label}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {profileActions?.slice(2).length > 0 && (
+              <div className="pp-group">
+                {profileActions.slice(2).map((a) => (
+                  <div key={a.label} className={`pp-item ${a.danger ? 'danger' : ''}`}
+                       onClick={() => { setOpen(false); a.onClick?.() }}>
+                    <Icon name={a.icon} size={16} />{a.label}
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="pp-group">
+              <div className="pp-item danger" onClick={() => { setOpen(false); onLogout?.() }}>
+                <Icon name="logout" size={16} />Sign out
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {open && !isVendor && (
         <div className="absolute right-0 sm:right-10 top-full mt-2 w-64 max-w-[calc(100vw-16px)] bg-white rounded-xl border border-slate-200 z-50"
              style={{ boxShadow: '0 4px 20px rgba(15,23,42,0.10)' }}>
 
@@ -182,6 +327,93 @@ function UserChip({ user, subtitle, infoRows, onLogout }) {
   )
 }
 
+// Vendor portal's single top navbar — replaces the sidebar entirely (no
+// left-hand chrome at all). Brand + nav links on the left, search/bell/profile
+// on the right, single sticky row. Only ever rendered for `layout="navbar"`.
+function Navbar({ navItems, activeId, onNavigate, brandName, searchValue, onSearchChange, showNavbarSearch = true,
+                   bellSlot, notifCount, onBellClick, bellTitle, canGoBack = false, onBack,
+                   user, subtitle, infoRows, profileStats, profileActions, profileContacts, onLogout }) {
+  return (
+    <header className="navbar">
+      <div className="flex items-center gap-6 min-w-0">
+        {canGoBack && (
+          <button onClick={onBack} aria-label="Go back" title="Go back"
+                  className="group flex items-center justify-center w-8 h-8 flex-shrink-0 rounded-full border border-slate-200 text-slate-500 transition-all duration-200 hover:bg-slate-100 hover:text-ink hover:border-slate-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/20">
+            <Icon name="chevronRight" size={16} className="rotate-180 transition-transform duration-200 group-hover:-translate-x-0.5" stroke={2.3} />
+          </button>
+        )}
+        <div className="flex items-center gap-2.5 flex-shrink-0">
+          <div className="w-[30px] h-[30px] rounded-[9px] flex items-center justify-center flex-shrink-0"
+               style={{ background: 'linear-gradient(135deg, var(--slate-blue), var(--navy-900))' }}>
+            <Shield size={15} className="text-white" strokeWidth={2} />
+          </div>
+          <span className="text-[15px] font-extrabold whitespace-nowrap" style={{ fontFamily: 'var(--font-display)', color: 'var(--navy-900)' }}>
+            {brandName}
+          </span>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3 flex-shrink-0">
+        <nav className="flex items-center gap-1">
+          {navItems.map((n) => {
+            const active = activeId === n.id
+            // Icon-only unless active — same pattern as the physician/payer nav;
+            // hover on a collapsed item shows a rounded navy tooltip.
+            if (!active) {
+              return (
+                <button key={n.id} onClick={() => onNavigate(n.id)}
+                        className="relative group flex items-center justify-center w-9 h-9 rounded-full text-[#5B84C4] hover:bg-[var(--n-50)] hover:text-[var(--n-700)] transition-colors border-0 cursor-pointer bg-transparent">
+                  <Icon name={n.icon} size={17} stroke={1.9} />
+                  <span className="absolute top-full left-1/2 -translate-x-1/2 mt-2.5 px-3.5 py-1.5 rounded-full text-[11px] font-semibold text-white whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible pointer-events-none transition-all duration-150 z-50"
+                        style={{ background: 'var(--navy-900)', boxShadow: '0 6px 16px rgba(10,31,61,.25)' }}>
+                    {n.label}
+                    <span className="absolute bottom-full left-1/2 -translate-x-1/2"
+                          style={{ width: 0, height: 0, borderLeft: '5px solid transparent', borderRight: '5px solid transparent', borderBottom: '5px solid var(--navy-900)' }} />
+                  </span>
+                </button>
+              )
+            }
+            return (
+              <button key={n.id} onClick={() => onNavigate(n.id)} className="nav-link active">
+                <Icon name={n.icon} size={16} stroke={2.2} />
+                <span>{n.label}</span>
+              </button>
+            )
+          })}
+        </nav>
+        {showNavbarSearch && (
+          <div className="relative hidden sm:block">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--n-400)' }}>
+              <Icon name="search" size={13} />
+            </span>
+            <input
+              value={searchValue}
+              onChange={(e) => onSearchChange?.(e.target.value)}
+              placeholder="Search claims, notes…"
+              className="navbar-search"
+              style={searchValue ? { paddingRight: 28 } : undefined}
+            />
+            {searchValue && (
+              <button
+                onClick={() => onSearchChange?.('')}
+                aria-label="Clear search"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center justify-center w-4 h-4 rounded-full hover:bg-[var(--n-200)] transition-colors"
+                style={{ color: 'var(--n-500)' }}
+              >
+                <Icon name="x" size={11} stroke={2.4} />
+              </button>
+            )}
+          </div>
+        )}
+        {bellSlot || <NotifBell count={notifCount} onClick={onBellClick} title={bellTitle} variant="vendor" />}
+        <UserChip user={user} subtitle={subtitle} infoRows={infoRows} onLogout={onLogout}
+                  profileStats={profileStats} profileActions={profileActions} profileContacts={profileContacts}
+                  variant="vendor" compact />
+      </div>
+    </header>
+  )
+}
+
 function ScoreBadge({ score = 0 }) {
   const color = score > 80 ? '#e11d48' : score > 60 ? '#ea580c' : score > 30 ? '#d97706' : '#059669'
   return <span className="text-[11px] font-bold tabular-nums px-2 py-0.5 rounded-md flex-shrink-0" style={{ color, backgroundColor: `${color}1A` }}>{score}</span>
@@ -190,7 +422,7 @@ function ScoreBadge({ score = 0 }) {
 // Top-nav search: filters NPIs + suppliers client-side (datasets fetched once) and
 // shows a dropdown; selecting a result navigates to its detail screen. Stays in sync
 // with the leaderboard filter via value/onChange.
-function SearchBox({ value = '', onChange, onOpenNpi, onOpenSupplier }) {
+function SearchBox({ value = '', onChange, onOpenNpi, onOpenSupplier, plainMode = false, placeholder = 'Search NPIs, vendors…' }) {
   const [debounced, setDebounced] = useState('')
   const [open, setOpen] = useState(false)
   const [npis, setNpis] = useState([])
@@ -198,11 +430,12 @@ function SearchBox({ value = '', onChange, onOpenNpi, onOpenSupplier }) {
   const ref = useRef(null)
 
   useEffect(() => {
+    if (plainMode) return
     let cancelled = false
     Promise.all([getNpiRiskList().catch(() => []), getSuppliers().catch(() => [])])
       .then(([n, s]) => { if (!cancelled) { setNpis(n); setSuppliers(s) } })
     return () => { cancelled = true }
-  }, [])
+  }, [plainMode])
 
   useEffect(() => {
     const t = setTimeout(() => setDebounced(value), 300)
@@ -229,12 +462,18 @@ function SearchBox({ value = '', onChange, onOpenNpi, onOpenSupplier }) {
   function pickSup(s) { setOpen(false); onChange?.(''); setDebounced(''); onOpenSupplier?.(s) }
 
   return (
-    <div ref={ref} className="relative hidden lg:block w-72">
-      <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"><Icon name="search" size={14} /></span>
-      <input value={value} onChange={(e) => onChange?.(e.target.value)} onKeyDown={onKeyDown} onFocus={() => setOpen(active)}
-             placeholder="Search NPIs, suppliers…"
-             className="w-full bg-slate-50 border border-slate-200/80 rounded-full pl-9 pr-4 py-2 text-sm text-slate-700 placeholder-slate-400 outline-none focus:bg-white focus:border-[#1E3A5F]/40 focus:ring-2 focus:ring-[#1E3A5F]/10 transition" />
-      {open && (
+    <div ref={ref} className="relative hidden lg:block w-80">
+      <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"><Icon name="search" size={16} /></span>
+      <input value={value} onChange={(e) => onChange?.(e.target.value)} onKeyDown={onKeyDown} onFocus={() => setOpen(!plainMode && active)}
+             placeholder={placeholder}
+             className="w-full bg-slate-50 border border-slate-200/80 rounded-full pl-10 pr-9 py-2.5 text-[15px] text-slate-700 placeholder-slate-400 outline-none focus:bg-white focus:border-[#1E3A5F]/40 focus:ring-2 focus:ring-[#1E3A5F]/10 transition" />
+      {value && (
+        <button onClick={reset} aria-label="Clear search"
+                className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center justify-center w-4 h-4 rounded-full hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors">
+          <Icon name="x" size={10} stroke={2.4} />
+        </button>
+      )}
+      {!plainMode && open && (
         <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg z-50 overflow-hidden py-1.5" style={{ boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}>
           {none ? (
             <div className="px-4 py-3 text-sm text-slate-400">No results for "{debounced.trim()}"</div>
@@ -256,7 +495,7 @@ function SearchBox({ value = '', onChange, onOpenNpi, onOpenSupplier }) {
               )}
               {supMatches.length > 0 && (
                 <div>
-                  <div className="px-4 pt-2 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">Suppliers</div>
+                  <div className="px-4 pt-2 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">Vendors</div>
                   {supMatches.map((s) => (
                     <button key={s.id} onClick={() => pickSup(s)} className="w-full flex items-center gap-2 px-4 py-2 hover:bg-slate-50 text-left">
                       <div className="min-w-0 flex-1">
@@ -283,10 +522,14 @@ function Section({ label, value }) {
   return <div><SectionLabel>{label}</SectionLabel><div className="text-[13px] font-medium text-[#111827]">{value}</div></div>
 }
 
-// Payer profile menu: avatar/name toggles a dropdown with org / UEI / signatory /
-// status. Org-level fields live in users.verification_results (not in the client auth
-// payload), so the demo values are used as the fallback per spec.
-function ProfileMenu({ user, onLogout }) {
+// Payer profile menu: avatar/name toggles a centered profile panel (same
+// "Provider profile panel" recipe as the vendor portal's UserChip modal —
+// identity header + contact icon + info rows + Sign out) instead of a corner
+// dropdown. Org-level fields live in users.verification_results (not in the
+// client auth payload), so the demo values are used as the fallback per spec.
+// Wrapped in .vendor-theme so it can reuse the .pp/.pp-item classes and CSS
+// vars (navy palette, fonts) without duplicating them for this non-vendor portal.
+function ProfileMenu({ user, onLogout, compact = false }) {
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
 
@@ -302,60 +545,79 @@ function ProfileMenu({ user, onLogout }) {
   const uei = 'ABC123DEF456'
   const signatory = 'Dr. James Thornton'
   const signatoryTitle = 'Chief Compliance Officer'
+  const initials = name.split(' ').map((w) => w[0]).filter(Boolean).slice(0, 2).join('').toUpperCase() || 'PI'
 
   return (
     <div ref={ref} className="relative flex items-center gap-3">
-      <button onClick={() => setOpen((v) => !v)} className="flex items-center gap-2.5 px-2 py-1.5 rounded-xl hover:bg-slate-50 transition-colors">
-        <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[11px] font-bold ring-2 ring-[#1E3A5F]/20 shadow-sm" style={{ backgroundColor: '#1E3A5F' }}>PI</div>
-        <div className="hidden sm:flex flex-col leading-tight text-left">
-          <span className="text-[13px] font-semibold text-slate-800">{name}</span>
-          <span className="text-[11px] text-slate-400">Payer</span>
-        </div>
-      </button>
-      <button onClick={onLogout} title="Sign out"
-              className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-700 transition-colors">
-        <Icon name="logout" size={15} />
-      </button>
-
-      {open && (
-        <div className="absolute right-0 top-full mt-2 w-[288px] max-w-[calc(100vw-16px)] bg-white rounded-xl z-50 overflow-hidden border border-slate-200" style={{ boxShadow: '0 8px 24px rgba(15,23,42,0.10), 0 2px 6px rgba(15,23,42,0.06)' }}>
-
-          {/* Name header — mobile only (hidden behind chip on sm+) */}
-          <div className="sm:hidden px-4 pt-3.5 pb-2.5 border-b border-slate-100 flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-[12px] font-bold flex-shrink-0"
-                 style={{ backgroundColor: '#1E3A5F' }}>PI</div>
-            <div className="min-w-0">
-              <div className="text-[13px] font-bold text-slate-800 truncate">{name}</div>
-              <div className="text-[11px] text-slate-400">Payer</div>
-            </div>
+      <button onClick={() => setOpen((v) => !v)}
+              className={compact ? 'flex items-center' : 'flex items-center gap-2.5 px-2 py-1.5 rounded-xl hover:bg-slate-50 transition-colors'}>
+        <div className="w-10 h-10 rounded-full flex items-center justify-center text-white text-[13px] font-bold ring-2 ring-[#1E3A5F]/20 shadow-sm" style={{ backgroundColor: '#1E3A5F' }}>{initials}</div>
+        {!compact && (
+          <div className="hidden sm:flex flex-col leading-tight text-left">
+            <span className="text-[13px] font-semibold text-slate-800">{name}</span>
+            <span className="text-[11px] text-slate-400">Payer</span>
           </div>
+        )}
+      </button>
+      {/* Compact (navbar) mode drops the separate logout button — Sign out
+          already lives inside the profile panel below. */}
+      {!compact && (
+        <button onClick={onLogout} title="Sign out"
+                className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-700 transition-colors">
+          <Icon name="logout" size={15} />
+        </button>
+      )}
 
-          {/* Info rows */}
-          <div className="px-4 py-2">
-            {[
-              { label: 'Organization',  value: org },
-              { label: 'UEI',           value: uei },
-              { label: 'Signatory',     value: signatory, sub: signatoryTitle },
-              { label: 'SAM.gov',       value: '✓ Verified', green: true },
-              { label: 'Member Since',  value: 'June 2026' },
-            ].map(row => (
-              <div key={row.label} className="flex items-start justify-between gap-4 py-2.5 border-b border-slate-50 last:border-0">
-                <span className="text-[11px] font-medium text-slate-400 shrink-0 mt-px">{row.label}</span>
-                <div className="text-right min-w-0">
-                  <span className={`text-[12px] font-semibold ${row.green ? 'text-emerald-600' : 'text-slate-700'} break-all`}>{row.value}</span>
-                  {row.sub && <div className="text-[11px] text-slate-400 mt-0.5">{row.sub}</div>}
+      {/* Centered modal — same recipe/classes as the vendor portal's provider
+          profile panel, rendered over the whole screen instead of a corner dropdown. */}
+      {open && (
+        <div className="vendor-theme fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-[2px] p-4"
+             onClick={() => setOpen(false)}>
+          <div className="pp w-[340px] max-w-full relative" onClick={(e) => e.stopPropagation()}>
+            <button onClick={() => setOpen(false)} aria-label="Close"
+                    className="absolute top-3 right-3 w-7 h-7 flex items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors">
+              <Icon name="x" size={14} stroke={2.3} />
+            </button>
+
+            <div className="pp-id">
+              <div className="flex items-center gap-3">
+                <div className="pp-avatar">{initials}</div>
+                <div className="min-w-0">
+                  <div className="font-bold text-[15px] truncate" style={{ color: 'var(--navy-900)' }}>{name}</div>
+                  <div className="text-[12px] font-semibold truncate" style={{ color: 'var(--slate-blue)' }}>{org}</div>
                 </div>
               </div>
-            ))}
-          </div>
+              <div className="pp-contact">
+                <a href={`mailto:${email}`} className="pp-contact-btn" title={email}>
+                  <Icon name="mail" size={15} />
+                </a>
+              </div>
+            </div>
 
-          {/* Sign out */}
-          <div className="px-3 pb-3 pt-1 border-t border-slate-100">
-            <button onClick={onLogout}
-                    className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-[13px] font-medium text-rose-600 hover:bg-rose-50 transition-colors">
-              <Icon name="logout" size={13} stroke={2} />
-              Sign out
-            </button>
+            {/* Info rows */}
+            <div className="px-[18px] pb-[14px]">
+              {[
+                { label: 'Organization',  value: org },
+                { label: 'UEI',           value: uei },
+                { label: 'Signatory',     value: signatory, sub: signatoryTitle },
+                { label: 'SAM.gov',       value: '✓ Verified', green: true },
+                { label: 'Member Since',  value: 'June 2026' },
+              ].map(row => (
+                <div key={row.label} className="flex items-start justify-between gap-4 py-2.5 border-b last:border-0" style={{ borderColor: 'var(--n-100)' }}>
+                  <span className="text-[11px] font-medium shrink-0 mt-px" style={{ color: 'var(--n-500)' }}>{row.label}</span>
+                  <div className="text-right min-w-0">
+                    <span className="text-[12px] font-semibold break-all" style={{ color: row.green ? 'var(--success-tx)' : 'var(--n-700)' }}>{row.value}</span>
+                    {row.sub && <div className="text-[11px] mt-0.5" style={{ color: 'var(--n-500)' }}>{row.sub}</div>}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="pp-group">
+              <div className="pp-item danger" onClick={() => { setOpen(false); onLogout?.() }}>
+                <Icon name="logout" size={16} />Sign out
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -363,12 +625,217 @@ function ProfileMenu({ user, onLogout }) {
   )
 }
 
+// Breadcrumb trail — only shown when more than one level deep. Shared between
+// the sidebar layout's header and the payer/vendor top-navbar layouts.
+function Breadcrumbs({ breadcrumbs }) {
+  const Sep = () => (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"
+         strokeLinecap="round" strokeLinejoin="round" className="text-slate-200 shrink-0 mx-0.5">
+      <polyline points="9 18 15 12 9 6" />
+    </svg>
+  )
+  const HomeIcon = () => (
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
+    </svg>
+  )
+
+  const total = breadcrumbs.length
+  const root  = breadcrumbs[0]
+  const last  = breadcrumbs[total - 1]
+  const parent = total >= 2 ? breadcrumbs[total - 2] : null
+
+  // Render a single crumb item (shared between mobile and desktop)
+  function CrumbItem({ crumb, isRoot, isLast, maxW = 'max-w-[140px]' }) {
+    if (isLast) {
+      return (
+        <span className={`text-[11px] sm:text-[12px] font-semibold text-slate-800 truncate ${maxW} sm:max-w-[240px] px-1 whitespace-nowrap`}>
+          {crumb.label}
+        </span>
+      )
+    }
+    if (crumb.onClick) {
+      return (
+        <button onClick={crumb.onClick}
+                className={`text-[11px] sm:text-[12px] font-medium px-1 py-0.5 rounded transition-colors whitespace-nowrap hover:text-[#0d1f35] hover:bg-slate-50 ${isRoot ? 'text-slate-400' : 'text-slate-500'}`}>
+          {isRoot
+            ? <span className="flex items-center gap-1"><HomeIcon /><span className="hidden sm:inline">{crumb.label}</span></span>
+            : <span className={`truncate block max-w-[100px] sm:max-w-[160px]`}>{crumb.label}</span>}
+        </button>
+      )
+    }
+    return (
+      <span className="text-[11px] sm:text-[12px] font-medium text-slate-400 px-1 flex items-center gap-1 whitespace-nowrap">
+        {isRoot && <HomeIcon />}
+        <span className="max-w-[100px] sm:max-w-none truncate">{crumb.label}</span>
+      </span>
+    )
+  }
+
+  return (
+    <nav className="px-3 sm:px-7 py-1.5 sm:py-2 bg-white border-b border-slate-100/80 flex-shrink-0">
+
+      {/* ── Mobile: collapsed to root › … › parent › current ── */}
+      <div className="sm:hidden flex items-center gap-0 min-w-0 overflow-hidden">
+        {/* Root (home icon only on mobile) */}
+        <CrumbItem crumb={root} isRoot isLast={total === 1} maxW="max-w-[60px]" />
+
+        {total > 3 && (
+          <>
+            <Sep />
+            <span className="text-[11px] font-medium text-slate-400 px-1 select-none">…</span>
+          </>
+        )}
+
+        {/* Parent — second-to-last, shown if it exists and isn't root */}
+        {parent && parent !== root && (
+          <>
+            <Sep />
+            <CrumbItem crumb={parent} isRoot={false} isLast={false} maxW="max-w-[90px]" />
+          </>
+        )}
+
+        {/* Current page */}
+        {total > 1 && (
+          <>
+            <Sep />
+            <CrumbItem crumb={last} isRoot={false} isLast maxW="max-w-[110px]" />
+          </>
+        )}
+      </div>
+
+      {/* ── Desktop: full trail ── */}
+      <div className="hidden sm:flex items-center gap-0 min-w-0 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+        {breadcrumbs.map((crumb, i) => (
+          <Fragment key={i}>
+            {i > 0 && <Sep />}
+            <CrumbItem crumb={crumb} isRoot={i === 0} isLast={i === total - 1} />
+          </Fragment>
+        ))}
+      </div>
+
+    </nav>
+  )
+}
+
+// Payer portal's top header — transparent row that blends into the light page
+// background (no white bar, no brand). Left side is an inline breadcrumb trail
+// (home icon + path back to Dashboard); right side keeps the nav pills (the
+// only route to some screens), search, bell and profile.
+function PlainNavbar({ navItems, activeId, onNavigate,
+                       showSearch, searchValue, onSearchChange, searchPlainMode, searchPlaceholder,
+                       onOpenNpi, onOpenSupplier, breadcrumbs, headerGreeting,
+                       transparentHeader = false, iconOnlyNav = false,
+                       bellSlot, notifCount, onBellClick, bellTitle, user, onLogout }) {
+  const crumbs = breadcrumbs && breadcrumbs.length > 0 ? breadcrumbs : [{ label: 'Dashboard', active: true }]
+  const HomeIcon = () => (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
+    </svg>
+  )
+  const Sep = () => (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"
+         strokeLinecap="round" strokeLinejoin="round" className="text-slate-300 shrink-0 mx-0.5">
+      <polyline points="9 18 15 12 9 6" />
+    </svg>
+  )
+  return (
+    <header className={`flex items-center justify-between gap-4 px-4 sm:px-7 py-4 flex-shrink-0 sticky top-0 z-20 ${transparentHeader ? '' : 'bg-white border-b'}`}
+             style={transparentHeader ? undefined : { borderColor: '#E1E6EE' }}>
+      {/* Left side — a personal greeting on the dashboard/overview screen
+          ("Hey {name}" + today's date), otherwise the inline breadcrumb trail
+          (home icon + path, straight on the page background). */}
+      {headerGreeting ? (
+        <div className="min-w-0">
+          <h1 className="text-[17px] sm:text-[19px] font-extrabold leading-tight truncate"
+              style={{ fontFamily: "'Manrope',sans-serif", color: '#0A1F3D', letterSpacing: '-0.01em' }}>
+            {headerGreeting.title}
+          </h1>
+          {headerGreeting.sub && (
+            <div className="text-[11.5px] font-medium leading-tight mt-0.5 truncate" style={{ color: '#647089' }}>
+              {headerGreeting.sub}
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="flex items-center gap-0.5 min-w-0 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+          {crumbs.map((crumb, i) => {
+            const isLast = i === crumbs.length - 1
+            return (
+              <Fragment key={i}>
+                {i > 0 && <Sep />}
+                {isLast ? (
+                  <span className="flex items-center gap-1.5 text-[15.5px] font-bold whitespace-nowrap px-1" style={{ color: '#0A1F3D' }}>
+                    {i === 0 && <HomeIcon />}{crumb.label}
+                  </span>
+                ) : crumb.onClick ? (
+                  <button onClick={crumb.onClick}
+                          className="flex items-center gap-1.5 text-[15px] font-medium text-slate-500 hover:text-[#0A1F3D] px-1 py-0.5 rounded transition-colors whitespace-nowrap">
+                    {i === 0 && <HomeIcon />}{crumb.label}
+                  </button>
+                ) : (
+                  <span className="flex items-center gap-1.5 text-[15px] font-medium text-slate-400 px-1 whitespace-nowrap">
+                    {i === 0 && <HomeIcon />}{crumb.label}
+                  </span>
+                )}
+              </Fragment>
+            )
+          })}
+        </div>
+      )}
+
+      <div className="flex items-center gap-3 flex-shrink-0 min-w-0">
+        <nav className="flex items-center gap-1">
+          {navItems.map((n) => {
+            const active = activeId === n.id
+            // iconOnlyNav: inactive items collapse to just their icon; only the
+            // page you're on expands to the full icon+label navy pill.
+            if (iconOnlyNav && !active) {
+              return (
+                <button key={n.id} onClick={() => onNavigate(n.id)}
+                        className="relative group flex items-center justify-center w-11 h-11 rounded-full text-[#5B84C4] hover:bg-white hover:text-[#2B3A52] transition-colors">
+                  <Icon name={n.icon} size={21} stroke={1.9} />
+                  {/* Custom hover tooltip — styled navy pill instead of the native title bubble */}
+                  <span className="absolute top-full left-1/2 -translate-x-1/2 mt-2.5 px-3.5 py-1.5 rounded-full text-[11px] font-semibold text-white whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible pointer-events-none transition-all duration-150 z-50"
+                        style={{ background: '#0A1F3D', boxShadow: '0 6px 16px rgba(10,31,61,.25)' }}>
+                    {n.label}
+                    <span className="absolute bottom-full left-1/2 -translate-x-1/2"
+                          style={{ width: 0, height: 0, borderLeft: '5px solid transparent', borderRight: '5px solid transparent', borderBottom: '5px solid #0A1F3D' }} />
+                  </span>
+                </button>
+              )
+            }
+            return (
+              <button key={n.id} onClick={() => onNavigate(n.id)}
+                      className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-[15.5px] font-semibold whitespace-nowrap transition-colors
+                        ${active ? 'bg-[#0A1F3D] text-white' : 'text-[#647089] hover:bg-[#F7F9FC] hover:text-[#2B3A52]'}`}>
+                <Icon name={n.icon} size={18} stroke={active ? 2.2 : 1.9} className={active ? '' : 'text-[#5B84C4]'} />
+                <span className={iconOnlyNav ? '' : 'hidden md:inline'}>{n.label}</span>
+              </button>
+            )
+          })}
+        </nav>
+        {showSearch && <SearchBox value={searchValue} onChange={onSearchChange} onOpenNpi={onOpenNpi} onOpenSupplier={onOpenSupplier}
+                                   plainMode={searchPlainMode} placeholder={searchPlaceholder} />}
+        {bellSlot || <NotifBell count={notifCount} onClick={onBellClick} title={bellTitle} />}
+        <ProfileMenu user={user} onLogout={onLogout} compact />
+      </div>
+    </header>
+  )
+}
+
 export default function Shell({ navItems, activeId, onNavigate, title, user, subtitle,
-                                infoRows,
-                                showSearch = false, searchValue = '', onSearchChange,
+                                infoRows, profileStats, profileActions, profileContacts,
+                                showSearch = false, searchValue = '', onSearchChange, showNavbarSearch = true,
+                                searchPlainMode = false, searchPlaceholder,
                                 onOpenNpi, onOpenSupplier, canGoBack = false, onBack,
-                                breadcrumbs,
-                                notifCount = 0, bellTitle, onBellClick, onLogout, children }) {
+                                breadcrumbs, headerGreeting, sidebarColor, sidebarHoverExpand = false, brandName, brandSubtitle, themeClass = '',
+                                transparentHeader = false, iconOnlyNav = false,
+                                layout = 'sidebar', scrollable = true,
+                                notifCount = 0, bellTitle, onBellClick, bellSlot, onLogout, children }) {
+  // Both declared unconditionally regardless of `layout` — the navbar branch
+  // below returns before using them, but hooks can never be called
+  // conditionally, so they're called up front either way.
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [collapsed, setCollapsed] = useState(() => {
     try { return localStorage.getItem('sidebar-collapsed') === 'true' } catch { return false }
@@ -383,8 +850,48 @@ export default function Shell({ navItems, activeId, onNavigate, title, user, sub
     })
   }
 
+  // Vendor portal's single top navbar — no sidebar, no header title/breadcrumbs/
+  // back button at all, just brand+nav / search+bell+profile in one sticky row.
+  if (layout === 'navbar') {
+    return (
+      <div className={`h-full flex flex-col bg-slate-100 overflow-hidden ${themeClass}`}>
+        <Navbar
+          navItems={navItems} activeId={activeId} onNavigate={onNavigate} brandName={brandName}
+          searchValue={searchValue} onSearchChange={onSearchChange} showNavbarSearch={showNavbarSearch}
+          bellSlot={bellSlot} notifCount={notifCount} onBellClick={onBellClick} bellTitle={bellTitle}
+          canGoBack={canGoBack} onBack={onBack}
+          user={user} subtitle={subtitle} infoRows={infoRows}
+          profileStats={profileStats} profileActions={profileActions} profileContacts={profileContacts}
+          onLogout={onLogout}
+        />
+        <main className="flex-1 overflow-y-auto">{children}</main>
+      </div>
+    )
+  }
+
+  // Payer portal's top header — transparent breadcrumb row on a light-blue
+  // page background (no white navbar, no brand); crumbs render inline in the
+  // header itself instead of a separate bar.
+  if (layout === 'navbar-plain') {
+    return (
+      <div className={`h-full flex flex-col bg-slate-100 overflow-hidden ${themeClass}`}>
+        <PlainNavbar
+          navItems={navItems} activeId={activeId} onNavigate={onNavigate}
+          showSearch={showSearch} searchValue={searchValue} onSearchChange={onSearchChange}
+          searchPlainMode={searchPlainMode} searchPlaceholder={searchPlaceholder}
+          onOpenNpi={onOpenNpi} onOpenSupplier={onOpenSupplier}
+          breadcrumbs={breadcrumbs} headerGreeting={headerGreeting}
+          transparentHeader={transparentHeader} iconOnlyNav={iconOnlyNav}
+          bellSlot={bellSlot} notifCount={notifCount} onBellClick={onBellClick} bellTitle={bellTitle}
+          user={user} onLogout={onLogout}
+        />
+        <main className={`flex-1 min-h-0 ${scrollable ? 'overflow-y-auto' : 'overflow-hidden'}`}>{children}</main>
+      </div>
+    )
+  }
+
   return (
-    <div className="h-full flex bg-slate-100 overflow-hidden">
+    <div className={`h-full flex bg-slate-100 overflow-hidden ${themeClass}`}>
 
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
@@ -394,7 +901,7 @@ export default function Shell({ navItems, activeId, onNavigate, title, user, sub
             <Sidebar navItems={navItems} activeId={activeId}
                      onNavigate={(id) => { onNavigate(id); setSidebarOpen(false) }}
                      collapsed={false} onToggleCollapse={() => {}}
-                     onClose={() => setSidebarOpen(false)} />
+                     onClose={() => setSidebarOpen(false)} color={sidebarColor} brandName={brandName} />
           </div>
         </div>
       )}
@@ -402,7 +909,8 @@ export default function Shell({ navItems, activeId, onNavigate, title, user, sub
       {/* Desktop sidebar — always visible md+ */}
       <div className="hidden md:flex">
         <Sidebar navItems={navItems} activeId={activeId} onNavigate={onNavigate}
-                 collapsed={collapsed} onToggleCollapse={toggleCollapse} />
+                 collapsed={collapsed} onToggleCollapse={toggleCollapse} color={sidebarColor}
+                 hoverExpand={sidebarHoverExpand} brandName={brandName} />
       </div>
 
       <div className="flex-1 flex flex-col min-w-0">
@@ -427,109 +935,23 @@ export default function Shell({ navItems, activeId, onNavigate, title, user, sub
           <div className="flex-shrink-0 flex items-center gap-2">
             {showSearch ? (
               <>
-                <SearchBox value={searchValue} onChange={onSearchChange} onOpenNpi={onOpenNpi} onOpenSupplier={onOpenSupplier} />
+                <SearchBox value={searchValue} onChange={onSearchChange} onOpenNpi={onOpenNpi} onOpenSupplier={onOpenSupplier}
+                           plainMode={searchPlainMode} placeholder={searchPlaceholder} />
+                {bellSlot || <NotifBell count={notifCount} onClick={onBellClick} title={bellTitle} />}
                 <ProfileMenu user={user} onLogout={onLogout} />
               </>
             ) : (
               <>
-                <NotifBell count={notifCount} onClick={onBellClick} title={bellTitle} />
-                <UserChip user={user} subtitle={subtitle} infoRows={infoRows} onLogout={onLogout} />
+                {bellSlot || <NotifBell count={notifCount} onClick={onBellClick} title={bellTitle} variant={themeClass === 'vendor-theme' ? 'vendor' : undefined} />}
+                <UserChip user={user} subtitle={subtitle} infoRows={infoRows} onLogout={onLogout}
+                          profileStats={profileStats} profileActions={profileActions} profileContacts={profileContacts}
+                          variant={themeClass === 'vendor-theme' ? 'vendor' : undefined} />
               </>
             )}
           </div>
         </header>
 
-        {/* Breadcrumb trail — only shown when more than one level deep */}
-        {showCrumbs && (() => {
-          const Sep = () => (
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"
-                 strokeLinecap="round" strokeLinejoin="round" className="text-slate-200 shrink-0 mx-0.5">
-              <polyline points="9 18 15 12 9 6" />
-            </svg>
-          )
-          const HomeIcon = () => (
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
-            </svg>
-          )
-
-          const total = breadcrumbs.length
-          const root  = breadcrumbs[0]
-          const last  = breadcrumbs[total - 1]
-          const parent = total >= 2 ? breadcrumbs[total - 2] : null
-
-          // Render a single crumb item (shared between mobile and desktop)
-          function CrumbItem({ crumb, isRoot, isLast, maxW = 'max-w-[140px]' }) {
-            if (isLast) {
-              return (
-                <span className={`text-[11px] sm:text-[12px] font-semibold text-slate-800 truncate ${maxW} sm:max-w-[240px] px-1 whitespace-nowrap`}>
-                  {crumb.label}
-                </span>
-              )
-            }
-            if (crumb.onClick) {
-              return (
-                <button onClick={crumb.onClick}
-                        className={`text-[11px] sm:text-[12px] font-medium px-1 py-0.5 rounded transition-colors whitespace-nowrap hover:text-[#0d1f35] hover:bg-slate-50 ${isRoot ? 'text-slate-400' : 'text-slate-500'}`}>
-                  {isRoot
-                    ? <span className="flex items-center gap-1"><HomeIcon /><span className="hidden sm:inline">{crumb.label}</span></span>
-                    : <span className={`truncate block max-w-[100px] sm:max-w-[160px]`}>{crumb.label}</span>}
-                </button>
-              )
-            }
-            return (
-              <span className="text-[11px] sm:text-[12px] font-medium text-slate-400 px-1 flex items-center gap-1 whitespace-nowrap">
-                {isRoot && <HomeIcon />}
-                <span className="max-w-[100px] sm:max-w-none truncate">{crumb.label}</span>
-              </span>
-            )
-          }
-
-          return (
-            <nav className="px-3 sm:px-7 py-1.5 sm:py-2 bg-white border-b border-slate-100/80 flex-shrink-0">
-
-              {/* ── Mobile: collapsed to root › … › parent › current ── */}
-              <div className="sm:hidden flex items-center gap-0 min-w-0 overflow-hidden">
-                {/* Root (home icon only on mobile) */}
-                <CrumbItem crumb={root} isRoot isLast={total === 1} maxW="max-w-[60px]" />
-
-                {total > 3 && (
-                  <>
-                    <Sep />
-                    <span className="text-[11px] font-medium text-slate-400 px-1 select-none">…</span>
-                  </>
-                )}
-
-                {/* Parent — second-to-last, shown if it exists and isn't root */}
-                {parent && parent !== root && (
-                  <>
-                    <Sep />
-                    <CrumbItem crumb={parent} isRoot={false} isLast={false} maxW="max-w-[90px]" />
-                  </>
-                )}
-
-                {/* Current page */}
-                {total > 1 && (
-                  <>
-                    <Sep />
-                    <CrumbItem crumb={last} isRoot={false} isLast maxW="max-w-[110px]" />
-                  </>
-                )}
-              </div>
-
-              {/* ── Desktop: full trail ── */}
-              <div className="hidden sm:flex items-center gap-0 min-w-0 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
-                {breadcrumbs.map((crumb, i) => (
-                  <Fragment key={i}>
-                    {i > 0 && <Sep />}
-                    <CrumbItem crumb={crumb} isRoot={i === 0} isLast={i === total - 1} />
-                  </Fragment>
-                ))}
-              </div>
-
-            </nav>
-          )
-        })()}
+        {showCrumbs && <Breadcrumbs breadcrumbs={breadcrumbs} />}
 
         <main className="flex-1 overflow-y-auto">{children}</main>
       </div>

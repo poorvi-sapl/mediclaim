@@ -26,6 +26,7 @@ from ..config import get_settings
 from ..models import User
 from ..auth import (
     create_access_token, decode_token, extract_token, is_blacklisted, COOKIE_NAME,
+    ROLE_REDIRECTS,
 )
 from ..auth.mfa_utils import (
     encrypt_secret, generate_totp_secret, get_totp_uri, verify_totp_code,
@@ -40,11 +41,6 @@ router = APIRouter(prefix="/auth/mfa", tags=["mfa"])
 otp_router = APIRouter(prefix="/auth/otp", tags=["otp"])  # ACTIVE email-OTP login factor
 settings = get_settings()
 log = logging.getLogger("routers.mfa")
-
-_REDIRECTS = {
-    "physician": "/physician/dashboard",
-    "plan_investigator": "/plan/dashboard",
-}
 
 
 # --- request/response models ------------------------------------------------
@@ -191,7 +187,7 @@ def mfa_login(payload: MFALoginRequest, response: Response,
     return {
         "success": True,
         "role": user.role,
-        "redirect": _REDIRECTS.get(user.role, "/"),
+        "redirect": ROLE_REDIRECTS.get(user.role, "/"),
     }
 
 
@@ -223,7 +219,7 @@ def mfa_backup(payload: MFABackupRequest, response: Response,
     result = {
         "success": True,
         "role": user.role,
-        "redirect": _REDIRECTS.get(user.role, "/"),
+        "redirect": ROLE_REDIRECTS.get(user.role, "/"),
     }
     if len(remaining) < 3:
         result["warning"] = (
@@ -294,7 +290,7 @@ def otp_verify(payload: OtpVerifyRequest, response: Response,
     return {
         "success": True,
         "role": user.role,
-        "redirect": _REDIRECTS.get(user.role, "/"),
+        "redirect": ROLE_REDIRECTS.get(user.role, "/"),
     }
 
 

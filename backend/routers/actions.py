@@ -15,10 +15,12 @@ from backend.scoring.risk_score import (
 )
 from backend.sse import broadcast_alert
 from backend.auth import extract_token, decode_token, is_blacklisted
-from backend.rules.trigger_engine import notify_vendor_from_claim_action
+from backend.rules.trigger_engine import notify_vendor_from_claim_action, record_decision_action
 
-# action_types that should also open a vendor dispute case (My Claims -> NPI Watch bridge)
-VENDOR_NOTIFY_ACTION_TYPES = {"dispute", "fraud"}
+# action_types that should also open a vendor dispute case (My Claims -> NPI Watch bridge).
+# Every physician flagging action now asks the vendor for proof-of-work documents —
+# the vendor is told nothing about WHICH action or physician, only that docs are needed.
+VENDOR_NOTIFY_ACTION_TYPES = {"dispute", "fraud", "deceased_patient", "flag_supplier", "unknown_patient"}
 
 router = APIRouter()
 log = logging.getLogger("routers.actions")
@@ -47,8 +49,8 @@ def _decrement_supplier(db: Session, supplier_id: str, settings) -> None:
     db.commit()
 
 VALID_ACTION_TYPES = {"confirm", "dispute", "flag_supplier", "unknown_patient",
-                      "did_not_order", "fraud"}
-ALERT_ACTION_TYPES = {"flag_supplier", "unknown_patient", "did_not_order"}
+                      "did_not_order", "fraud", "deceased_patient"}
+ALERT_ACTION_TYPES = {"flag_supplier", "unknown_patient", "did_not_order", "deceased_patient"}
 ESCALATION_ACTION_TYPES = {"did_not_order"}
 
 
@@ -78,20 +80,13 @@ def create_action(payload: ActionRequest, db: Session = Depends(get_db)):
             "error": "Claim not found", "code": "CLAIM_NOT_FOUND"})
 
     # --- record action + mark claim reviewed ---
-    action = Action(
-        claim_id=claim.id,
-        npi=payload.npi,
-        action_type=payload.action_type,
-        note=payload.note,
-        vendor_id=claim.vendor_id,
-        vendor_name=claim.vendor_name,
-        patient_name=claim.patient_name,
-        claim_amount=claim.claim_amount,
-        broadcast=False,
-    )
+    # Shared with the NPI-Watch email response path (respond_to_notification) via
+    # record_decision_action, so the two decision bridges write the Action row +
+    # reviewed flag identically and can't drift apart.
     try:
-        db.add(action)
-        claim.reviewed = True
+        action = record_decision_action(
+            db, claim, payload.npi, payload.action_type, note=payload.note,
+        )
         db.commit()
         db.refresh(action)
     except Exception as e:
@@ -101,21 +96,30 @@ def create_action(payload: ActionRequest, db: Session = Depends(get_db)):
             "error": "Transaction failed — action not recorded", "code": "DB_ERROR"})
 
     # --- bridge to NPI Watch: dispute/fraud actions also open a vendor dispute case.
+    # Deferred by default: the vendor email + case go out only after the
+    # physician's undo window (vendor_notify_delay_hours) closes — the reminder
+    # worker (backend/rules/reminders.py) picks up surviving actions then. An
+    # undo inside the window deletes the Action row, so the vendor never hears
+    # about it. With the delay set <= 0 this notifies inline, like before.
     # notify_vendor_from_claim_action() never raises, but this is wrapped anyway —
     # a vendor-notification problem must never fail the underlying claim action,
     # which has already been committed above.
     if payload.action_type in VENDOR_NOTIFY_ACTION_TYPES:
-        try:
-            notified = notify_vendor_from_claim_action(
-                claim_id=str(action.claim_id),
-                physician_npi=action.npi,
-                action_type=payload.action_type,
-                db=db,
-            )
-            if notified:
-                log.info(f"Vendor notified for claim {action.claim_id} — action: {payload.action_type}")
-        except Exception as e:
-            log.error(f"Vendor notification failed for claim {action.claim_id}: {e}")
+        if settings.vendor_notify_delay_hours > 0:
+            log.info(f"Vendor notification for claim {action.claim_id} deferred "
+                     f"{settings.vendor_notify_delay_hours}h (undo window) — action: {payload.action_type}")
+        else:
+            try:
+                notified = notify_vendor_from_claim_action(
+                    claim_id=str(action.claim_id),
+                    physician_npi=action.npi,
+                    action_type=payload.action_type,
+                    db=db,
+                )
+                if notified:
+                    log.info(f"Vendor notified for claim {action.claim_id} — action: {payload.action_type}")
+            except Exception as e:
+                log.error(f"Vendor notification failed for claim {action.claim_id}: {e}")
 
     # --- supplier risk bump for flag_supplier / unknown_patient / did_not_order ---
     if payload.action_type in ALERT_ACTION_TYPES:
@@ -179,8 +183,13 @@ def undo_action(action_id: str, request: Request, db: Session = Depends(get_db))
         raise HTTPException(status_code=403, detail={
             "error": "You can only undo your own actions", "code": "NOT_OWNER"})
 
-    # Undo window: 24 hours for dispute, 60 seconds for all other actions.
-    undo_window = 86400 if action.action_type == "dispute" else 60
+    # Undo window: vendor_notify_delay_hours (default 24h) for every action
+    # that notifies the vendor — the email/case only go out once this window
+    # closes, so an undo here truly retracts the action. 60 seconds otherwise.
+    if action.action_type in VENDOR_NOTIFY_ACTION_TYPES:
+        undo_window = max(60, settings.vendor_notify_delay_hours * 3600)
+    else:
+        undo_window = 60
     if (datetime.utcnow() - action.created_at).total_seconds() > undo_window:
         raise HTTPException(status_code=403, detail={
             "error": "undo_expired",

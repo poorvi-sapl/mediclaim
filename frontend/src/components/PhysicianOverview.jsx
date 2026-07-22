@@ -194,7 +194,7 @@ export default function PhysicianOverview({ npi }) {
           </ResponsiveContainer>
         </ChartCard>
 
-        <ChartCard title="Claims by Supplier">
+        <ChartCard title="Claims by Vendor">
           <ResponsiveContainer width="100%" height={Math.max(180, pieData.length * 46)}>
             <BarChart
               layout="vertical"

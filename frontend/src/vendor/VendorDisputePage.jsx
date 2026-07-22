@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { API_BASE } from '../api'
+import { Icon } from '../components/ui'
 
 // ---------------------------------------------------------------------------
 // API calls — follow the same request() pattern from api.js
@@ -63,51 +64,47 @@ function fmtDate(iso) {
 function Logo() {
   return (
     <div className="flex items-center gap-2">
-      <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#0d1f35' }}>
+      <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ backgroundColor: 'var(--navy-900, #3E5F94)' }}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
           <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
         </svg>
       </div>
-      <span className="text-[15px] font-bold tracking-tight" style={{ color: '#0d1f35' }}>NPI Watch</span>
+      <span className="text-[15px] font-bold tracking-tight" style={{ color: 'var(--navy-900, #3E5F94)' }}>NPI Watch</span>
     </div>
   )
 }
 
 function StatusBadge({ status }) {
   const cfg = {
-    OPEN:                    { bg: 'bg-amber-100',   text: 'text-amber-700',  label: 'Open' },
-    RESPONDED_TO_MEDICARE:   { bg: 'bg-emerald-100', text: 'text-emerald-700', label: 'Responded' },
-    RESOLVED_BY_PHYSICIAN:   { bg: 'bg-emerald-100', text: 'text-emerald-700', label: 'Resolved' },
-    NON_RESPONSIVE:          { bg: 'bg-red-100',     text: 'text-red-700',    label: 'Non-Responsive' },
-    REFERRED_OIG:            { bg: 'bg-red-100',     text: 'text-red-700',    label: 'Referred OIG' },
-    CLOSED:                  { bg: 'bg-slate-100',   text: 'text-slate-600',  label: 'Closed' },
+    OPEN:                    { tone: 'warning', label: 'Open',           icon: 'clock' },
+    RESPONDED_TO_MEDICARE:   { tone: 'success', label: 'Responded',      icon: 'check' },
+    RESOLVED_BY_PHYSICIAN:   { tone: 'success', label: 'Resolved',       icon: 'check' },
+    NON_RESPONSIVE:          { tone: 'error',   label: 'Non-Responsive', icon: 'x' },
+    REFERRED_OIG:            { tone: 'error',   label: 'Referred OIG',   icon: 'alertTri' },
+    CLOSED:                  { tone: 'neutral', label: 'Closed',         icon: 'check' },
   }
-  const c = cfg[status] || { bg: 'bg-slate-100', text: 'text-slate-600', label: status }
-  return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${c.bg} ${c.text}`}>
-      {c.label}
-    </span>
-  )
+  const c = cfg[status] || { tone: 'neutral', label: status, icon: 'clock' }
+  return <span className={`vbadge ${c.tone}`}><Icon name={c.icon} size={12} />{c.label}</span>
 }
 
 function DeadlineBanner({ daysRemaining, deadlinePassed, status }) {
   if (status !== 'OPEN') return null
   if (deadlinePassed) {
     return (
-      <div className="rounded-lg px-4 py-3 bg-red-50 border border-red-200 text-red-700 text-sm font-medium">
+      <div className="rounded-lg px-4 py-3 text-sm font-medium" style={{ background: 'var(--n-100)', color: 'var(--n-600)' }}>
         Response window has closed.
       </div>
     )
   }
   if (daysRemaining <= 3) {
     return (
-      <div className="rounded-lg px-4 py-3 bg-red-50 border border-red-200 text-red-700 text-sm font-semibold">
+      <div className="rounded-lg px-4 py-3 text-sm font-semibold" style={{ background: 'var(--error-bg)', color: 'var(--error-tx)', boxShadow: 'inset 0 0 0 1px #EBD3D1' }}>
         URGENT: {daysRemaining} day{daysRemaining !== 1 ? 's' : ''} remaining to respond
       </div>
     )
   }
   return (
-    <div className="rounded-lg px-4 py-3 bg-amber-50 border border-amber-200 text-amber-800 text-sm font-medium">
+    <div className="rounded-lg px-4 py-3 text-sm font-medium" style={{ background: 'var(--warning-bg)', color: 'var(--warning-tx)' }}>
       {daysRemaining} days remaining to respond
     </div>
   )
@@ -130,15 +127,15 @@ function OptionCard({ id, title, description, selected, onSelect }) {
       onClick={() => onSelect(id)}
       className={`w-full text-left rounded-xl border-2 p-4 transition-all duration-150 ${
         selected
-          ? 'border-[#0d1f35] bg-[#0d1f35]/5'
+          ? 'border-[#3E5F94] bg-[#3E5F94]/5'
           : 'border-slate-200 hover:border-slate-300 bg-white'
       }`}
     >
       <div className="flex items-start gap-3">
         <div className={`mt-0.5 w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${
-          selected ? 'border-[#0d1f35]' : 'border-slate-300'
+          selected ? 'border-[#3E5F94]' : 'border-slate-300'
         }`}>
-          {selected && <div className="w-2 h-2 rounded-full bg-[#0d1f35]" />}
+          {selected && <div className="w-2 h-2 rounded-full bg-[#3E5F94]" />}
         </div>
         <div>
           <div className="text-[13px] font-semibold text-slate-900">{title}</div>
@@ -175,7 +172,7 @@ function ErrorCard({ errorCode, message }) {
         <p className="text-[13px] text-slate-500 leading-relaxed mb-1">{message}</p>
         <p className="text-[12px] text-slate-400 mt-3">
           If you believe this is an error, contact{' '}
-          <span className="text-[#0d1f35] font-medium">support@npiwatch.com</span>
+          <span className="text-[#3E5F94] font-medium">support@npiwatch.com</span>
         </p>
       </div>
     </div>
@@ -251,13 +248,12 @@ export default function VendorDisputePage() {
 
   // --- Loaded ---
   const {
-    dispute_type, status, days_remaining, deadline_passed,
-    response_due_date, physician_notes,
+    status, days_remaining, deadline_passed,
+    response_due_date,
     vendor_responded_at, provider_response_type, vendor_response, vendor_docs,
     claim,
   } = dispute
 
-  const isFraud = dispute_type === 'FRAUD_REPORT'
   const isOpen  = status === 'OPEN'
   const alreadyResponded = !!vendor_responded_at
 
@@ -266,7 +262,7 @@ export default function VendorDisputePage() {
     : (claim?.hcpcs_codes || 'N/A')
 
   return (
-    <div className="min-h-screen bg-slate-50 py-8 px-4">
+    <div className="vendor-theme min-h-screen bg-slate-50 py-8 px-4">
       <div className="max-w-[680px] mx-auto space-y-5">
 
         {/* ── Header ── */}
@@ -275,10 +271,12 @@ export default function VendorDisputePage() {
           <StatusBadge status={status} />
         </div>
 
-        {/* ── Page title ── */}
+        {/* ── Page title — deliberately type-blind: the vendor is never told
+             whether this is a dispute, fraud report, or deceased-patient case,
+             only that documents are required. ── */}
         <div>
           <h1 className="text-[22px] font-bold text-slate-900">
-            {isFraud ? 'Physician Fraud Report' : 'Physician Dispute Notice'}
+            Supporting Documents Required
           </h1>
           <p className="text-[13px] text-slate-500 mt-1">
             Case #{case_id} · Due {fmtDate(response_due_date)}
@@ -302,25 +300,17 @@ export default function VendorDisputePage() {
           <DetailRow label="Vendor Type"        value={claim?.vendor_type} />
         </div>
 
-        {/* ── Physician note ── */}
-        {physician_notes && (
-          <div className="bg-amber-50 border border-amber-200 rounded-xl px-5 py-4">
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-amber-600 mb-1.5">Physician's Note</div>
-            <p className="text-[13px] text-amber-900 leading-relaxed">{physician_notes}</p>
-          </div>
-        )}
-
         {/* ── Already responded ── */}
         {alreadyResponded && (
-          <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-5 py-4">
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-emerald-600 mb-1.5">
+          <div className="rounded-xl px-5 py-4" style={{ background: 'var(--info-bg)', border: '1px solid #D2E1EB' }}>
+            <div className="text-[11px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--info-tx)' }}>
               Response Submitted
             </div>
-            <p className="text-[13px] text-emerald-800">
+            <p className="text-[13px]" style={{ color: 'var(--navy-900)' }}>
               Submitted on {fmtDate(vendor_responded_at)}
             </p>
             {provider_response_type && (
-              <p className="text-[12px] text-emerald-700 mt-1">
+              <p className="text-[12px] mt-1" style={{ color: 'var(--info-tx)' }}>
                 Type: {provider_response_type === 'RESPONDED_TO_MEDICARE' ? 'Responded to Medicare directly' : 'Resolved with physician'}
               </p>
             )}
@@ -334,7 +324,8 @@ export default function VendorDisputePage() {
                     key={doc.stored_name}
                     href={`${API_BASE}/api/v1/vendor/disputes/${case_id}/docs/${doc.stored_name}?token=${encodeURIComponent(token)}`}
                     target="_blank" rel="noreferrer"
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white ring-1 ring-emerald-200 text-[11px] font-semibold text-emerald-800 hover:bg-emerald-50 transition-colors"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white text-[11px] font-semibold transition-colors"
+                    style={{ boxShadow: 'inset 0 0 0 1px #D2E1EB', color: 'var(--info-tx)' }}
                   >
                     {doc.filename}
                   </a>
@@ -351,14 +342,14 @@ export default function VendorDisputePage() {
             <p className="text-[12px] text-slate-500 mb-4">Select one of the options below and submit before the deadline.</p>
 
             {submitState === 'success' ? (
-              <div className="rounded-xl bg-emerald-50 border border-emerald-200 px-5 py-5 text-center">
-                <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-3">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <div className="rounded-xl px-5 py-5 text-center" style={{ background: 'var(--success-bg)', border: '1px solid #D5E9DD' }}>
+                <div className="w-10 h-10 rounded-full flex items-center justify-center mx-auto mb-3" style={{ background: '#D5E9DD' }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--success-tx)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="20 6 9 17 4 12"/>
                   </svg>
                 </div>
-                <div className="text-[15px] font-bold text-emerald-800 mb-1">Response Submitted</div>
-                <p className="text-[13px] text-emerald-700">
+                <div className="text-[15px] font-bold mb-1" style={{ color: 'var(--success-tx)' }}>Response Submitted</div>
+                <p className="text-[13px]" style={{ color: 'var(--success-tx)' }}>
                   Your response has been recorded. Case #{case_id} is now marked as{' '}
                   <strong>{submitResult?.status?.replace(/_/g, ' ')}</strong>.
                 </p>
@@ -391,7 +382,7 @@ export default function VendorDisputePage() {
                     onChange={(e) => setNotes(e.target.value)}
                     rows={3}
                     placeholder="Provide any relevant details about your response..."
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-[13px] text-slate-800 placeholder-slate-400 outline-none focus:border-[#0d1f35]/40 focus:ring-2 focus:ring-[#0d1f35]/10 resize-none transition"
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-[13px] text-slate-800 placeholder-slate-400 outline-none focus:border-[#3E5F94]/40 focus:ring-2 focus:ring-[#3E5F94]/10 resize-none transition"
                   />
                 </div>
 
@@ -399,7 +390,7 @@ export default function VendorDisputePage() {
                   <label className="block text-[12px] font-medium text-slate-600 mb-1.5">
                     Supporting documents <span className="text-slate-400 font-normal">(optional)</span>
                   </label>
-                  <label className="flex items-center justify-center gap-2 w-full px-3 py-4 rounded-lg border-2 border-dashed border-slate-200 hover:border-[#0d1f35]/40 text-[12px] text-slate-500 cursor-pointer transition-colors">
+                  <label className="flex items-center justify-center gap-2 w-full px-3 py-4 rounded-lg border-2 border-dashed border-slate-200 hover:border-[#3E5F94]/40 text-[12px] text-slate-500 cursor-pointer transition-colors">
                     Attach PDF, JPEG, or PNG proof (max 10MB each)
                     <input
                       type="file"
@@ -414,7 +405,7 @@ export default function VendorDisputePage() {
                       {docFiles.map((f, i) => (
                         <span key={`${f.name}-${i}`} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 text-[11px] font-medium text-slate-700">
                           {f.name}
-                          <button type="button" onClick={() => setDocFiles((prev) => prev.filter((_, j) => j !== i))} className="text-slate-400 hover:text-rose-500 transition-colors" aria-label={`Remove ${f.name}`}>
+                          <button type="button" onClick={() => setDocFiles((prev) => prev.filter((_, j) => j !== i))} className="text-slate-400 hover:text-[var(--navy-900)] transition-colors" aria-label={`Remove ${f.name}`}>
                             ✕
                           </button>
                         </span>
@@ -424,7 +415,7 @@ export default function VendorDisputePage() {
                 </div>
 
                 {submitState === 'error' && submitError && (
-                  <div className="rounded-lg px-4 py-3 bg-red-50 border border-red-200 text-red-700 text-[13px]">
+                  <div className="rounded-lg px-4 py-3 text-[13px]" style={{ background: 'var(--error-bg)', boxShadow: 'inset 0 0 0 1px #EBD3D1', color: 'var(--error-tx)' }}>
                     {submitError}
                   </div>
                 )}
@@ -432,8 +423,7 @@ export default function VendorDisputePage() {
                 <button
                   type="submit"
                   disabled={!selectedOption || submitState === 'loading'}
-                  className="w-full py-3 rounded-xl text-[14px] font-semibold text-white transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
-                  style={{ backgroundColor: selectedOption ? '#0d1f35' : undefined }}
+                  className={selectedOption ? 'gbtn gbtn-primary gbtn-lg w-full' : 'gbtn gbtn-lg w-full opacity-50 cursor-not-allowed'}
                 >
                   {submitState === 'loading' ? (
                     <span className="flex items-center justify-center gap-2">

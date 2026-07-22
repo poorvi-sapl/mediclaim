@@ -168,6 +168,15 @@ export async function verifyUei(uei) {
   return request(`/auth/verify-uei?uei=${encodeURIComponent(uei)}`)
 }
 
+export async function registerVendor(body) {
+  return request('/auth/register/vendor', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  })
+}
+export async function verifyVendorNpi(npi) {
+  return request(`/auth/verify-vendor-npi?npi=${encodeURIComponent(npi)}`)
+}
+
 // ─── Vendor portal ──────────────────────────────────────────────────────────
 export async function getVendorStats() {
   return request('/api/v1/vendor/portal/stats')
@@ -177,6 +186,10 @@ export async function getVendorClaims() {
 }
 export async function getVendorDisputes() {
   return request('/api/v1/vendor/portal/disputes')
+}
+export async function getVendorNotifications() {
+  const d = await request('/api/v1/vendor/portal/notifications')
+  return d.notifications || []
 }
 export async function submitVendorResponse(caseId, responseType, vendorResponse, docs = []) {
   const fd = new FormData()
@@ -192,6 +205,10 @@ export async function getNpiWatchNotifications() {
 }
 export async function getNpiWatchStats() {
   return request('/api/v1/physician/npi-watch/stats')
+}
+export async function getPhysicianBellNotifications() {
+  const d = await request('/api/v1/physician/npi-watch/notifications/bell')
+  return d.notifications || []
 }
 export async function confirmDisputeResolution(caseId, confirmed) {
   return request(`/api/v1/physician/npi-watch/disputes/${caseId}/confirm`, {
@@ -211,6 +228,17 @@ export async function decideDisputeClaim(caseId, actionType, note = '') {
 // ─── Compliance: plan disputes ───────────────────────────────────────────────
 export async function getPlanDisputes(status = 'open') {
   return get(`/plan/disputes?status=${status}`)
+}
+export async function getPlanNotifications() {
+  const d = await get('/plan/notifications')
+  return d.notifications || []
+}
+export async function submitComplianceAction(caseId, action, notes = '') {
+  return request(`/plan/disputes/${caseId}/compliance-action`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action, notes: notes || null }),
+  })
 }
 
 // Document upload (multipart). Requires a session cookie.
@@ -244,12 +272,12 @@ const catLabel = (c) => CATEGORY_LABEL[c] || (c ? c[0].toUpperCase() + c.slice(1
 export const ACTION_TO_BACKEND = {
   confirmed: 'confirm', disputed: 'dispute',
   flagged: 'flag_supplier', unknownPatient: 'unknown_patient',
-  deniedOrder: 'did_not_order',
+  deniedOrder: 'did_not_order', deceasedPatient: 'deceased_patient',
 }
 export const ACTION_FROM_BACKEND = {
   confirm: 'confirmed', dispute: 'disputed',
   flag_supplier: 'flagged', unknown_patient: 'unknownPatient',
-  did_not_order: 'deniedOrder',
+  did_not_order: 'deniedOrder', deceased_patient: 'deceasedPatient',
 }
 
 // backend rule_name -> the UI's flag code keys (FLAG_LABELS / FLAG_STYLES)
@@ -266,9 +294,9 @@ const RULE_TO_FLAG = {
 const RULE_META = {  // for the NPI-detail "Rules Fired" list
   volume_spike: { label: 'Volume Spike', points: 25 },
   geographic_anomaly: { label: 'Geographic Anomaly', points: 15 },
-  cross_npi_supplier: { label: 'Cross-NPI Supplier', points: 30 },
+  cross_npi_supplier: { label: 'Cross-NPI Vendor', points: 30 },
   oig_leie_hit: { label: 'OIG Hit', points: 35 },
-  new_high_value_supplier: { label: 'New High-Value Supplier', points: 10 },
+  new_high_value_supplier: { label: 'New High-Value Vendor', points: 10 },
   duplicate_billing: { label: 'Duplicate Billing', points: 20 },
   identity_reuse: { label: 'Patient Identity Reuse', points: 20 },
   abnormal_hospice_duration: { label: 'Abnormal Hospice Duration', points: 15 },
@@ -278,19 +306,19 @@ const RULE_META = {  // for the NPI-detail "Rules Fired" list
   impossible_day: { label: 'Impossible Day', points: 40 },
   modifier_abuse: { label: 'Modifier Abuse', points: 24 },
   rapid_cycling: { label: 'Rapid Patient Cycling', points: 30 },
-  supplier_concentration: { label: 'Supplier Concentration', points: 18 },
+  supplier_concentration: { label: 'Vendor Concentration', points: 18 },
 }
 
 // compact rule labels for claim flag badges
 const RULE_LABEL = {
   oig_leie_hit: 'OIG Hit', cross_npi_supplier: 'Cross-NPI',
   volume_spike: 'Volume Spike', geographic_anomaly: 'Geo Anomaly',
-  new_high_value_supplier: 'New Supplier', duplicate_billing: 'Duplicate',
+  new_high_value_supplier: 'New Vendor', duplicate_billing: 'Duplicate',
   identity_reuse: 'Identity Reuse', abnormal_hospice_duration: 'Long Hospice',
   upcoding: 'Upcoding', unbundling: 'Unbundling',
   deceased_patient: 'Deceased', impossible_day: 'Impossible Day',
   modifier_abuse: 'Modifier Abuse', rapid_cycling: 'Rapid Cycling',
-  supplier_concentration: 'Supplier Conc.',
+  supplier_concentration: 'Vendor Conc.',
 }
 
 function mapClaim(c) {
@@ -301,6 +329,7 @@ function mapClaim(c) {
     id: c.id,
     ccn: c.ccn,
     date: c.date_of_service,
+    createdAt: c.created_at || null,
     patient: c.patient_name,
     patientZip: c.patient_zip || '',
     description: c.service_description,
@@ -343,6 +372,23 @@ export async function getPhysician(npi = PHYSICIAN_NPI) {
       totalAmountBilled: Number(s.total_amount_month),
     },
   }
+}
+
+// Vendors this physician has flagged (flag_supplier / unknown_patient /
+// did_not_order), most recently flagged first — powers the dashboard's
+// Vendor Watchlist card.
+export async function getFlaggedSuppliers(npi = PHYSICIAN_NPI) {
+  const { items } = await get(`/physician/${npi}/flagged-suppliers`)
+  return (items || []).map((s) => ({
+    vendorId: s.vendor_id,
+    vendorName: s.vendor_name,
+    claimCount: s.claim_count,
+    totalAmount: Number(s.total_amount),
+    flagCount: s.flag_count,
+    oigFlagged: s.oig_flagged,
+    planStatus: s.plan_status,
+    firstFlaggedAt: s.first_flagged_at,
+  }))
 }
 
 export async function getClaims(npi = PHYSICIAN_NPI) {
@@ -397,31 +443,34 @@ export async function getClaimsPage(npi = PHYSICIAN_NPI, f = {}) {
   }
 }
 
-export async function getFlaggedSuppliers(npi = PHYSICIAN_NPI) {
-  const data = await get(`/physician/${npi}/flagged-suppliers`)
-  const PLAN_STATUS_LABEL = {
-    pending: 'Pending', under_review: 'Under Review', acknowledged: 'Acknowledged',
-  }
-  return data.items.map((s, i) => ({
-    id: s.vendor_id || i,
-    name: s.vendor_name,
-    claimsCount: s.claim_count,
-    totalAmount: Number(s.total_amount),
-    firstFlagged: (s.flagged_at || s.first_flagged_at || '').slice(0, 10),
-    flaggedAt: s.flagged_at || s.first_flagged_at,
-    planStatus: s.plan_status || 'pending',
-    planStatusLabel: PLAN_STATUS_LABEL[s.plan_status] || 'Pending',
-    status: s.oig_flagged ? 'Escalated' : (PLAN_STATUS_LABEL[s.plan_status] || 'Under Review'),
-  }))
+// A single claim by id, in the same shape as the list rows (mapClaim). Backs a
+// deep-linked / refreshed Claim Detail screen (/physician/claims/:id) where no
+// row was handed over in-app. Rejects (404) if the claim isn't under this NPI.
+export async function getClaim(npi = PHYSICIAN_NPI, claimId) {
+  const c = await get(`/physician/${npi}/claims/${claimId}`)
+  return mapClaim(c)
 }
 
-export async function postAction(claimId, npi, uiAction) {
+export async function postAction(claimId, npi, uiAction, note = null) {
   const action_type = ACTION_TO_BACKEND[uiAction] || uiAction
   return request('/actions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ claim_id: claimId, npi, action_type }),
+    body: JSON.stringify({ claim_id: claimId, npi, action_type, note: note || null }),
   })
+}
+
+// This claim's decision history under this NPI, oldest first — backs the
+// Claim Detail screen's timeline with the real action record (note +
+// timestamp) rather than only what's cached locally in the undo store.
+export async function getClaimActions(npi, claimId) {
+  const rows = await get(`/physician/${npi}/claims/${claimId}/actions`)
+  return rows.map((a) => ({
+    id: a.id,
+    actionType: a.action_type,
+    note: a.note || '',
+    createdAt: a.created_at,
+  }))
 }
 
 // ─── Plan portal ───────────────────────────────────────────────────────────
@@ -569,6 +618,15 @@ export async function getSuppliers() {
     riskScore: s.risk_score ?? 0,
     oig: s.oig_flag,
   }))
+}
+
+// Single supplier row by id. The watchlist list endpoint is the only source of
+// the header/KPI fields SupplierDetail renders, so a deep-linked (or refreshed)
+// /payer/vendor/:id — where no in-memory row was handed over — resolves the row
+// from that list. Returns null if the id isn't in the current top-100 window.
+export async function getSupplierById(id) {
+  const list = await getSuppliers()
+  return list.find((s) => String(s.id) === String(id)) || null
 }
 
 // All physicians billing a supplier — the core of the Supplier Case view.

@@ -1,31 +1,6 @@
-import { useState, useEffect, useRef } from 'react'
-import { createPortal } from 'react-dom'
-import { getClaimsPage, postAction, ACTION_TO_BACKEND, PHYSICIAN_NPI, API_BASE } from '../api'
+import { useState, useEffect } from 'react'
+import { getClaimsPage, postAction, getClaimActions, ACTION_TO_BACKEND, PHYSICIAN_NPI, API_BASE } from '../api'
 import { Icon, fmtUSD } from './ui'
-
-function KpiTile({ icon, label, value, accent = 'slate', valueClass = '', loading }) {
-  const styles = {
-    slate:  { wrap: 'bg-slate-100',    icon: 'text-slate-500'    },
-    blue:   { wrap: 'bg-[#e8eef7]',   icon: 'text-[#1B3A5C]'   },
-    amber:  { wrap: 'bg-amber-100',   icon: 'text-amber-500'    },
-    emerald:{ wrap: 'bg-emerald-100', icon: 'text-emerald-600'  },
-    rose:   { wrap: 'bg-rose-100',    icon: 'text-rose-500'     },
-  }
-  const s = styles[accent] || styles.slate
-  return (
-    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm px-3 py-3 sm:px-5 sm:py-4 flex items-center gap-2.5 sm:gap-4 group cursor-default transition-all duration-200 hover:-translate-y-1 hover:shadow-md hover:border-slate-200">
-      <div className={`w-9 h-9 sm:w-11 sm:h-11 rounded-full flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-110 ${s.wrap}`}>
-        <Icon name={icon} size={16} className={s.icon} />
-      </div>
-      <div className="min-w-0">
-        {loading
-          ? <div className="h-6 sm:h-7 w-14 sm:w-20 rounded-lg bg-slate-100 animate-pulse" />
-          : <div className={`text-xl sm:text-[1.45rem] font-bold tabular-nums leading-none tracking-tight text-slate-900 ${valueClass}`}>{value}</div>}
-        <div className="text-[10px] sm:text-[11px] font-medium text-slate-400 mt-1 uppercase tracking-wider leading-none">{label}</div>
-      </div>
-    </div>
-  )
-}
 
 const fmtDate = (iso) => {
   if (!iso) return ''
@@ -33,131 +8,70 @@ const fmtDate = (iso) => {
   return `${m}/${d}/${y}`
 }
 
-const CATEGORIES = ['All Categories', 'Home Health', 'Hospice', 'DME', 'Drugs', 'Hospital']
+// Server timestamps are naive UTC (datetime.utcnow); treat a tz-less string as UTC
+// so times aren't skewed by the browser's local offset.
+function parseServerTime(s) {
+  if (!s) return null
+  const hasTz = /[zZ]$|[+-]\d{2}:?\d{2}$/.test(s)
+  return new Date(hasTz ? s : s + 'Z').getTime()
+}
+function fmtDateTime(iso) {
+  const t = parseServerTime(iso)
+  if (!t) return ''
+  const d = new Date(t)
+  return `${fmtDate(d.toISOString().slice(0, 10))} · ${d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`
+}
 
-function CustomSelect({ value, onChange, options, placeholder = 'Select…' }) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef(null)
-  useEffect(() => {
-    function onDoc(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
-    document.addEventListener('mousedown', onDoc)
-    return () => document.removeEventListener('mousedown', onDoc)
-  }, [])
-  function pick(val) { onChange(val); setOpen(false) }
+// Service Category tag — light-glass pill (same recipe as the vendor
+// portal's status badges), one fixed color + icon per category so
+// DME/Home Health/Hospital/Drugs are visually distinct at a glance. This is
+// decorative categorization, not a status signal, so it's a different token
+// set from the Status column's badges. Anything not in the map (e.g. Hospice)
+// falls back to the neutral .cat-other.
+const CATEGORY_TAG = {
+  'DME':         { cls: 'cat-dme',         icon: 'package' },
+  'Home Health': { cls: 'cat-home-health', icon: 'suppliers' },
+  'Hospital':    { cls: 'cat-hospital',    icon: 'hospital' },
+  'Drugs':       { cls: 'cat-drugs',       icon: 'pill' },
+}
+function CategoryTag({ category }) {
+  const meta = CATEGORY_TAG[category] || { cls: 'cat-other', icon: 'doc' }
   return (
-    <div ref={ref} className="relative">
-      <button onClick={() => setOpen(v => !v)}
-              className={`flex items-center justify-between gap-2 bg-white border rounded-lg px-3 py-2 text-[12px] font-medium transition-all min-w-[132px] ${open ? 'border-[#0d1f35]/40 ring-2 ring-[#0d1f35]/10' : 'border-slate-200 hover:border-slate-300'} ${value ? 'text-slate-800' : 'text-slate-500'}`}>
-        <span className="truncate">{value || placeholder}</span>
-        <Icon name="chevronDown" size={12} stroke={2.5} className={`shrink-0 text-slate-400 transition-transform duration-150 ${open ? 'rotate-180' : ''}`} />
-      </button>
-      {open && (
-        <div className="absolute top-full left-0 mt-1.5 bg-white rounded-xl border border-slate-200 z-50 min-w-[160px] overflow-hidden"
-             style={{ boxShadow: '0 8px 24px rgba(15,23,42,0.10), 0 2px 6px rgba(15,23,42,0.06)' }}>
-          <div className="py-1">
-            <button onMouseDown={() => pick('')}
-                    className={`w-full text-left px-3.5 py-2 text-[12px] font-medium transition-colors flex items-center justify-between gap-3 ${!value ? 'text-[#0d1f35] bg-slate-50 font-semibold' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'}`}>
-              {placeholder}
-              {!value && <span className="text-[#0d1f35] text-[11px]">✓</span>}
-            </button>
-            {options.map(o => (
-              <button key={o.value} onMouseDown={() => pick(o.value)}
-                      className={`w-full text-left px-3.5 py-2 text-[12px] transition-colors flex items-center justify-between gap-3 ${value === o.value ? 'bg-slate-50 text-[#0d1f35] font-semibold' : 'font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-800'}`}>
-                <span className="truncate">{o.label}</span>
-                {value === o.value && <span className="text-[#0d1f35] shrink-0 text-[11px]">✓</span>}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
+    <span className={`cat-tag ${meta.cls}`}>
+      <Icon name={meta.icon} size={11} stroke={2.2} />
+      {category}
+    </span>
   )
 }
-function exportCSV(filename, headers, rows) {
-  const esc = (v) => { const s = String(v ?? ''); return /[,"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s }
-  const csv = [headers, ...rows].map(r => r.map(esc).join(',')).join('\n')
-  const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(new Blob([csv], { type: 'text/csv' })), download: filename })
-  a.click(); URL.revokeObjectURL(a.href)
-}
 
-const PAGE_SIZE = 15
+// The list's one row-level action, everywhere it appears (desktop table +
+// mobile card): "View" (already decided) is the vendor portal's neutral
+// glass button, "Take action" (still needs a decision) is its primary navy
+// glass button — same .view-btn/.take-action-btn recipe defined in index.css.
 
-// Single muted-blue category chip everywhere (no per-category colors).
-const CATEGORY_CHIP = 'inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium'
-const CATEGORY_CHIP_STYLE = { backgroundColor: '#EFF6FF', color: '#1E3A5F' }
-
-// five row actions (icon-only). UI id -> backend action_type mapped in api.js.
+// Five decisions a physician can record on a claim — rendered as the button
+// grid on the Claim Detail screen's "Take action" card. UI id -> backend
+// action_type mapping lives in api.js (ACTION_TO_BACKEND).
 const ACTIONS = [
-  { id: 'confirmed',     label: 'Confirm',         desc: 'Claim is legitimate — you recognize the supplier',   accent: '#10b981', icon: 'check', cls: 'bg-emerald-50/70 text-emerald-500 ring-emerald-100 hover:bg-emerald-100 hover:text-emerald-700 hover:ring-emerald-300 hover:shadow-emerald-100' },
-  { id: 'disputed',      label: 'Dispute',          desc: 'Amount or service details look incorrect to you',    accent: '#ef4444', icon: 'x',     cls: 'bg-rose-50/70 text-rose-400 ring-rose-100 hover:bg-rose-100 hover:text-rose-600 hover:ring-rose-300 hover:shadow-rose-100'                   },
-  { id: 'flagged',       label: 'Flag Supplier',    desc: 'Supplier is unknown or suspicious — raise a flag',   accent: '#f59e0b', icon: 'flag',  cls: 'bg-amber-50/70 text-amber-500 ring-amber-100 hover:bg-amber-100 hover:text-amber-700 hover:ring-amber-300 hover:shadow-amber-100'             },
-  { id: 'unknownPatient',label: 'Unknown Patient',  desc: "You don't recognize the patient on this claim",   accent: '#94a3b8', icon: 'userx', cls: 'bg-slate-50 text-slate-400 ring-slate-200 hover:bg-slate-100 hover:text-slate-600 hover:ring-slate-300'                                       },
-  { id: 'fraud',         label: 'Report Fraud',     desc: 'This claim appears fraudulent — vendor billed for a service never provided', accent: '#0f172a', icon: 'alertTri', cls: 'bg-slate-800 text-white ring-slate-800 hover:bg-slate-900 hover:ring-slate-900 hover:shadow-slate-400' },
+  { id: 'confirmed',     label: 'Confirm',          desc: 'Claim is legitimate — you recognize the vendor',                            accent: '#3A7D5C', icon: 'check',      cls: 'bg-[#E9F3ED] text-[#3A7D5C] ring-[#D5E9DD] hover:bg-[#DCEDE4] hover:text-[#2E6B4F]' },
+  { id: 'disputed',      label: 'Dispute',          desc: 'Amount or service details look incorrect to you',                           accent: '#D1A85C', icon: 'message',    cls: 'bg-[#FBF3E4] text-[#D1A85C] ring-[#F0E0BE] hover:bg-[#F7ECD3] hover:text-[#8A6A34]' },
+  { id: 'fraud',         label: 'Report Fraud',     desc: 'This claim appears fraudulent — vendor billed for a service never provided', accent: '#A6453F', icon: 'shieldAlert', cls: 'bg-[#F7EBEA] text-[#A6453F] ring-[#EBD3D1] hover:bg-[#F2DFDD] hover:text-[#8A423D]' },
+  { id: 'flagged',       label: 'Flag Vendor',      desc: 'Vendor is unknown or suspicious — raise a flag',                            accent: '#647089', icon: 'flag',       cls: 'bg-[#F1F4F9] text-[#647089] ring-[#E1E6EE] hover:bg-[#E7ECF3] hover:text-[#46586F]' },
+  { id: 'unknownPatient',label: 'Reassign Patient', desc: "You don't recognize the patient on this claim",                             accent: '#93A0B3', icon: 'userx',      cls: 'bg-[#F1F4F9] text-[#93A0B3] ring-[#E1E6EE] hover:bg-[#E7ECF3] hover:text-[#647089]' },
+  { id: 'deceasedPatient',label: 'Deceased Patient', desc: 'Patient is deceased — services could not have been provided',              accent: '#7A6899', icon: 'heartOff',   cls: 'bg-[#F2EEF7] text-[#7A6899] ring-[#E3DCEF] hover:bg-[#EAE3F2] hover:text-[#5F4E80]' },
 ]
 
-function ActionTooltip({ action, children }) {
-  const [pos, setPos] = useState(null)
-  const timer = useRef(null)
-  const btnRef = useRef(null)
-
-  const TOOLTIP_W = 196
-  function show() {
-    clearTimeout(timer.current)
-    timer.current = setTimeout(() => {
-      if (!btnRef.current) return
-      const r = btnRef.current.getBoundingClientRect()
-      const ideal = r.left + r.width / 2
-      const clamped = Math.min(
-        Math.max(ideal, TOOLTIP_W / 2 + 8),
-        window.innerWidth - TOOLTIP_W / 2 - 8
-      )
-      setPos({
-        bottom: window.innerHeight - r.top + 10,
-        left: clamped,
-        arrowLeft: ideal - clamped + TOOLTIP_W / 2,
-      })
-    }, 200)
-  }
-  function hide() { clearTimeout(timer.current); setPos(null) }
-
-  return (
-    <>
-      <div ref={btnRef} className="inline-flex" onMouseEnter={show} onMouseLeave={hide}>
-        {children}
-      </div>
-
-      {pos && createPortal(
-        <div
-          className="pointer-events-none"
-          style={{
-            position: 'fixed',
-            bottom: pos.bottom,
-            left: pos.left,
-            transform: 'translateX(-50%)',
-            zIndex: 99999,
-            animation: 'tooltip-up 0.15s cubic-bezier(0.16,1,0.3,1) forwards',
-          }}
-        >
-          <div className="bg-white rounded-xl border border-slate-200 shadow-[0_8px_28px_rgba(15,23,42,0.14)]" style={{ width: '196px' }}>
-            <div className="px-4 py-3">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0"
-                     style={{ backgroundColor: `${action.accent}20` }}>
-                  <Icon name={action.icon} size={12} stroke={2.5} style={{ color: action.accent }} />
-                </div>
-                <span className="text-[12px] font-bold text-slate-800 leading-tight">{action.label}</span>
-              </div>
-              <p className="text-[11px] text-slate-500 leading-snug">{action.desc}</p>
-            </div>
-          </div>
-          {/* Arrow — tracks actual button center even when card is clamped */}
-          <div style={{ position: 'absolute', bottom: -6, left: pos.arrowLeft, transform: 'translateX(-50%)', width: 0, height: 0, borderLeft: '6px solid transparent', borderRight: '6px solid transparent', borderTop: '6px solid #e2e8f0' }} />
-          <div style={{ position: 'absolute', bottom: -5, left: pos.arrowLeft, transform: 'translateX(-50%)', width: 0, height: 0, borderLeft: '5px solid transparent', borderRight: '5px solid transparent', borderTop: '5px solid white' }} />
-        </div>,
-        document.body
-      )}
-    </>
-  )
+// Tinted circle background/icon/border per action — the decision panel's icon
+// options always show this tint (like a status swatch); the SELECTED option
+// additionally borrows its border+card background, so picking "Confirm" turns
+// green, picking "Report Fraud" turns red, etc. instead of one flat navy tone.
+const ACTION_TINT = {
+  confirmed:      { bg: '#E9F3ED', border: '#3A7D5C', icon: '#3A7D5C' },
+  disputed:       { bg: '#FBF3E4', border: '#B08C4E', icon: '#D1A85C' },
+  fraud:          { bg: '#F7EBEA', border: '#A6453F', icon: '#A6453F' },
+  flagged:        { bg: '#F1F4F9', border: '#647089', icon: '#647089' },
+  unknownPatient: { bg: '#F1F4F9', border: '#93A0B3', icon: '#93A0B3' },
+  deceasedPatient:{ bg: '#F2EEF7', border: '#7A6899', icon: '#7A6899' },
 }
 
 function Spinner() {
@@ -169,26 +83,30 @@ function Spinner() {
   )
 }
 
-// ─── 60-second undo window ──────────────────────────────────────────────────
-// The backend (DELETE /actions/{id}) is the source of truth for the 60s limit;
-// this is the honest client-side countdown. created_at comes from the server, so
-// the timer resumes correctly after a refresh (we stash it in localStorage since
-// the claims-list response doesn't carry the action timestamp).
-const UNDO_KEY = 'claimlens_undo_v1'
+// ─── Undo window ────────────────────────────────────────────────────────────
+// The backend (DELETE /actions/{id}) is the source of truth for the limit; this
+// is the honest client-side countdown, driven by the real action record fetched
+// from GET /physician/{npi}/claims/{id}/actions — no local caching needed since
+// that endpoint is authoritative even after a refresh or a different session.
 const UNDO_WINDOW_DEFAULT = 60
-const UNDO_WINDOW_DISPUTE = 86400   // 24 hours
+const UNDO_WINDOW_VENDOR = 86400   // 24 hours — mirrors backend vendor_notify_delay_hours
+
+// Backend action types that open a vendor dispute case. These get the 24h undo
+// window: the vendor email + case are deferred until it closes (reminder
+// worker), so undoing here genuinely retracts the action before the vendor
+// ever hears about it.
+const VENDOR_NOTIFY_TYPES = ['dispute', 'fraud', 'deceased_patient', 'flag_supplier', 'unknown_patient']
 
 function undoWindowFor(actionType) {
-  return actionType === 'dispute' ? UNDO_WINDOW_DISPUTE : UNDO_WINDOW_DEFAULT
+  return VENDOR_NOTIFY_TYPES.includes(actionType) ? UNDO_WINDOW_VENDOR : UNDO_WINDOW_DEFAULT
 }
 
-// Server timestamps are naive UTC (datetime.utcnow); treat a tz-less string as UTC
-// so the countdown isn't skewed by the browser's local offset.
-function parseServerTime(s) {
-  if (!s) return null
-  const hasTz = /[zZ]$|[+-]\d{2}:?\d{2}$/.test(s)
-  return new Date(hasTz ? s : s + 'Z').getTime()
-}
+// Small counter-clockwise arrow used on every Undo chip.
+const undoArrow = (
+  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/>
+  </svg>
+)
 function secondsRemaining(createdAt, now, actionType) {
   const t = parseServerTime(createdAt)
   if (!t) return 0
@@ -204,7 +122,7 @@ function fmtRemaining(r) {
   return `${r}s`
 }
 function undoTimerCls(r, actionType) {
-  if (actionType === 'dispute') {
+  if (VENDOR_NOTIFY_TYPES.includes(actionType)) {
     if (r > 3600)  return 'bg-slate-100 text-slate-500 ring-slate-200 hover:bg-slate-200 hover:text-slate-700'
     if (r > 1800)  return 'bg-amber-50 text-amber-600 ring-amber-200 hover:bg-amber-100'
     return 'bg-rose-50 text-rose-600 ring-rose-200 hover:bg-rose-100 animate-pulse'
@@ -214,30 +132,7 @@ function undoTimerCls(r, actionType) {
   return 'bg-rose-50 text-rose-600 ring-rose-200 hover:bg-rose-100 animate-pulse'
 }
 
-function loadUndoStore() {
-  try { return JSON.parse(localStorage.getItem(UNDO_KEY) || '{}') } catch { return {} }
-}
-function saveUndoEntry(claimId, actionId, createdAt, actionType) {
-  try { const s = loadUndoStore(); s[claimId] = { actionId, createdAt, actionType }; localStorage.setItem(UNDO_KEY, JSON.stringify(s)) } catch { /* ignore */ }
-}
-function removeUndoEntry(claimId) {
-  try { const s = loadUndoStore(); delete s[claimId]; localStorage.setItem(UNDO_KEY, JSON.stringify(s)) } catch { /* ignore */ }
-}
-// Re-attach action_id + created_at to actioned rows after a page load (the claims
-// list doesn't return them). Drops entries already past the window so stale rows
-// never show a dead Undo link.
-function hydrateUndo(items) {
-  const s = loadUndoStore(); const now = Date.now()
-  return items.map((c) => {
-    const e = c.latestAction && s[c.id]
-    if (e && secondsRemaining(e.createdAt, now, e.actionType) > 0) {
-      return { ...c, actionId: e.actionId, actionCreatedAt: e.createdAt, actionType: e.actionType }
-    }
-    return c
-  })
-}
-
-// Subtle soft-green chip (change 4) — no border, not a heavy badge.
+// Subtle soft-green chip — no border, not a heavy badge.
 const actionedBadge = (
   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-medium"
         style={{ backgroundColor: '#D1FAE5', color: '#065F46' }}>
@@ -245,141 +140,105 @@ const actionedBadge = (
   </span>
 )
 
-// Self-contained actioned cell: owns its own per-row countdown interval (cleaned up
-// on unmount or when the window closes). Single-click undo — the 60s window is the
-// accidental-click guard, so no extra confirmation (change 6).
-function ActionedCell({ claim, onUndo }) {
-  const [now, setNow] = useState(() => Date.now())
-  const [busy, setBusy] = useState(false)
-  const [err, setErr] = useState(false)
-  const [expired, setExpired] = useState(false)
-
-  const remaining = claim.actionCreatedAt ? secondsRemaining(claim.actionCreatedAt, now, claim.actionType) : 0
-  const canUndo = !!claim.actionId && !!claim.actionCreatedAt && remaining > 0 && !expired
-
-  useEffect(() => {
-    if (!canUndo) return
-    const id = setInterval(() => setNow(Date.now()), 1000)
-    return () => clearInterval(id)
-  }, [canUndo])
-
-  async function handleUndo() {
-    setBusy(true); setErr(false)
-    const res = await onUndo(claim)
-    setBusy(false)
-    if (res?.ok) return                 // parent restores the row -> this cell unmounts
-    if (res?.expired) setExpired(true)   // window closed server-side: drop the link
-    else setErr(true)                    // transient error: keep the link for retry
-  }
-
-  return (
-    <div className="flex items-center gap-1.5 text-xs whitespace-nowrap flex-nowrap">
-      {actionedBadge}
-      {canUndo && (busy
-        ? <Spinner />
-        : <button onClick={handleUndo}
-                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold ring-1 ring-inset transition-all duration-150 whitespace-nowrap ${undoTimerCls(remaining, claim.actionType)}`}>
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/>
-            </svg>
-            Undo · {fmtRemaining(remaining)}
-          </button>
-      )}
-      {expired && <span className="text-[11px] text-slate-400 whitespace-nowrap">Expired</span>}
-      {err && <span className="text-[11px] text-rose-400 whitespace-nowrap">Failed</span>}
-    </div>
-  )
-}
-
-// Status as plain colored text (change 4) — only deliberate decisions carry color.
-// Unreviewed + Unknown Patient are muted gray; no pills/badges anywhere.
+// Status pill — used on the Claim Detail header, next to the claim number.
 function statusFor(claim) {
   const act = claim.latestAction
-  if (act === 'confirm') return { label: 'Confirmed', cls: 'text-[#059669] font-normal' }
-  if (act === 'dispute') return { label: 'Disputed', cls: 'text-[#7C3AED] font-normal' }
-  if (act === 'unknown_patient') return { label: 'Unknown Patient', cls: 'text-[#6B7280] font-normal' }
-  if (act === 'fraud') return { label: 'Fraud Reported', cls: 'text-[#DC2626] font-bold' }
-  if (act) return { label: 'Flagged', cls: 'text-[#DC2626] font-medium' }   // flag_supplier / did_not_order
-  if (claim.reviewed) return { label: 'Reviewed', cls: 'text-[#6B7280] font-normal' }
-  return { label: 'Unreviewed', cls: 'text-[#6B7280] font-normal' }
+  if (act === 'confirm') return { label: 'Confirmed', cls: 'bg-emerald-50 text-emerald-600' }
+  if (act === 'dispute') return { label: 'Disputed', cls: 'bg-violet-50 text-violet-600' }
+  if (act === 'unknown_patient') return { label: 'Unknown Patient', cls: 'bg-slate-100 text-slate-500' }
+  if (act === 'deceased_patient') return { label: 'Deceased Patient', cls: 'bg-[#F2EEF7] text-[#7A6899] font-semibold' }
+  if (act === 'fraud') return { label: 'Fraud Reported', cls: 'bg-rose-100 text-rose-700 font-bold' }
+  if (act) return { label: 'Flagged', cls: 'bg-rose-50 text-rose-600 font-semibold' }   // flag_supplier / did_not_order
+  if (claim.reviewed) return { label: 'Reviewed', cls: 'bg-slate-100 text-slate-500' }
+  return { label: 'Unreviewed', cls: 'bg-slate-100 text-slate-500' }
 }
 
-// Supplier name color hierarchy (change 5): only genuine high-risk stands out.
-function supplierTierCls(claim) {
-  if (claim.supplierHighRisk) return 'font-semibold text-[#DC2626]'
-  if (claim.hasRuleFlag) return 'font-medium text-[#DC2626]'
-  return 'font-normal text-[#DC2626]'
-}
+// Supplier name — bold link-blue, matches the Claim ID/Amount emphasis treatment.
+const SUPPLIER_NAME_CLS = 'font-semibold text-[#1B3A5C]'
 
-// claims-table cell padding (12px/16px) — local so the shared .td (px-5 py-4) used by
-// other tables is left untouched.
-const CELL = 'px-4 py-3 align-middle'
-// Column order + widths. `sort` = client-side sort key (omitted = not sortable).
-// Service Description is the flex column (takes remaining space, truncates).
+// claims-table cell padding — 8px/14px on every cell (header + body), matching
+// the vendor portal's claims table (table.vclaims) row height exactly. Local
+// so the shared .td (px-5 py-4) used by other tables is untouched.
+const CELL = 'py-2 px-3.5 align-middle'
+const THEAD_TH = 'text-left py-2.5 px-3.5 text-[10.5px] font-semibold uppercase tracking-[0.04em] text-slate-400 bg-slate-50 border-b border-slate-100 whitespace-nowrap'
+// Column order. `sort` = client-side sort key (omitted = not sortable). No
+// explicit widths — the table lays out by content, and Amount is the only
+// right-aligned column (numbers align right by convention; everything else
+// stays left-aligned). A row click (or the trailing button) opens the Claim
+// Detail screen — the list itself no longer carries the review actions inline.
 const COLS = [
-  { key: 'ccn', label: 'Claim #', width: 110 },   // not sortable — CCN sort has no meaningful order
-  { key: 'date', label: 'Date', width: 100, sort: 'date' },
-  { key: 'patient', label: 'Patient Name', width: 140, sort: 'patient' },
-  { key: 'supplier', label: 'Supplier', width: 200, sort: 'supplier' },
-  { key: 'amount', label: 'Amount', width: 110, right: true, sort: 'amount' },
-  { key: 'category', label: 'Service Category', width: 130, sort: 'category' },
-  { key: 'description', label: 'Service Description', flex: true, sort: 'description' },
-  { key: 'status', label: 'Status', width: 110, sort: 'status' },
-  { key: 'actions', label: 'Actions', width: 120 },   // not sortable
+  { key: 'ccn', label: 'Claim' },   // not sortable — CCN sort has no meaningful order
+  { key: 'supplier', label: 'Vendor', sort: 'supplier' },
+  { key: 'date', label: 'DOS', sort: 'date' },
+  { key: 'category', label: 'Service Category', sort: 'category' },
+  { key: 'actions', label: '' },   // not sortable
 ]
 const NCOLS = COLS.length
 
 // ─── client-side sort (change 7) ─────────────────────────────────────────────
 const parseMs = (d) => { const t = Date.parse(d); return Number.isNaN(t) ? 0 : t }
-const lastName = (n) => { const p = String(n || '').trim().split(/\s+/); return (p[p.length - 1] || '').toLowerCase() }
-// status order for sorting: Unreviewed → Confirmed → Disputed → Flagged
-function statusRank(claim) {
-  const a = claim.latestAction
-  if (a === 'confirm') return 1
-  if (a === 'dispute') return 2
-  if (a === 'unknown_patient') return 2.5
-  if (a) return 3            // flag_supplier / did_not_order
-  return 0                   // unreviewed / reviewed-no-action
-}
 const CLAIM_COMPARATORS = {
   date: (a, b) => parseMs(a.date) - parseMs(b.date),
-  patient: (a, b) => lastName(a.patient).localeCompare(lastName(b.patient)),
   supplier: (a, b) => (a.supplier || '').localeCompare(b.supplier || ''),
   amount: (a, b) => (a.amount || 0) - (b.amount || 0),
   category: (a, b) => (a.category || '').localeCompare(b.category || ''),
-  description: (a, b) => (a.description || '').localeCompare(b.description || ''),
-  status: (a, b) => statusRank(a) - statusRank(b),
 }
 
-const CLEARED = { category: 'All Categories', dateFrom: '', dateTo: '', supplier: '', claimSearch: '', reviewed: 'all' }
-const DEFAULT_FILTERS = { ...CLEARED, reviewed: 'unreviewed', page: 0 }
+// My Claims is a pure unreviewed queue — the backend query is
+// reviewed:'unreviewed', never a `filters` field. The one exception is an
+// active vendor filter (supFilter, from the dashboard watchlist / Flagged
+// Suppliers hand-off): that view is "this vendor's claims under my NPI", and
+// the flagged claims that put the vendor on the watchlist are by definition
+// already reviewed — an unreviewed-only list would always come up empty. So
+// with supFilter set the query widens to reviewed:'all' and reviewed rows
+// render in their greyed row state.
+const CLEARED = { category: 'All Categories', dateFrom: '', dateTo: '', supplier: '', claimSearch: '' }
+const DEFAULT_FILTERS = CLEARED
 const inputCls = 'bg-white border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-slate-600 outline-none cursor-pointer transition-colors hover:border-slate-300 focus:border-ink focus:ring-2 focus:ring-ink/15'
 
-function last30Iso() {
-  const d = new Date()
-  d.setDate(d.getDate() - 30)
-  return d.toISOString().slice(0, 10)
-}
-
-export default function ClaimsTable({ npi = PHYSICIAN_NPI, onActioned, supplierFilter: incomingSupplier = null, onSupplierFilterChange }) {
+export default function ClaimsTable({ npi = PHYSICIAN_NPI, onActioned, onSelectClaim, supplierFilter: incomingSupplier = null, onSupplierFilterChange, externalSearch = null }) {
   const [filters, setFilters] = useState(DEFAULT_FILTERS)
   const [debouncedSupplier, setDebouncedSupplier] = useState('')
   const [debouncedClaimSearch, setDebouncedClaimSearch] = useState('')
   const [data, setData] = useState({ items: [], total: 0, page: 0, totalPages: 0, totalCount: 0, flaggedCount: 0, confirmedCount: 0 })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [pending, setPending] = useState(null)
-  const [toast, setToast] = useState(null)
   const [supFilter, setSupFilter] = useState(incomingSupplier)   // active supplier filter (exact name)
   const [supSummary, setSupSummary] = useState(null)             // { claims, patients, billed }
   const [unknownOnly, setUnknownOnly] = useState(false)          // dashboard "Unknown Suppliers" intent
   const [sort, setSort] = useState({ key: null, dir: null })     // client-side column sort (null = default)
+  const [rowPending, setRowPending] = useState(null)              // { claimId, action } — quick-action button mid-flight
+  const [actionError, setActionError] = useState(null)            // transient row-action failure message
 
   // asc → desc → cleared. A different column starts fresh at asc.
   function onSort(key) {
     setSort((p) => p.key !== key ? { key, dir: 'asc' } : p.dir === 'asc' ? { key, dir: 'desc' } : { key: null, dir: null })
   }
   const resetSort = () => setSort({ key: null, dir: null })
+
+  // One-tap decision straight from the list (the 5 quick-action icons) — same
+  // ACTIONS/postAction recipe the Claim Detail decision panel uses, just
+  // without the "add context" note. In the unreviewed queue an actioned claim
+  // drops out of `data.items`; in the vendor-filtered view (which shows
+  // reviewed claims too) it flips to its reviewed row state instead.
+  async function handleRowAction(claimId, action) {
+    setRowPending({ claimId, action })
+    try {
+      await postAction(claimId, npi, action)
+      setData((d) => ({
+        ...d,
+        items: supFilter
+          ? d.items.map((c) => (c.id === claimId ? { ...c, reviewed: true, latestAction: action } : c))
+          : d.items.filter((c) => c.id !== claimId),
+      }))
+      onActioned?.()
+    } catch (e) {
+      setActionError(e.message || 'Could not record action. Please try again.')
+      setTimeout(() => setActionError(null), 3500)
+    } finally {
+      setRowPending(null)
+    }
+  }
 
   // Dashboard summary-card navigation (change 5): a card stashes a filter intent in
   // sessionStorage then switches to this tab; read it once on mount and apply it.
@@ -392,9 +251,9 @@ export default function ClaimsTable({ npi = PHYSICIAN_NPI, onActioned, supplierF
       if (raw) { intent = JSON.parse(raw); sessionStorage.removeItem('physician_claims_intent') }
     } catch { /* ignore */ }
     if (!intent) return
-    setSupFilter(null); onSupplierFilterChange?.(null)
+    setSupFilter(intent.supplier || null); onSupplierFilterChange?.(intent.supplier || null)
     setUnknownOnly(!!intent.unknownOnly)
-    setFilters({ ...CLEARED, reviewed: intent.reviewed || 'all', dateFrom: intent.dateFrom || '', dateTo: intent.dateTo || '', page: 0 })
+    setFilters({ ...CLEARED, dateFrom: intent.dateFrom || '', dateTo: intent.dateTo || '' })
   }, [])  // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -407,27 +266,23 @@ export default function ClaimsTable({ npi = PHYSICIAN_NPI, onActioned, supplierF
     return () => clearTimeout(t)
   }, [filters.claimSearch])
 
-  // A supplier picked on the Flagged Suppliers screen arrives via props -> apply it and
-  // switch to "All" so every claim from that supplier shows (not just unreviewed).
+  // A supplier picked on the Flagged Suppliers screen arrives via props -> apply it.
+  // Widens the queue to reviewed:'all' (see CLEARED comment above) so the
+  // vendor's flagged claims are actually visible.
   useEffect(() => {
-    if (incomingSupplier) {
-      setSupFilter(incomingSupplier)
-      setFilters((f) => ({ ...f, reviewed: 'all', page: 0 }))
-    }
+    if (incomingSupplier) setSupFilter(incomingSupplier)
   }, [incomingSupplier])
 
-  // Apply / toggle a supplier filter from a click inside the table.
-  function applySupplier(name) {
-    const next = supFilter === name ? null : name   // clicking the active supplier clears it
-    resetSort()
-    setSupFilter(next)
-    setFilters((f) => ({ ...f, page: 0, reviewed: next ? 'all' : f.reviewed }))
-    onSupplierFilterChange?.(next)
-  }
+  // The navbar search box (Shell) feeds the same claimSearch filter the local
+  // filter bar uses — one-way navbar -> table, reusing the debounce above.
+  useEffect(() => {
+    if (externalSearch == null) return
+    setFilters((f) => (f.claimSearch === externalSearch ? f : { ...f, claimSearch: externalSearch }))
+  }, [externalSearch])
+
   function clearSupplier() {
     resetSort()
     setSupFilter(null)
-    setFilters((f) => ({ ...f, page: 0 }))
     onSupplierFilterChange?.(null)
   }
 
@@ -442,7 +297,7 @@ export default function ClaimsTable({ npi = PHYSICIAN_NPI, onActioned, supplierF
           const res = await getClaimsPage(npi, {
             page: pageN, pageSize: 100, category: filters.category,
             dateFrom: filters.dateFrom, dateTo: filters.dateTo,
-            reviewed: filters.reviewed, supplierSearch: supFilter,
+            reviewed: 'all', supplierSearch: supFilter,
           })
           res.items.forEach((c) => { names.add(c.patient); billed += c.amount || 0 })
           claims = res.total; totalPages = res.totalPages; pageN += 1
@@ -451,95 +306,60 @@ export default function ClaimsTable({ npi = PHYSICIAN_NPI, onActioned, supplierF
       } catch { if (!cancelled) setSupSummary(null) }
     })()
     return () => { cancelled = true }
-  }, [supFilter, npi, filters.category, filters.dateFrom, filters.dateTo, filters.reviewed])
+  }, [supFilter, npi, filters.category, filters.dateFrom, filters.dateTo])
 
+  // Loads every matching claim up front (paging internally at the API's max
+  // page size) instead of a "Show More" button — same as the vendor portal's
+  // claims table, which fetches its whole list in one go and just lets the
+  // page scroll. Renders progressively as each page lands so a large result
+  // set still shows something immediately rather than one long spinner.
   useEffect(() => {
     let cancelled = false
     setLoading(true); setError(null)
-    getClaimsPage(npi, {
-      page: filters.page, pageSize: PAGE_SIZE,
-      category: filters.category, dateFrom: filters.dateFrom, dateTo: filters.dateTo,
-      reviewed: filters.reviewed, supplierSearch: supFilter || debouncedSupplier,
-      claimSearch: debouncedClaimSearch,
-    })
-      .then((res) => {
-        if (!cancelled) {
-          const hydrated = hydrateUndo(res.items)
-          setData((prev) => ({
-            ...res,
-            items: filters.page === 0 ? hydrated : [...prev.items, ...hydrated],
-          }))
+    ;(async () => {
+      let pageN = 0, totalPages = 1, allItems = []
+      try {
+        do {
+          const res = await getClaimsPage(npi, {
+            page: pageN, pageSize: 100,
+            category: filters.category, dateFrom: filters.dateFrom, dateTo: filters.dateTo,
+            reviewed: supFilter ? 'all' : 'unreviewed', supplierSearch: supFilter || debouncedSupplier,
+            claimSearch: debouncedClaimSearch,
+          })
+          if (cancelled) return
+          allItems = [...allItems, ...res.items]
+          setData({ ...res, items: allItems })
           setLoading(false)
-        }
-      })
-      .catch((e) => { if (!cancelled) { setError(e.message); setLoading(false) } })
-    return () => { cancelled = true }
-  }, [npi, filters.page, filters.category, filters.dateFrom, filters.dateTo, filters.reviewed, debouncedSupplier, debouncedClaimSearch, supFilter])
-
-  function handleExport() {
-    exportCSV('claims.csv',
-      ['Claim #', 'Date', 'Patient Name', 'Supplier', 'Amount', 'Category', 'Description', 'Status'],
-      sortedItems.map(c => [c.ccn, fmtDate(c.date), c.patient, c.supplier, c.amount, c.category, c.description, statusFor(c).label])
-    )
-  }
-
-  function setFilter(key, value) { resetSort(); setUnknownOnly(false); setFilters((f) => ({ ...f, [key]: value, page: 0 })) }
-  function setPage(p) { setFilters((f) => ({ ...f, page: p })) }
-  function clearAll() { resetSort(); setUnknownOnly(false); setFilters({ ...CLEARED, page: 0 }); setDebouncedSupplier(''); setDebouncedClaimSearch('') }
-  function toggleLast30() {
-    resetSort()
-    setFilters((f) => ({ ...f, dateFrom: f.dateFrom ? '' : last30Iso(), dateTo: '', page: 0 }))
-  }
-
-  const last30Active = !!filters.dateFrom
-  const isActive = filters.category !== CLEARED.category || filters.dateFrom || filters.dateTo ||
-    filters.supplier || filters.claimSearch || filters.reviewed !== CLEARED.reviewed
-
-  function showToast(msg) { setToast(msg); setTimeout(() => setToast(null), 3500) }
-
-  async function handleAction(claimId, action) {
-    setPending({ claimId, action })
-    try {
-      const res = await postAction(claimId, npi, action)
-      const backend = ACTION_TO_BACKEND[action] || action
-      // store action_id + server created_at so this row can be undone (and the
-      // countdown survives a refresh via localStorage)
-      const backendType = ACTION_TO_BACKEND[action] || action
-      saveUndoEntry(claimId, res?.id, res?.created_at, backendType)
-      setData((d) => ({ ...d, items: d.items.map((c) => (c.id === claimId ? { ...c, reviewed: true, latestAction: backend, actionId: res?.id, actionCreatedAt: res?.created_at, actionType: backendType } : c)) }))
-      if (onActioned) onActioned()
-    } catch (e) {
-      showToast(e.message || 'Could not record action. Please try again.')
-    } finally { setPending(null) }
-  }
-
-  // Returns { ok } | { expired } | { error }. The cell renders the outcome.
-  async function doUndo(claim) {
-    try {
-      const r = await fetch(`${API_BASE}/actions/${claim.actionId}`, { method: 'DELETE', credentials: 'include' })
-      if (r.status === 403) {
-        let body = null
-        try { body = await r.json() } catch { /* ignore */ }
-        if (body?.detail?.error === 'undo_expired') { removeUndoEntry(claim.id); return { expired: true } }
-        return { error: true }
+          totalPages = res.totalPages
+          pageN += 1
+        } while (pageN < totalPages && !cancelled)
+      } catch (e) {
+        if (!cancelled) { setError(e.message); setLoading(false) }
       }
-      if (!r.ok) return { error: true }
-      // restore the row to its unreviewed state (action buttons reappear)
-      removeUndoEntry(claim.id)
-      setData((d) => ({ ...d, items: d.items.map((c) => (c.id === claim.id ? { ...c, reviewed: false, latestAction: null, actionId: null, actionCreatedAt: null } : c)) }))
-      if (onActioned) onActioned()
-      return { ok: true }
-    } catch {
-      return { error: true }
-    }
-  }
+    })()
+    return () => { cancelled = true }
+  }, [npi, filters.category, filters.dateFrom, filters.dateTo, debouncedSupplier, debouncedClaimSearch, supFilter])
 
-  const { items, total, page, totalPages, totalCount, flaggedCount, confirmedCount, disputedCount, unknownCount } = data
-  // "Unknown Suppliers Detected" card: client-side narrow to unknown-patient / new-supplier
-  // claims on the current page (no backend filter exists for this; honest best-effort).
+  function clearAll() { resetSort(); setUnknownOnly(false); setFilters(CLEARED); setDebouncedSupplier(''); setDebouncedClaimSearch('') }
+
+  const isActive = filters.category !== CLEARED.category || filters.dateFrom || filters.dateTo ||
+    filters.supplier || filters.claimSearch
+
+  const { items, total, totalCount } = data
+  // Belt-and-suspenders on top of the backend's reviewed=false filter: some
+  // claims carry a latest_action (fraud/dispute/etc.) while Claim.reviewed is
+  // still false in the data, so a pure server-side filter alone can leak an
+  // already-decided claim back into this unreviewed queue. Drop those here too
+  // — except in the vendor-filtered view, where reviewed claims are the point.
+  const unreviewedItems = supFilter ? items : items.filter((c) => !c.reviewed && !c.latestAction)
+  // "Unknown Suppliers Detected" card: client-side narrow to claims from an
+  // unfamiliar supplier (no backend filter exists for this; honest best-effort).
+  // Only the unknownSupplier flag applies here — an actual unknown_patient
+  // action means the claim's already been decided, so unreviewedItems above
+  // already excludes it.
   const displayItems = unknownOnly
-    ? items.filter((c) => c.unknownSupplier || c.latestAction === 'unknown_patient')
-    : items
+    ? unreviewedItems.filter((c) => c.unknownSupplier)
+    : unreviewedItems
   // Sort the current page client-side; default (no sort) = newest date first.
   const sortedItems = (() => {
     const arr = [...displayItems]
@@ -553,83 +373,8 @@ export default function ClaimsTable({ npi = PHYSICIAN_NPI, onActioned, supplierF
   })()
 
   return (
-    <div className="w-full px-4 sm:px-7 py-4 sm:py-7">
-      {/* Stat cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4 mb-4 sm:mb-5">
-        <KpiTile icon="doc"      label="Total Claims"     value={(totalCount    || 0).toLocaleString()} accent="blue"    loading={loading} />
-        <KpiTile icon="check"    label="Confirmed"        value={(confirmedCount || 0).toLocaleString()} accent="emerald" loading={loading} valueClass={confirmedCount > 0 ? 'text-emerald-600' : ''} />
-        <KpiTile icon="x"        label="Disputed"         value={(disputedCount  || 0).toLocaleString()} accent="rose"    loading={loading} valueClass={disputedCount  > 0 ? 'text-rose-500'    : ''} />
-        <KpiTile icon="flag"     label="Flagged Supplier" value={(flaggedCount   || 0).toLocaleString()} accent="amber"   loading={loading} valueClass={flaggedCount   > 0 ? 'text-amber-600'  : ''} />
-        <KpiTile icon="userx"    label="Unknown Patient"  value={(unknownCount   || 0).toLocaleString()} accent="slate"   loading={loading} valueClass={unknownCount   > 0 ? 'text-slate-600'  : ''} />
-      </div>
-
-      <div className="mc-card">
-        {/* Filter bar */}
-        <div className="px-4 sm:px-5 py-3 sm:py-3.5 border-b border-slate-100 flex flex-wrap items-center gap-2 sm:gap-2.5">
-          {/* Row 1: Review tabs + category + last30 */}
-          <div className="flex items-center gap-0.5 bg-slate-100 rounded-xl p-1 shrink-0">
-            {[['all', 'All'], ['unreviewed', 'Unreviewed'], ['reviewed', 'Reviewed']].map(([id, label]) => (
-              <button key={id} onClick={() => setFilter('reviewed', id)}
-                      className={`px-2.5 sm:px-3.5 py-1.5 text-[12px] font-semibold rounded-lg transition-all duration-150 ${filters.reviewed === id ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-white/60'}`}>
-                {label}
-              </button>
-            ))}
-          </div>
-
-          {/* Divider — hidden on mobile */}
-          <div className="hidden sm:block w-px h-5 bg-slate-200 mx-0.5 shrink-0" />
-
-          {/* Category custom select */}
-          <CustomSelect
-            value={filters.category}
-            onChange={v => setFilter('category', v)}
-            options={CATEGORIES.map(c => ({ value: c, label: c === 'All Categories' ? 'Category: All' : c }))}
-          />
-
-          {/* Last 30 days toggle */}
-          <button onClick={toggleLast30}
-                  className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[12px] sm:text-[13px] font-medium border transition-all duration-150 whitespace-nowrap ${last30Active ? 'bg-[#EEF2F7] border-[#1B3A5C]/20 text-[#1B3A5C]' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50'}`}>
-            <Icon name="clock" size={13} stroke={2} />
-            Last 30 Days
-          </button>
-
-          {/* Search — full width on mobile */}
-          <div className="relative w-full sm:flex-1 sm:min-w-[180px] sm:max-w-xs">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"><Icon name="search" size={13} /></span>
-            <input type="text" placeholder="Search supplier name…" value={filters.supplier} onChange={(e) => setFilter('supplier', e.target.value)}
-                   className="w-full pl-8 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-[13px] font-medium text-slate-700 placeholder-slate-400 outline-none focus:border-[#1B3A5C]/40 focus:ring-2 focus:ring-[#1B3A5C]/10 transition-all hover:border-slate-300" />
-          </div>
-
-          {/* Claim # search — full width on mobile */}
-          <div className="relative w-full sm:flex-1 sm:min-w-[160px] sm:max-w-[220px]">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"><Icon name="search" size={13} /></span>
-            <input type="text" placeholder="Search claim #…" value={filters.claimSearch} onChange={(e) => setFilter('claimSearch', e.target.value)}
-                   className="w-full pl-8 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-[13px] font-medium text-slate-700 placeholder-slate-400 outline-none focus:border-[#1B3A5C]/40 focus:ring-2 focus:ring-[#1B3A5C]/10 transition-all hover:border-slate-300" />
-          </div>
-
-          {/* Right: count + clear + export */}
-          <div className="flex items-center gap-2 sm:gap-3 sm:ml-auto shrink-0 w-full sm:w-auto justify-between sm:justify-start">
-            {isActive && (
-              <button onClick={clearAll}
-                      className="text-[12px] font-semibold text-slate-500 hover:text-rose-500 transition-colors flex items-center gap-1">
-                <Icon name="x" size={11} stroke={2.5} /> Clear all
-              </button>
-            )}
-            <span className="text-[12px] font-semibold text-slate-400 bg-slate-100 px-2.5 py-1 rounded-lg tabular-nums">
-              {supFilter
-                ? `${total.toLocaleString()} / ${(totalCount || 0).toLocaleString()}`
-                : `${total.toLocaleString()} claim${total !== 1 ? 's' : ''}`}
-            </span>
-            <button onClick={handleExport}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#1E3A5F]/20 bg-white text-[#1E3A5F] text-[12px] font-semibold hover:bg-[#EEF2F7] transition-colors ml-auto sm:ml-0">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-              </svg>
-              Export
-            </button>
-          </div>
-        </div>
-
+    <div className="w-full h-full flex flex-col px-4 sm:px-7 py-4 sm:py-7 min-h-0">
+      <div className="mc-card flex flex-col flex-1 min-h-0 overflow-hidden">
         {/* Active supplier filter indicator + patient summary */}
         {supFilter && (
           <>
@@ -646,7 +391,7 @@ export default function ClaimsTable({ npi = PHYSICIAN_NPI, onActioned, supplierF
             </div>
             {supSummary && (
               <div className="px-5 py-2.5 border-b border-slate-100 bg-slate-50 text-xs text-slate-500">
-                {supSummary.claims.toLocaleString()} claims · {supSummary.patients.toLocaleString()} unique patient{supSummary.patients !== 1 ? 's' : ''} · {fmtUSD(supSummary.billed)} total billed by this supplier under your NPI
+                {supSummary.claims.toLocaleString()} claims · {supSummary.patients.toLocaleString()} unique patient{supSummary.patients !== 1 ? 's' : ''} · {fmtUSD(supSummary.billed)} total billed by this vendor under your NPI
               </div>
             )}
           </>
@@ -656,12 +401,19 @@ export default function ClaimsTable({ npi = PHYSICIAN_NPI, onActioned, supplierF
           <div className="px-5 py-3 border-b border-slate-100 bg-amber-50/60 flex items-center justify-between gap-3 text-sm">
             <span className="text-slate-700 flex items-center gap-2.5 min-w-0">
               <span className="flex items-center justify-center w-7 h-7 rounded-lg bg-amber-100 text-amber-600 flex-shrink-0"><Icon name="userx" size={15} stroke={2.1} /></span>
-              Showing unknown-patient / new-supplier claims on this page
+              Showing unknown-patient / new-vendor claims on this page
             </span>
             <button onClick={() => setUnknownOnly(false)}
                     className="flex items-center gap-1.5 text-xs font-semibold text-amber-700 hover:text-rose-600 whitespace-nowrap rounded-lg px-2.5 py-1.5 hover:bg-rose-50 transition-colors flex-shrink-0">
               <Icon name="x" size={13} stroke={2.4} /> Clear filter
             </button>
+          </div>
+        )}
+
+        {actionError && (
+          <div className="px-4 sm:px-5 py-2 border-b border-rose-100 bg-rose-50 flex items-center justify-between gap-3 text-[12.5px] text-rose-600">
+            {actionError}
+            <button onClick={() => setActionError(null)} className="text-rose-400 hover:text-rose-600 flex-shrink-0"><Icon name="x" size={12} stroke={2.4} /></button>
           </div>
         )}
 
@@ -674,7 +426,7 @@ export default function ClaimsTable({ npi = PHYSICIAN_NPI, onActioned, supplierF
         ) : (
           <>
           {/* ── Mobile card view (< sm) ── */}
-          <div className="sm:hidden divide-y divide-slate-100">
+          <div className="sm:hidden flex-1 min-h-0 overflow-y-auto divide-y divide-slate-100">
             {loading ? (
               Array.from({ length: 6 }).map((_, i) => (
                 <div key={i} className="px-4 py-3 space-y-2">
@@ -691,46 +443,37 @@ export default function ClaimsTable({ npi = PHYSICIAN_NPI, onActioned, supplierF
               </div>
             ) : sortedItems.map((claim) => {
               const reviewed = claim.reviewed || !!claim.latestAction
-              const status = statusFor(claim)
-              const rowPending = pending && pending.claimId === claim.id
               return (
-                <div key={claim.id} className={`px-4 py-3 ${reviewed ? 'bg-slate-50/40' : ''}`}>
+                <div key={claim.id} onClick={() => onSelectClaim?.(claim)}
+                     className={`px-3.5 py-2.5 cursor-pointer text-[13px] ${reviewed ? 'bg-slate-50/40' : ''}`}>
                   <div className="flex items-start justify-between gap-2 mb-1.5">
                     <div className="min-w-0">
-                      <span className={`text-sm font-semibold ${claim.patient?.startsWith('Unknown') ? 'text-violet-600' : 'text-slate-900'}`}>{claim.patient}</span>
+                      <span className="text-[11px] font-mono font-semibold text-[#111827] tabular-nums">{claim.ccn}</span>
                       <span className="ml-2 text-[11px] text-slate-400 tabular-nums">{fmtDate(claim.date)}</span>
-                      <div className="text-[10px] font-mono text-slate-400 tabular-nums mt-0.5">{claim.ccn}</div>
                     </div>
-                    <span className={`text-sm font-semibold tabular-nums flex-shrink-0 ${status.cls}`}>{fmtUSD(claim.amount, 2)}</span>
                   </div>
-                  <button onClick={() => applySupplier(claim.supplier)} title={claim.supplier}
-                          className={`text-xs text-left truncate block w-full mb-1.5 ${supplierTierCls(claim)}`}>
+                  <span title={claim.supplier}
+                        className={`text-xs text-left truncate block w-full mb-1.5 ${SUPPLIER_NAME_CLS}`}>
                     {claim.supplier}
-                    {claim.supplierNpi && <span className="ml-1.5 font-mono text-[10px] text-slate-400">NPI {claim.supplierNpi}</span>}
-                  </button>
+                  </span>
                   <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <span className={CATEGORY_CHIP} style={CATEGORY_CHIP_STYLE}>{claim.category}</span>
-                      <span className={`text-[11px] ${status.cls}`}>{status.label}</span>
-                    </div>
-                    <div className="flex-shrink-0">
-                      {reviewed ? (
-                        <ActionedCell key={claim.actionId || claim.id} claim={claim} onUndo={doUndo} />
-                      ) : (
-                        <div className="flex items-center gap-1.5">
-                          {ACTIONS.map((a) => {
-                            const isThis = rowPending && pending.action === a.id
-                            return (
-                              <button key={a.id} onClick={() => handleAction(claim.id, a.id)} disabled={rowPending}
-                                      aria-label={a.label}
-                                      className={`w-7 h-7 rounded-lg ring-1 ring-inset transition-all duration-150 inline-flex items-center justify-center flex-shrink-0 active:scale-95 disabled:opacity-40 ${a.cls}`}>
-                                {isThis ? <Spinner /> : <Icon name={a.icon} size={14} stroke={2.4} />}
-                              </button>
-                            )
-                          })}
-                        </div>
-                      )}
-                    </div>
+                    <CategoryTag category={claim.category} />
+                    {reviewed ? (
+                      <button onClick={(e) => { e.stopPropagation(); onSelectClaim?.(claim) }} className="view-btn">View →</button>
+                    ) : (
+                      <div className="flex items-center gap-1.5 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                        {ACTIONS.map((a) => {
+                          const isThis = rowPending?.claimId === claim.id && rowPending.action === a.id
+                          return (
+                            <button key={a.id} onClick={() => handleRowAction(claim.id, a.id)} disabled={!!rowPending}
+                                    title={a.desc} aria-label={a.label}
+                                    className={`w-7 h-7 rounded-lg ring-1 ring-inset transition-all duration-150 inline-flex items-center justify-center flex-shrink-0 active:scale-95 disabled:opacity-40 ${a.cls}`}>
+                              {isThis ? <Spinner /> : <Icon name={a.icon} size={14} stroke={2.4} />}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
                   </div>
                 </div>
               )
@@ -738,26 +481,21 @@ export default function ClaimsTable({ npi = PHYSICIAN_NPI, onActioned, supplierF
           </div>
 
           {/* ── Desktop table view (sm+) ── */}
-          <div className="hidden sm:block overflow-x-auto">
-            <table className="w-full" style={{ minWidth: 700 }}>
-              <colgroup>
-                {COLS.map((c) => (
-                  <col key={c.key} style={c.flex ? { width: '100%' } : c.width ? { width: `${c.width}px` } : undefined} />
-                ))}
-              </colgroup>
-              <thead>
-                <tr className="border-b border-slate-100 bg-slate-50/60">
+          <div className="hidden sm:block flex-1 min-h-0 overflow-auto">
+            <table className="w-full text-[13px]" style={{ minWidth: 700 }}>
+              <thead className="sticky top-0 z-10">
+                <tr>
                   {COLS.map((c) => {
                     const sortable = !!c.sort
                     const active = sortable && sort.key === c.sort
                     return (
                       <th key={c.key} onClick={sortable ? () => onSort(c.sort) : undefined}
-                          className={`th whitespace-nowrap ${c.right ? 'text-right' : ''} ${sortable ? 'cursor-pointer select-none group' : ''}`}>
-                        <span className={`inline-flex items-center gap-1 font-bold ${sortable ? 'text-slate-700 group-hover:text-[#1E3A5F] transition-colors' : ''}`}>
+                          className={`${THEAD_TH} ${c.right ? 'text-right' : ''} ${sortable ? 'cursor-pointer select-none group' : ''}`}>
+                        <span className={`inline-flex items-center gap-1 ${sortable ? 'group-hover:text-[#1E3A5F] transition-colors' : ''}`}>
                           {c.label}
                           {sortable && (active
                             ? <span className="text-[#1E3A5F] font-bold">{sort.dir === 'asc' ? '↑' : '↓'}</span>
-                            : <span className="text-slate-400 group-hover:text-[#1E3A5F] transition-colors">↕</span>)}
+                            : <span className="text-slate-300 group-hover:text-[#1E3A5F] transition-colors">↕</span>)}
                         </span>
                       </th>
                     )
@@ -778,53 +516,50 @@ export default function ClaimsTable({ npi = PHYSICIAN_NPI, onActioned, supplierF
                 ) : sortedItems.map((claim) => {
                   const reviewed = claim.reviewed || !!claim.latestAction
                   const rowCls = reviewed ? 'bg-slate-50/40' : 'hover:bg-[#F9FAFB]'
-                  const status = statusFor(claim)
-                  const rowPending = pending && pending.claimId === claim.id
                   return (
-                    <tr key={claim.id} className={`transition-colors duration-100 ${rowCls}`}>
-                      {/* Claim # — short CMS-style CCN, not the internal UUID */}
-                      <td className={`${CELL} text-xs font-mono tabular-nums whitespace-nowrap text-[#6B7280]`}>{claim.ccn}</td>
-                      {/* Date — gray, context not primary (change 2: no left border) */}
-                      <td className={`${CELL} text-xs tabular-nums whitespace-nowrap text-[#6B7280]`}>{fmtDate(claim.date)}</td>
-                      {/* Patient Name — gray-900, weight 400 (violet kept for Unknown) */}
-                      <td className={CELL}><span className={`text-sm font-normal ${claim.patient?.startsWith('Unknown') ? 'text-violet-600' : 'text-[#111827]'}`}>{claim.patient}</span></td>
-                      {/* Supplier — three-tier color (change 5) */}
+                    <tr key={claim.id} onClick={() => onSelectClaim?.(claim)}
+                        className={`cursor-pointer transition-colors duration-100 ${rowCls}`}>
+                      {/* Claim — short CMS-style CCN, not the internal UUID */}
+                      <td className={`${CELL} text-sm font-mono font-semibold tabular-nums whitespace-nowrap text-[#111827]`}>{claim.ccn}</td>
+                      {/* Supplier — plain body text */}
                       <td className={CELL}>
-                        <button onClick={() => applySupplier(claim.supplier)} title={claim.supplier}
-                                className={`text-sm text-left hover:underline w-full truncate block ${supplierTierCls(claim)}`}
-                                style={{ maxWidth: '190px' }}>
+                        <span title={claim.supplier}
+                              className={`text-sm text-left w-full truncate block ${SUPPLIER_NAME_CLS}`}
+                              style={{ maxWidth: '190px' }}>
                           {claim.supplier}
-                        </button>
-                        {claim.supplierNpi && (
-                          <div className="font-mono text-[10px] text-slate-400 truncate" style={{ maxWidth: '190px' }}>NPI {claim.supplierNpi}</div>
-                        )}
+                        </span>
                       </td>
-                      {/* Amount — gray-900, weight 500, tabular */}
-                      <td className={`${CELL} text-right tabular-nums font-medium text-[#111827]`}>{fmtUSD(claim.amount, 2)}</td>
-                      {/* Service Category — single muted-blue chip */}
-                      <td className={CELL}><span className={CATEGORY_CHIP} style={CATEGORY_CHIP_STYLE}>{claim.category}</span></td>
-                      {/* Service Description — gray-500, 13px, truncate (change 3) */}
-                      <td className={`${CELL} text-[13px] font-normal text-[#6B7280]`} style={{ maxWidth: 0 }}>
-                        <div className="overflow-hidden text-ellipsis whitespace-nowrap" title={claim.description}>{claim.description}</div>
-                      </td>
-                      {/* Status — plain colored text, 13px */}
-                      <td className={`${CELL} text-[13px] ${status.cls}`}>{status.label}</td>
-                      {/* Actions */}
-                      <td className={CELL}>
+                      {/* Date — gray, context not primary */}
+                      <td className={`${CELL} text-xs tabular-nums whitespace-nowrap text-[#6B7280]`}>{fmtDate(claim.date)}</td>
+                      {/* Service Category — light-glass pill, one fixed color + icon per category */}
+                      <td className={CELL}><CategoryTag category={claim.category} /></td>
+                      {/* Row action — quick 5-action icons for an unreviewed claim
+                          (one-tap decision, no need to open Claim Detail); a
+                          reviewed claim still links through to the full record. */}
+                      <td className={`${CELL} text-right`} onClick={(e) => e.stopPropagation()}>
                         {reviewed ? (
-                          <ActionedCell key={claim.actionId || claim.id} claim={claim} onUndo={doUndo} />
+                          <div className="flex justify-end">
+                            <button onClick={() => onSelectClaim?.(claim)} className="view-btn">View →</button>
+                          </div>
                         ) : (
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center justify-end gap-1.5">
                             {ACTIONS.map((a) => {
-                              const isThis = rowPending && pending.action === a.id
+                              const isThis = rowPending?.claimId === claim.id && rowPending.action === a.id
+                              const tint = ACTION_TINT[a.id]
                               return (
-                                <ActionTooltip key={a.id} action={a}>
-                                  <button onClick={() => handleAction(claim.id, a.id)} disabled={rowPending}
+                                <div key={a.id} className="relative group/act">
+                                  <button onClick={() => handleRowAction(claim.id, a.id)} disabled={!!rowPending}
                                           aria-label={a.label}
                                           className={`w-7 h-7 rounded-lg ring-1 ring-inset transition-all duration-150 inline-flex items-center justify-center flex-shrink-0 hover:-translate-y-0.5 hover:shadow-md active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 ${a.cls}`}>
                                     {isThis ? <Spinner /> : <Icon name={a.icon} size={15} stroke={2.4} />}
                                   </button>
-                                </ActionTooltip>
+                                  {/* Tooltip — same tone as its button (replaces the browser's black title popup) */}
+                                  <div className="pointer-events-none absolute bottom-full right-0 mb-1.5 z-30 w-max max-w-[210px] rounded-lg px-2.5 py-1.5 text-left opacity-0 translate-y-0.5 transition-all duration-100 group-hover/act:opacity-100 group-hover/act:translate-y-0"
+                                       style={{ background: tint.bg, border: `1px solid ${tint.border}`, boxShadow: '0 6px 16px rgba(15,23,42,.12)' }}>
+                                    <div className="text-[11px] font-bold whitespace-nowrap" style={{ color: tint.icon }}>{a.label}</div>
+                                    <div className="text-[10.5px] leading-snug mt-0.5" style={{ color: tint.icon, opacity: .8 }}>{a.desc}</div>
+                                  </div>
+                                </div>
                               )
                             })}
                           </div>
@@ -837,30 +572,343 @@ export default function ClaimsTable({ npi = PHYSICIAN_NPI, onActioned, supplierF
             </table>
 
           </div>
-
-          {/* Pagination — shared by both mobile card view and desktop table */}
-          {!loading && total > 0 && (
-            <div className="flex items-center justify-between px-4 sm:px-5 py-3 border-t border-slate-100 bg-white">
-              <span className="text-[11px] text-slate-400 tabular-nums">
-                Showing <span className="font-semibold text-slate-500">{data.items.length.toLocaleString()}</span> of <span className="font-semibold text-slate-500">{total.toLocaleString()}</span> claims
-              </span>
-              {page < totalPages - 1 && (
-                <button onClick={() => setPage(page + 1)}
-                        className="text-[12px] font-semibold text-[#1B3A5C] px-4 py-2 rounded-lg border border-[#1B3A5C]/20 bg-[#EEF2F7] hover:bg-[#dde6f0] transition-colors cursor-pointer">
-                  Show More <span className="text-slate-400 font-normal">+{Math.min(PAGE_SIZE, total - data.items.length)}</span>
-                </button>
-              )}
-            </div>
-          )}
           </>
         )}
       </div>
+    </div>
+  )
+}
 
-      {toast && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-white ring-1 ring-rose-200 text-rose-600 text-sm font-medium px-4 py-3 rounded-xl shadow-lg">
-          <Icon name="alertTri" size={15} />{toast}
+// ─── Claim Detail ───────────────────────────────────────────────────────────
+// Full click-through screen for a single claim — replaces the old inline
+// per-row action icons. Shows what the row already told you (claim/status),
+// what it didn't (patient, full service, timeline of what's happened so far),
+// and — while still undecided — the one decision to make on it.
+
+// Privacy-masked patient display ("John Smith" -> "J*** S***") — every other
+// claim-notification surface in the app (vendor/payer dispute views) shows a
+// partially-masked patient name; this matches that convention.
+function maskPatientName(name) {
+  if (!name) return '—'
+  const parts = name.trim().split(/\s+/)
+  if (parts.length === 1) return `${(parts[0][0] || '').toUpperCase()}.`
+  return `${(parts[0][0] || '').toUpperCase()}. ${parts.slice(1).join(' ')}`
+}
+
+const DECISION_LABEL = {
+  confirm: 'Confirmed',
+  dispute: 'Disputed',
+  fraud: 'Reported fraud',
+  flag_supplier: 'Flagged vendor',
+  unknown_patient: 'Reassigned patient',
+  deceased_patient: 'Marked patient deceased',
+  did_not_order: 'Reported did-not-order',
+}
+
+function ClaimTimeline({ claim, actions }) {
+  const submittedAt = claim.createdAt || claim.date
+  const rows = [{ label: 'Claim submitted by vendor', at: submittedAt }]
+  if (actions.length === 0) {
+    rows.push({ label: 'Awaiting your review', at: submittedAt, detail: 'This claim was filed under your NPI and needs a decision.' })
+  } else {
+    actions.forEach((a) => rows.push({ label: DECISION_LABEL[a.actionType] || a.actionType, at: a.createdAt, note: a.note }))
+  }
+  return (
+    <div>
+      {rows.map((t, i) => {
+        const isLast = i === rows.length - 1
+        return (
+          <div key={i} className="flex gap-3.5" style={{ marginBottom: isLast ? 0 : 14 }}>
+            <div className="flex flex-col items-center flex-shrink-0 pt-1" style={{ width: 12 }}>
+              <div className="rounded-full flex-shrink-0" style={{ width: 12, height: 12, background: isLast ? '#0A1F3D' : '#5B84C4' }} />
+              {!isLast && <div className="mt-1" style={{ width: 2, flex: 1, background: '#E1E6EE' }} />}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-[10.5px] font-semibold text-slate-400 mb-1.5">{fmtDateTime(t.at)}</div>
+              <div className="rounded-[10px] border border-slate-100 bg-slate-50 px-3.5 py-3">
+                <div className="text-[13px] font-bold text-slate-900">{t.label}</div>
+                {t.detail && <p className="text-[12px] text-slate-500 mt-1">{t.detail}</p>}
+                {t.note && <p className="text-[12px] text-slate-500 italic mt-1">"{t.note}"</p>}
+              </div>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+export function ClaimDetailScreen({ claim, npi = PHYSICIAN_NPI, onActioned }) {
+  const [localClaim, setLocalClaim] = useState(claim)
+  const [actions, setActions] = useState([])
+  const [loadingActions, setLoadingActions] = useState(true)
+  const [selectedAction, setSelectedAction] = useState(null)
+  const [note, setNote] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState(null)
+  const [now, setNow] = useState(() => Date.now())
+  const [supplierStats, setSupplierStats] = useState(null)         // { totalCount, confirmedCount, flaggedCount, fraudCount }
+  const [supplierStatsLoading, setSupplierStatsLoading] = useState(true)
+
+  useEffect(() => { setLocalClaim(claim); setSelectedAction(null); setNote(''); setSubmitError(null) }, [claim?.id])
+
+  useEffect(() => {
+    if (!claim?.id) return
+    let cancelled = false
+    setLoadingActions(true)
+    getClaimActions(npi, claim.id)
+      .then((rows) => { if (!cancelled) setActions(rows) })
+      .catch(() => { if (!cancelled) setActions([]) })
+      .finally(() => { if (!cancelled) setLoadingActions(false) })
+    return () => { cancelled = true }
+  }, [claim?.id, npi])
+
+  // Supplier snapshot — every claim this exact supplier has under this NPI
+  // (any review status), tallied client-side same as the claims list's own
+  // per-supplier summary (no backend aggregate respects supplier_search).
+  useEffect(() => {
+    const supplierName = claim?.supplier
+    if (!supplierName) { setSupplierStats(null); setSupplierStatsLoading(false); return }
+    let cancelled = false
+    setSupplierStatsLoading(true)
+    ;(async () => {
+      let pageN = 0, totalPages = 1, totalCount = 0, confirmedCount = 0, flaggedCount = 0, fraudCount = 0
+      try {
+        do {
+          const res = await getClaimsPage(npi, { page: pageN, pageSize: 100, supplierSearch: supplierName })
+          if (cancelled) return
+          totalCount = res.total
+          res.items.forEach((c) => {
+            if (c.latestAction === 'confirm') confirmedCount += 1
+            if (c.latestAction === 'fraud') fraudCount += 1
+            if (c.hasRuleFlag) flaggedCount += 1
+          })
+          totalPages = res.totalPages
+          pageN += 1
+        } while (pageN < totalPages && !cancelled)
+        if (!cancelled) setSupplierStats({ totalCount, confirmedCount, flaggedCount, fraudCount })
+      } catch { if (!cancelled) setSupplierStats(null) }
+      finally { if (!cancelled) setSupplierStatsLoading(false) }
+    })()
+    return () => { cancelled = true }
+  }, [claim?.supplier, npi])
+
+  const latest = actions[actions.length - 1] || null
+  const remaining = latest ? secondsRemaining(latest.createdAt, now, latest.actionType) : 0
+  const canUndo = !!latest && remaining > 0
+
+  useEffect(() => {
+    if (!canUndo) return
+    const id = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [canUndo])
+
+  if (!claim) return <div className="px-7 py-8 text-slate-400">No claim selected.</div>
+
+  const reviewed = localClaim.reviewed || !!localClaim.latestAction
+  const status = statusFor(localClaim)
+  const receivedAt = localClaim.createdAt
+  const daysAgo = receivedAt ? Math.floor((Date.now() - (parseServerTime(receivedAt) || 0)) / 86400000) : null
+  const daysAgoLabel = daysAgo == null ? '' : daysAgo <= 0 ? 'today' : daysAgo === 1 ? '1 day ago' : `${daysAgo} days ago`
+
+  const confirmedRate = supplierStats && supplierStats.totalCount > 0
+    ? ((supplierStats.confirmedCount / supplierStats.totalCount) * 100).toFixed(1)
+    : null
+  // Plain computed sentence from the stats above — not a fabricated AI output.
+  const supplierInsightText = supplierStats && supplierStats.totalCount > 0
+    ? `${localClaim.supplier} has ${supplierStats.confirmedCount} of ${supplierStats.totalCount} claims confirmed under your NPI, ${
+        supplierStats.fraudCount > 0
+          ? `with ${supplierStats.fraudCount} prior fraud report${supplierStats.fraudCount === 1 ? '' : 's'}`
+          : 'no prior fraud reports'
+      }.`
+    : null
+
+  async function submitDecision() {
+    if (!selectedAction) return
+    setSubmitting(true); setSubmitError(null)
+    try {
+      const res = await postAction(localClaim.id, npi, selectedAction, note.trim() || null)
+      const backendType = ACTION_TO_BACKEND[selectedAction] || selectedAction
+      setLocalClaim((c) => ({ ...c, reviewed: true, latestAction: backendType }))
+      setActions((a) => [...a, { id: res?.id, actionType: backendType, note: note.trim(), createdAt: res?.created_at || new Date().toISOString() }])
+      setSelectedAction(null); setNote('')
+      onActioned?.()
+    } catch (e) {
+      setSubmitError(e.message || 'Could not record your decision. Please try again.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function handleUndo() {
+    if (!latest?.id) return
+    setSubmitting(true)
+    try {
+      const r = await fetch(`${API_BASE}/actions/${latest.id}`, { method: 'DELETE', credentials: 'include' })
+      if (r.ok) {
+        setActions((a) => a.slice(0, -1))
+        setLocalClaim((c) => ({ ...c, reviewed: false, latestAction: null }))
+        onActioned?.()
+      }
+    } catch { /* leave the banner up — the countdown will just expire */ }
+    finally { setSubmitting(false) }
+  }
+
+  const decisionPanel = !reviewed ? (
+    <>
+      <div className="flex items-center gap-2.5 mb-3.5">
+        <span className="w-[22px] h-[22px] rounded-full bg-[#0A1F3D] text-white text-[11px] font-bold flex items-center justify-center flex-shrink-0">1</span>
+        <span className="text-[13.5px] font-bold text-slate-900">Choose your decision</span>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        {ACTIONS.map((a) => {
+          const tint = ACTION_TINT[a.id]
+          const selected = selectedAction === a.id
+          return (
+            <button key={a.id} onClick={() => setSelectedAction(a.id)} title={a.desc}
+                    className={`rounded-xl border-[1.5px] py-3.5 px-2 text-center transition-colors cursor-pointer ${selected ? '' : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'}`}
+                    style={selected ? { borderColor: tint.border, background: tint.bg } : undefined}>
+              <span className="w-8 h-8 rounded-full flex items-center justify-center mx-auto mb-2" style={{ background: tint.bg }}>
+                <Icon name={a.icon} size={15} style={{ color: tint.icon }} />
+              </span>
+              <span className="text-[11.5px] font-bold text-slate-800">{a.label}</span>
+            </button>
+          )
+        })}
+      </div>
+
+      <div className="h-px bg-slate-100 my-4" />
+
+      <div className="flex items-center gap-2.5 mb-3">
+        <span className="w-[22px] h-[22px] rounded-full bg-[#0A1F3D] text-white text-[11px] font-bold flex items-center justify-center flex-shrink-0">2</span>
+        <span className="text-[13.5px] font-bold text-slate-900">Add context (optional)</span>
+      </div>
+      <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} placeholder="Add any context for this decision…"
+                className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-700 outline-none focus:border-ink focus:ring-2 focus:ring-ink/15 resize-y" />
+
+      {submitError && <div className="mt-3 text-[12.5px] text-rose-600">{submitError}</div>}
+
+      <button onClick={submitDecision} disabled={!selectedAction || submitting}
+              className="mt-4 w-full inline-flex items-center justify-center gap-1.5 text-sm font-semibold text-white rounded-xl px-4 py-2.5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              style={{ backgroundColor: '#1B3A5C' }}>
+        {submitting && <Spinner />} Submit decision →
+      </button>
+    </>
+  ) : (
+    <>
+      <div className="flex items-center gap-2 flex-wrap">
+        {actionedBadge}
+        <span className="text-[13px] text-slate-500">Recorded as {status.label}</span>
+      </div>
+      {canUndo && (
+        <button onClick={handleUndo} disabled={submitting}
+                className={`mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold ring-1 ring-inset transition-all duration-150 ${undoTimerCls(remaining, latest.actionType)}`}>
+          {submitting ? <Spinner /> : undoArrow}
+          Undo · {fmtRemaining(remaining)}
+        </button>
+      )}
+    </>
+  )
+
+  return (
+    <div className="h-full flex flex-col min-h-0 px-4 sm:px-7 py-5 gap-4">
+      {/* Header — claim card + supplier snapshot, side by side */}
+      <div className="flex-shrink-0 grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-4">
+        <div className="mc-card p-5">
+          <h2 className="text-[17px] font-bold text-slate-900 mb-2.5">Claim {localClaim.ccn}</h2>
+          <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11.5px] font-semibold ${status.cls}`}>{status.label}</span>
+          {receivedAt && (
+            <div className="text-[12px] text-slate-400 mt-3">Received {fmtDate(String(receivedAt).slice(0, 10))} · {daysAgoLabel}</div>
+          )}
+        </div>
+
+        <div className="mc-card p-5">
+          <div className="flex items-center gap-2.5 mb-4">
+            <span className="w-8 h-8 rounded-lg bg-slate-100 text-slate-500 flex items-center justify-center flex-shrink-0">
+              <Icon name="suppliers" size={16} stroke={1.8} />
+            </span>
+            <div className="min-w-0">
+              <div className="font-bold text-[14px] text-slate-900 truncate">{localClaim.supplier}</div>
+              <div className="text-[11px] text-slate-400">Vendor snapshot</div>
+            </div>
+          </div>
+          <div className="flex gap-6">
+            <div className="flex-1 min-w-0">
+              <div className="text-[19px] font-extrabold text-slate-900 tabular-nums">{supplierStatsLoading ? '—' : (supplierStats?.totalCount ?? '—')}</div>
+              <div className="text-[10.5px] text-slate-400 mt-1">Total claims</div>
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[19px] font-extrabold text-emerald-600 tabular-nums">{confirmedRate != null ? `${confirmedRate}%` : '—'}</div>
+              <div className="text-[10.5px] text-slate-400 mt-1">Confirmed</div>
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[19px] font-extrabold text-slate-900 tabular-nums">{supplierStatsLoading ? '—' : (supplierStats?.flaggedCount ?? '—')}</div>
+              <div className="text-[10.5px] text-slate-400 mt-1">Flagged</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Supplier insight — a plain sentence computed from the snapshot above, not a fabricated AI output */}
+      {supplierInsightText && (
+        <div className="flex-shrink-0 rounded-2xl p-4 sm:p-5 flex gap-3.5 items-start"
+             style={{ background: 'linear-gradient(180deg, #EAF1F5, #fff 65%)' }}>
+          <span className="w-8 h-8 rounded-[10px] flex-shrink-0 flex items-center justify-center"
+                style={{ background: 'linear-gradient(180deg,#3E7FA6,#2E6B8F)' }}>
+            <Icon name="sparkle" size={15} className="text-white" />
+          </span>
+          <div className="min-w-0">
+            <div className="text-[10.5px] font-bold uppercase tracking-wide text-[#2E6B8F] mb-1">Vendor Insight</div>
+            <div className="text-[13px] text-slate-700 leading-relaxed">{supplierInsightText}</div>
+          </div>
         </div>
       )}
+
+      {/* Claim Details + Timeline (left) alongside the decision panel (right,
+          height-matched to the left column). The Timeline absorbs the
+          remaining height and scrolls internally (long multi-action
+          histories don't push the page down), so the whole screen stays one
+          fixed page — same idea as before, just restored to the reference's
+          two-column shape instead of a single vertical stack. */}
+      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-4 items-stretch">
+        <div className="flex flex-col gap-4 lg:h-full lg:min-h-0">
+          {/* Claim details */}
+          <div className="mc-card p-5 lg:shrink-0">
+            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-3.5">Claim Details</div>
+            <div className="grid grid-cols-2 gap-x-6 gap-y-4 text-[13px]">
+              {[
+                ['Patient', maskPatientName(localClaim.patient)],
+                ['Service', localClaim.description || '—'],
+                ['Service Category', localClaim.category || '—'],
+                ['DOS', fmtDate(localClaim.date)],
+                ['Vendor', localClaim.supplierNpi ? `${localClaim.supplier} — NPI ${localClaim.supplierNpi}` : localClaim.supplier],
+              ].map(([label, value]) => (
+                <div key={label} className="min-w-0">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">{label}</div>
+                  <div className="font-medium text-slate-800 truncate" title={value}>{value}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Timeline */}
+          <div className="mc-card p-5 lg:flex-1 lg:min-h-0 flex flex-col overflow-hidden">
+            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-3.5 flex-shrink-0">Timeline</div>
+            <div className="flex-1 min-h-0 overflow-y-auto pr-1">
+              {loadingActions ? (
+                <div className="text-[12px] text-slate-400">Loading…</div>
+              ) : (
+                <ClaimTimeline claim={localClaim} actions={actions} />
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Decision panel */}
+        <div className="mc-card p-5 lg:h-full lg:min-h-0 overflow-y-auto">
+          {decisionPanel}
+        </div>
+      </div>
     </div>
   )
 }

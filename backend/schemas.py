@@ -32,6 +32,17 @@ class ClaimResponse(BaseModel):
     flags: list[str] = []
     severities: list[str] = []
     flag_descriptions: list[str] = []
+    created_at: Optional[datetime] = None   # when the claim was received, for the detail screen's timeline
+
+    class Config:
+        from_attributes = True
+
+
+class ClaimActionResponse(BaseModel):
+    id: str
+    action_type: str
+    note: Optional[str] = None
+    created_at: datetime
 
     class Config:
         from_attributes = True
