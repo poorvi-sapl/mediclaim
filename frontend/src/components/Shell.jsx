@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, Fragment } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getNpiRiskList, getSuppliers } from '../api'
+import { riskBand } from '../lib/risk'
 import { Icon } from './ui'
 import { Shield, Check } from 'lucide-react'
 
@@ -129,6 +130,7 @@ function NotifBell({ count = 0, onClick, title = 'Notifications', variant }) {
 
 function UserChip({ user, subtitle, infoRows, profileStats, profileActions, profileContacts, onLogout, variant, compact = false }) {
   const [open, setOpen] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
   const ref = useRef(null)
   const isVendor = variant === 'vendor'
 
@@ -136,7 +138,7 @@ function UserChip({ user, subtitle, infoRows, profileStats, profileActions, prof
     .split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase()
 
   useEffect(() => {
-    function onDoc(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    function onDoc(e) { if (ref.current && !ref.current.contains(e.target)) { setOpen(false); setMenuOpen(false) } }
     document.addEventListener('mousedown', onDoc)
     return () => document.removeEventListener('mousedown', onDoc)
   }, [])
@@ -149,7 +151,7 @@ function UserChip({ user, subtitle, infoRows, profileStats, profileActions, prof
         // avatar + stacked name/sub, no border/shadow/chevron wrapper.
         // `compact` (navbar mode) drops the name/sub — avatar only, detail
         // lives in the profile panel opened on click.
-        <button onClick={() => setOpen(v => !v)} className="profile-chip">
+        <button onClick={() => setMenuOpen(v => !v)} className="profile-chip">
           <div className="profile-avatar">{initials}</div>
           {!compact && (
             <div className="hidden sm:flex flex-col leading-tight text-left">
@@ -159,7 +161,7 @@ function UserChip({ user, subtitle, infoRows, profileStats, profileActions, prof
           )}
         </button>
       ) : (
-        <button onClick={() => setOpen(v => !v)}
+        <button onClick={() => setMenuOpen(v => !v)}
                 className="flex items-center gap-2.5 pl-1.5 sm:pr-3 pr-1.5 py-1.5 rounded-xl border border-slate-200/80 bg-white shadow-sm hover:shadow-md hover:border-slate-300 transition-all duration-150">
           {/* Avatar + online dot */}
           <div className="relative flex-shrink-0">
@@ -185,21 +187,23 @@ function UserChip({ user, subtitle, infoRows, profileStats, profileActions, prof
         </button>
       )}
 
-      {/* Logout button — desktop only (mobile uses the dropdown). Compact/navbar
-          mode skips this entirely — Sign out already lives inside the profile panel. */}
-      {isVendor ? (
-        !compact && (
-          <div className="hidden sm:block">
-            <button onClick={onLogout} title="Sign out" className="gicon-btn">
-              <Icon name="logout" size={14} />
-            </button>
-          </div>
-        )
-      ) : (
-        <button onClick={onLogout} title="Sign out"
-                className="hidden sm:flex w-8 h-8 rounded-lg border border-slate-200/80 bg-white shadow-sm hover:bg-rose-50 hover:border-rose-200 items-center justify-center text-slate-400 hover:text-rose-500 transition-all duration-150">
-          <Icon name="logout" size={14} />
-        </button>
+      {/* Small dropdown: Profile (opens the detail panel/modal below) + Logout.
+          Shared by the physician chip and the vendor chip — replaces the chip
+          opening the profile card directly. */}
+      {menuOpen && (
+        <div className="absolute top-full right-0 mt-2 w-52 bg-white rounded-2xl shadow-lg ring-1 ring-slate-100 py-2 z-50">
+          <button onClick={() => { setMenuOpen(false); setOpen(true) }}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-[14px] font-medium text-slate-600 hover:bg-slate-50 transition-colors">
+            <Icon name="user" size={17} className="text-slate-400" />
+            Profile
+          </button>
+          <div className="my-1 border-t border-slate-100" />
+          <button onClick={() => { setMenuOpen(false); onLogout?.() }}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-[14px] font-semibold text-[#8A423D] hover:bg-[#F7EBEA] transition-colors">
+            <Icon name="logout" size={17} />
+            Logout
+          </button>
+        </div>
       )}
 
       {/* Centered modal — vendor's "Provider profile panel" moodboard recipe: identity
@@ -415,7 +419,9 @@ function Navbar({ navItems, activeId, onNavigate, brandName, searchValue, onSear
 }
 
 function ScoreBadge({ score = 0 }) {
-  const color = score > 80 ? '#e11d48' : score > 60 ? '#ea580c' : score > 30 ? '#d97706' : '#059669'
+  // Was a separate rose/orange/amber/emerald palette; now the same four band
+  // colors every other risk indicator in the payer UI uses.
+  const { color } = riskBand(score)
   return <span className="text-[11px] font-bold tabular-nums px-2 py-0.5 rounded-md flex-shrink-0" style={{ color, backgroundColor: `${color}1A` }}>{score}</span>
 }
 
@@ -531,10 +537,11 @@ function Section({ label, value }) {
 // vars (navy palette, fonts) without duplicating them for this non-vendor portal.
 function ProfileMenu({ user, onLogout, compact = false }) {
   const [open, setOpen] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
   const ref = useRef(null)
 
   useEffect(() => {
-    function onDoc(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    function onDoc(e) { if (ref.current && !ref.current.contains(e.target)) { setOpen(false); setMenuOpen(false) } }
     document.addEventListener('mousedown', onDoc)
     return () => document.removeEventListener('mousedown', onDoc)
   }, [])
@@ -549,7 +556,7 @@ function ProfileMenu({ user, onLogout, compact = false }) {
 
   return (
     <div ref={ref} className="relative flex items-center gap-3">
-      <button onClick={() => setOpen((v) => !v)}
+      <button onClick={() => setMenuOpen((v) => !v)}
               className={compact ? 'flex items-center' : 'flex items-center gap-2.5 px-2 py-1.5 rounded-xl hover:bg-slate-50 transition-colors'}>
         <div className="w-10 h-10 rounded-full flex items-center justify-center text-white text-[13px] font-bold ring-2 ring-[#1E3A5F]/20 shadow-sm" style={{ backgroundColor: '#1E3A5F' }}>{initials}</div>
         {!compact && (
@@ -559,13 +566,24 @@ function ProfileMenu({ user, onLogout, compact = false }) {
           </div>
         )}
       </button>
-      {/* Compact (navbar) mode drops the separate logout button — Sign out
-          already lives inside the profile panel below. */}
-      {!compact && (
-        <button onClick={onLogout} title="Sign out"
-                className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-700 transition-colors">
-          <Icon name="logout" size={15} />
-        </button>
+
+      {/* Small dropdown: Profile (opens the detail panel below) + Logout.
+          Replaces the old behavior where clicking the avatar opened the full
+          profile card directly. */}
+      {menuOpen && (
+        <div className="absolute top-full right-0 mt-2 w-52 bg-white rounded-2xl shadow-lg ring-1 ring-slate-100 py-2 z-50">
+          <button onClick={() => { setMenuOpen(false); setOpen(true) }}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-[14px] font-medium text-slate-600 hover:bg-slate-50 transition-colors">
+            <Icon name="user" size={17} className="text-slate-400" />
+            Profile
+          </button>
+          <div className="my-1 border-t border-slate-100" />
+          <button onClick={() => { setMenuOpen(false); onLogout?.() }}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-[14px] font-semibold text-[#8A423D] hover:bg-[#F7EBEA] transition-colors">
+            <Icon name="logout" size={17} />
+            Logout
+          </button>
+        </div>
       )}
 
       {/* Centered modal — same recipe/classes as the vendor portal's provider
@@ -741,18 +759,18 @@ function PlainNavbar({ navItems, activeId, onNavigate,
   )
   return (
     <header className={`flex items-center justify-between gap-4 px-4 sm:px-7 py-4 flex-shrink-0 sticky top-0 z-20 ${transparentHeader ? '' : 'bg-white border-b'}`}
-             style={transparentHeader ? undefined : { borderColor: '#E1E6EE' }}>
+             style={transparentHeader ? undefined : { borderColor: 'var(--color-border)' }}>
       {/* Left side — a personal greeting on the dashboard/overview screen
           ("Hey {name}" + today's date), otherwise the inline breadcrumb trail
           (home icon + path, straight on the page background). */}
       {headerGreeting ? (
         <div className="min-w-0">
           <h1 className="text-[17px] sm:text-[19px] font-extrabold leading-tight truncate"
-              style={{ fontFamily: "'Manrope',sans-serif", color: '#0A1F3D', letterSpacing: '-0.01em' }}>
+              style={{ fontFamily: "'Manrope',sans-serif", color: 'var(--color-primary)', letterSpacing: '-0.01em' }}>
             {headerGreeting.title}
           </h1>
           {headerGreeting.sub && (
-            <div className="text-[11.5px] font-medium leading-tight mt-0.5 truncate" style={{ color: '#647089' }}>
+            <div className="text-[11.5px] font-medium leading-tight mt-0.5 truncate" style={{ color: 'var(--color-text-body)' }}>
               {headerGreeting.sub}
             </div>
           )}
@@ -765,12 +783,12 @@ function PlainNavbar({ navItems, activeId, onNavigate,
               <Fragment key={i}>
                 {i > 0 && <Sep />}
                 {isLast ? (
-                  <span className="flex items-center gap-1.5 text-[15.5px] font-bold whitespace-nowrap px-1" style={{ color: '#0A1F3D' }}>
+                  <span className="flex items-center gap-1.5 text-[15.5px] font-bold whitespace-nowrap px-1" style={{ color: 'var(--color-primary)' }}>
                     {i === 0 && <HomeIcon />}{crumb.label}
                   </span>
                 ) : crumb.onClick ? (
                   <button onClick={crumb.onClick}
-                          className="flex items-center gap-1.5 text-[15px] font-medium text-slate-500 hover:text-[#0A1F3D] px-1 py-0.5 rounded transition-colors whitespace-nowrap">
+                          className="flex items-center gap-1.5 text-[15px] font-medium text-slate-500 hover:text-[var(--color-primary)] px-1 py-0.5 rounded transition-colors whitespace-nowrap">
                     {i === 0 && <HomeIcon />}{crumb.label}
                   </button>
                 ) : (
@@ -793,23 +811,23 @@ function PlainNavbar({ navItems, activeId, onNavigate,
             if (iconOnlyNav && !active) {
               return (
                 <button key={n.id} onClick={() => onNavigate(n.id)}
-                        className="relative group flex items-center justify-center w-11 h-11 rounded-full text-[#5B84C4] hover:bg-white hover:text-[#2B3A52] transition-colors">
-                  <Icon name={n.icon} size={21} stroke={1.9} />
+                        className="relative group flex items-center justify-center w-9 h-9 rounded-full text-[var(--color-primary-tint)] hover:bg-white hover:text-[var(--color-text-dark)] transition-colors">
+                  <Icon name={n.icon} size={17} stroke={1.9} />
                   {/* Custom hover tooltip — styled navy pill instead of the native title bubble */}
                   <span className="absolute top-full left-1/2 -translate-x-1/2 mt-2.5 px-3.5 py-1.5 rounded-full text-[11px] font-semibold text-white whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible pointer-events-none transition-all duration-150 z-50"
-                        style={{ background: '#0A1F3D', boxShadow: '0 6px 16px rgba(10,31,61,.25)' }}>
+                        style={{ background: 'var(--color-primary)', boxShadow: '0 6px 16px rgba(10,31,61,.25)' }}>
                     {n.label}
                     <span className="absolute bottom-full left-1/2 -translate-x-1/2"
-                          style={{ width: 0, height: 0, borderLeft: '5px solid transparent', borderRight: '5px solid transparent', borderBottom: '5px solid #0A1F3D' }} />
+                          style={{ width: 0, height: 0, borderLeft: '5px solid transparent', borderRight: '5px solid transparent', borderBottom: '5px solid var(--color-primary)' }} />
                   </span>
                 </button>
               )
             }
             return (
               <button key={n.id} onClick={() => onNavigate(n.id)}
-                      className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-[15.5px] font-semibold whitespace-nowrap transition-colors
-                        ${active ? 'bg-[#0A1F3D] text-white' : 'text-[#647089] hover:bg-[#F7F9FC] hover:text-[#2B3A52]'}`}>
-                <Icon name={n.icon} size={18} stroke={active ? 2.2 : 1.9} className={active ? '' : 'text-[#5B84C4]'} />
+                      className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-[13.5px] font-semibold whitespace-nowrap transition-colors
+                        ${active ? 'bg-[var(--color-primary)] text-white' : 'text-[var(--color-text-body)] hover:bg-[var(--color-bg-soft)] hover:text-[var(--color-text-dark)]'}`}>
+                <Icon name={n.icon} size={15} stroke={active ? 2.2 : 1.9} className={active ? '' : 'text-[var(--color-primary-tint)]'} />
                 <span className={iconOnlyNav ? '' : 'hidden md:inline'}>{n.label}</span>
               </button>
             )

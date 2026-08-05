@@ -49,18 +49,13 @@ def _facts(profile, score) -> dict:
 
 
 def _template(f: dict) -> str:
-    lead = f"{f['physician_name']} is rated {f['risk_band'].upper()} risk ({f['risk_score']}/100)."
+    # One short sentence, ~15-20 words: risk level + the single most serious finding.
+    lead = f"{f['physician_name']} is {f['risk_band'].upper()} risk ({f['risk_score']}/100)"
     if not f["fired_rules"] and not f["physician_flags"]:
-        return (lead + " No fraud rules fired and there are no physician flags — billing "
-                "looks consistent with peers, so risk is low.")
-    parts = []
+        return f"{lead} — no fraud rules fired; billing looks consistent."
     if f["fired_rules"]:
-        parts.append("Key drivers: " + "; ".join(f["fired_rules"]) + ".")
-    if f["top_supplier"]:
-        parts.append(f"Top supplier is {f['top_supplier']}.")
-    if f["physician_flags"]:
-        parts.append(f"{f['physician_flags']} physician flag(s) further reinforce the concern.")
-    return lead + " " + " ".join(parts)
+        return f"{lead} — driven mainly by having {f['fired_rules'][0]}."
+    return f"{lead} — flagged by {f['physician_flags']} physician report(s)."
 
 
 def _llm(f: dict) -> str | None:
@@ -78,16 +73,15 @@ def _llm(f: dict) -> str | None:
             f"Physician flags: {f['physician_flags']}.\n"
             f"Total claims: {f['total_claims']}, total billed: ${f['total_billed']:,.0f}.\n"
             f"Top supplier: {f['top_supplier'] or 'n/a'}.\n\n"
-            "Write a risk summary in EXACTLY two sentences. "
-            "Sentence 1: State the overall risk level and the single most serious finding "
+            "Write a risk summary as ONE sentence of 15-20 words. "
+            "State the overall risk level and the single most serious finding "
             "(OIG hit, cross-NPI pattern, or duplicate billing — whichever is highest severity). "
-            "Sentence 2: Name one additional supporting pattern and its implication. "
-            "Maximum 50 words total. Be direct and clinical. No hedging language."
+            "Be direct and clinical. No preamble, no hedging, no second sentence."
         )
         resp = client.chat.completions.create(
             model=MODEL,
             temperature=0.3,
-            max_tokens=120,
+            max_tokens=60,
             messages=[
                 {"role": "system", "content": (
                     "You are a senior Medicare/Medicaid fraud analyst. Write a concise, "
@@ -111,6 +105,60 @@ def generate_npi_summary(profile, score) -> tuple[str, str, bool]:
         return text, source, True
 
     f = _facts(profile, score)
+    text = _llm(f)
+    source = "llm"
+    if not text:
+        text, source = _template(f), "rules"
+    _cache[cache_key] = (text, source)
+    return text, source, False
+
+
+# rule_name -> vendor-oriented phrase, for the vendor risk summary. Keyed by the
+# real rules_flags.rule_name so it covers every rule that can fire on a vendor's
+# claims (richer than the 3 supplier score booleans).
+_VENDOR_RULE_PHRASES = {
+    "oig_leie_hit": "appears on the OIG federal exclusion list — Medicare cannot reimburse it",
+    "cross_npi_supplier": "bills under many unrelated physician NPIs (a kickback-ring pattern)",
+    "ghost_billing": "billed for services with no matching physician bill on file (ghost billing)",
+    "new_high_value_supplier": "appeared suddenly with high-value claims and no prior history",
+    "identity_reuse": "is tied to patient identities reused across unrelated physicians",
+    "abnormal_hospice_duration": "kept patients enrolled in hospice far longer than is clinically typical",
+    "upcoding": "billed well above the category norm (possible upcoding)",
+    "unbundling": "split single services into multiple separately-billed codes (unbundling)",
+    "duplicate_billing": "billed the same service more than once (duplicate billing)",
+    "modifier_abuse": "used near-duplicate line items to bypass duplicate checks (modifier abuse)",
+    "impossible_day": "is linked to an implausible number of claims billed in a single day",
+    "rapid_cycling": "is linked to an implausible number of distinct patients billed per day",
+    "deceased_patient": "billed for patients after long inactivity gaps (possible deceased-patient billing)",
+    "volume_spike": "is linked to sharp claim-volume spikes",
+    "geographic_anomaly": "billed for patients located far from the practice address",
+    "supplier_concentration": "dominates the billing of the physicians it works with (exclusive-arrangement pattern)",
+}
+
+
+def generate_vendor_summary(vendor_name, score, fired_rules, distinct_npis) -> tuple[str, str, bool]:
+    """Vendor-level risk summary, grounded strictly in the rules that fired on this
+    vendor's claims. Returns (summary_text, source, cached). Mirrors
+    generate_npi_summary but reuses the same _llm / _template machinery."""
+    cache_key = ("vendor", score.entity_id, score.risk_score,
+                 score.physician_flag_count, len(fired_rules or []))
+    if cache_key in _cache:
+        text, source = _cache[cache_key]
+        return text, source, True
+
+    phrases = [_VENDOR_RULE_PHRASES[r] for r in (fired_rules or []) if r in _VENDOR_RULE_PHRASES]
+    f = {
+        "physician_name": vendor_name or f"Vendor {score.entity_id}",
+        "specialty": f"billing vendor across {distinct_npis} physician NPIs" if distinct_npis else "billing vendor",
+        "state": "—",
+        "risk_score": score.risk_score,
+        "risk_band": get_risk_band(score.risk_score),
+        "fired_rules": phrases,
+        "physician_flags": score.physician_flag_count or 0,
+        "total_claims": score.total_claim_count or 0,
+        "total_billed": float(score.total_claim_amount or 0),
+        "top_supplier": None,
+    }
     text = _llm(f)
     source = "llm"
     if not text:

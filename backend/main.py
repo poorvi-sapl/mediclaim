@@ -13,6 +13,7 @@ from .auth import extract_token, decode_token, is_blacklisted
 from .routers import claims as claims_router
 from .routers import actions as actions_router
 from .routers import dashboard as dashboard_router
+from .routers import assistant as assistant_router
 from .routers import alerts as alerts_router
 from .routers import auth as auth_router
 from .routers import mfa as mfa_router
@@ -131,6 +132,7 @@ app.include_router(admin_router.router)
 app.include_router(claims_router.router)
 app.include_router(actions_router.router)
 app.include_router(dashboard_router.router)
+app.include_router(assistant_router.router, tags=["assistant"])
 app.include_router(alerts_router.router)
 app.include_router(analytics_router.router, prefix="/analytics", tags=["analytics"])
 app.include_router(ingest_router.router)

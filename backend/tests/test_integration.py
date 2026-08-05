@@ -32,7 +32,7 @@ from backend.auth import create_access_token
 from backend.config import get_settings
 from backend.database import SessionLocal, engine, Base
 from backend.main import app
-from backend.models import Action, Claim, ClaimNotification, DisputeCase, NpiProfile, Physician, SupplierProfile, User
+from backend.models import Action, Claim, ClaimNotification, DisputeCase, DisputeCaseEvent, NpiProfile, Physician, SupplierProfile, User
 from backend.rules.reminders import process_pending_vendor_notifications
 from backend.rules.trigger_engine import notify_vendor_from_claim_action
 
@@ -327,9 +327,14 @@ def _make_physician_user(db, email="int_test_phys@internal.test", npi=TEST_PHYSI
     return u
 
 
-def _create_pending_confirmation_case(db):
-    """Dispute a claim, then have the vendor resolve it with the physician —
-    lands the case in PENDING_PHYSICIAN_CONFIRMATION, same as a real user flow."""
+def _create_pending_review_case(db):
+    """Dispute a claim, then have the vendor respond — lands the case in
+    PENDING_PHYSICIAN_REVIEW, same as a real user flow.
+
+    The vendor's response is now always "here are my proof-of-work documents";
+    the old two-choice response (resolve-with-physician vs responded-to-Medicare)
+    was removed, so response_type is accepted and ignored. See vendor.py's
+    _apply_vendor_docs."""
     _insert_physician(db)
     _make_physician_user(db)
     vendor = _make_vendor(db)
@@ -352,7 +357,7 @@ def _create_pending_confirmation_case(db):
         data={"response_type": "RESOLVED_WITH_PHYSICIAN", "vendor_response": "Confirmed with office, order was legitimate."},
     )
     assert resp.status_code == 200
-    assert resp.json()["status"] == "PENDING_PHYSICIAN_CONFIRMATION"
+    assert resp.json()["status"] == "PENDING_PHYSICIAN_REVIEW"
 
     db.expire_all()
     case = db.query(DisputeCase).filter(DisputeCase.case_id == case.case_id).first()
@@ -360,7 +365,7 @@ def _create_pending_confirmation_case(db):
 
 
 def test_physician_confirm_resolves_case(db):
-    case = _create_pending_confirmation_case(db)
+    case = _create_pending_review_case(db)
 
     resp = client.post(
         f"/api/v1/physician/npi-watch/disputes/{case.case_id}/confirm",
@@ -379,29 +384,38 @@ def test_physician_confirm_resolves_case(db):
     print(f"\n  [PASS] Physician confirms -> RESOLVED_BY_PHYSICIAN, closed_at set")
 
 
-def test_physician_reject_unlocks_escalation(db):
-    case = _create_pending_confirmation_case(db)
+def test_physician_decline_refers_case_to_payer(db):
+    """Declining the vendor's documents ends the vendor's involvement — the case
+    is handed to the payer, NOT reopened for another vendor attempt. (The old flow
+    reopened it as OPEN with escalation_unlocked=True; see npi_watch.py's confirm.)"""
+    case = _create_pending_review_case(db)
 
     resp = client.post(
         f"/api/v1/physician/npi-watch/disputes/{case.case_id}/confirm",
         headers=_AUTH_HEADERS,
-        json={"confirmed": False},
+        json={"confirmed": False, "note": "Documents don't cover the billed service."},
     )
     assert resp.status_code == 200
-    assert resp.json()["status"] == "OPEN"
+    assert resp.json()["status"] == "REFERRED_TO_PAYER"
 
     db.expire_all()
     updated = db.query(DisputeCase).filter(DisputeCase.case_id == case.case_id).first()
-    assert updated.status == "OPEN"
-    assert updated.escalation_unlocked is True
+    assert updated.status == "REFERRED_TO_PAYER"
+    assert updated.closed_at is not None, "a referred case is closed for the vendor"
 
-    print(f"\n  [PASS] Physician rejects -> case reopens with escalation_unlocked=True")
+    events = [e.event_type for e in db.query(DisputeCaseEvent)
+              .filter(DisputeCaseEvent.case_id == case.case_id).all()]
+    assert "PHYSICIAN_REJECTED" in events, "the payer is notified via this event"
+
+    print(f"\n  [PASS] Physician declines -> REFERRED_TO_PAYER, closed, payer notified")
 
 
-def test_escalation_unlocked_allows_medicare_response(db):
-    case = _create_pending_confirmation_case(db)
-    case.status = "OPEN"
-    case.escalation_unlocked = True
+def test_vendor_respond_ignores_response_type(db):
+    """The vendor no longer chooses how to respond — uploading documents is the
+    only option. Whatever response_type is posted (the field is kept for
+    backward-compat), the case lands in PENDING_PHYSICIAN_REVIEW."""
+    case = _create_pending_review_case(db)
+    case.status = "OPEN"          # reopen so a second response is accepted
     db.commit()
 
     vendor_headers = {"Authorization": f"Bearer {create_access_token(email='int_test_vendor@internal.test', role='vendor', npi=TEST_VENDOR_NPI, full_name='Int Test Vendor', expires_hours=1)}"}
@@ -411,16 +425,29 @@ def test_escalation_unlocked_allows_medicare_response(db):
         data={"response_type": "RESPONDED_TO_MEDICARE", "vendor_response": "Submitted correction to Medicare."},
     )
     assert resp.status_code == 200
-    assert resp.json()["status"] == "RESPONDED_TO_MEDICARE"
+    assert resp.json()["status"] == "PENDING_PHYSICIAN_REVIEW"
 
-    print(f"\n  [PASS] After escalation_unlocked=True, vendor can submit RESPONDED_TO_MEDICARE")
+    db.expire_all()
+    updated = db.query(DisputeCase).filter(DisputeCase.case_id == case.case_id).first()
+    assert updated.provider_response_type is None, "the old response-type choice is not recorded"
+
+    print(f"\n  [PASS] response_type is ignored -> always PENDING_PHYSICIAN_REVIEW")
 
 
-def test_confirmation_timeout_auto_unlocks(db):
+def test_legacy_confirmation_timeout_drains_to_open(db):
+    """LEGACY PATH. PENDING_PHYSICIAN_CONFIRMATION belonged to the retired
+    resolve-with-physician flow; nothing in the app creates it anymore, so this
+    test has to set it by hand. The timer is kept purely as a one-way drain for
+    rows that may still exist in deployed databases — without it they'd be stuck
+    forever, since /confirm rejects any status but PENDING_PHYSICIAN_REVIEW.
+    Delete this test and escalate_unconfirmed_physician_resolutions together, once
+    `SELECT count(*) FROM dispute_cases WHERE status='PENDING_PHYSICIAN_CONFIRMATION'`
+    returns 0 in every environment."""
     from datetime import datetime, timedelta
     from backend.rules.trigger_engine import escalate_unconfirmed_physician_resolutions
 
-    case = _create_pending_confirmation_case(db)
+    case = _create_pending_review_case(db)
+    case.status = "PENDING_PHYSICIAN_CONFIRMATION"
     case.physician_confirmation_due_date = datetime.utcnow() - timedelta(days=1)
     db.commit()
 
@@ -432,11 +459,11 @@ def test_confirmation_timeout_auto_unlocks(db):
     assert updated.status == "OPEN"
     assert updated.escalation_unlocked is True
 
-    print(f"\n  [PASS] Expired confirmation window -> auto-reopens with escalation_unlocked=True")
+    print(f"\n  [PASS] legacy drain: expired confirmation window -> OPEN")
 
 
 def test_confirm_endpoint_rejects_non_owner(db):
-    case = _create_pending_confirmation_case(db)
+    case = _create_pending_review_case(db)
     _make_physician_user(db, email="int_test_other_phys@internal.test", npi="9990000079")
 
     other_phys_headers = {"Authorization": f"Bearer {create_access_token(email='int_test_other_phys@internal.test', role='physician', npi='9990000079', full_name='Other Physician', expires_hours=1)}"}
@@ -457,7 +484,7 @@ def test_confirm_endpoint_rejects_non_owner(db):
 
 def test_decide_endpoint_creates_action_after_vendor_resolved(db):
     from backend.models import Action
-    case = _create_pending_confirmation_case(db)
+    case = _create_pending_review_case(db)
 
     resp = client.post(
         f"/api/v1/physician/npi-watch/disputes/{case.case_id}/confirm",
@@ -487,7 +514,7 @@ def test_decide_endpoint_creates_action_after_vendor_resolved(db):
 
 
 def test_decide_endpoint_dispute_again_does_not_duplicate_notification(db):
-    case = _create_pending_confirmation_case(db)
+    case = _create_pending_review_case(db)
     client.post(f"/api/v1/physician/npi-watch/disputes/{case.case_id}/confirm", headers=_AUTH_HEADERS, json={"confirmed": True})
 
     claim_number = db.query(ClaimNotification.claim_number).filter(ClaimNotification.notification_id == case.notification_id).scalar()
@@ -529,7 +556,7 @@ def test_decide_endpoint_rejects_before_vendor_response(db):
 
 
 def test_decide_endpoint_rejects_non_owner(db):
-    case = _create_pending_confirmation_case(db)
+    case = _create_pending_review_case(db)
     client.post(f"/api/v1/physician/npi-watch/disputes/{case.case_id}/confirm", headers=_AUTH_HEADERS, json={"confirmed": True})
     _make_physician_user(db, email="int_test_other_phys@internal.test", npi="9990000079")
 

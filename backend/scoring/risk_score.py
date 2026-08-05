@@ -15,13 +15,15 @@ import math
 from collections import defaultdict
 from datetime import datetime
 from decimal import Decimal
+from typing import NamedTuple
 
-from sqlalchemy import func, distinct
+from sqlalchemy import and_, case, func, distinct
 from sqlalchemy.orm import Session
 
 from backend.database import SessionLocal
 from backend.models import NpiProfile, Claim, Action, RulesFlag, NpiRiskScore
 from backend.config import get_settings
+from backend.schemas import RISK_BAND_BOUNDS, RISK_BAND_ORDER
 
 FLAG_ACTIONS = ("flag_supplier", "unknown_patient", "deceased_patient")
 # physician actions that contribute to the score (did_not_order weighs more)
@@ -63,22 +65,57 @@ def _shape_score(raw_points: float, cont_norm: float, settings) -> int:
     return int(round(min(severity + continuous, 100)))
 
 
-def _physician_signal(db: Session, column, value, settings):
-    """Weighted physician contribution: flag/unknown = +5 each, did_not_order = +10,
-    capped at max_physician_flag_contribution. Returns (count, contribution)."""
+class PhysicianFeedback(NamedTuple):
+    count: int          # how many scored physician actions exist
+    points: int         # what they contribute to the risk score, capped
+    by_action: dict     # raw per-action-type counts, for labels like "3 flag x 5"
+
+
+def physician_feedback(db: Session, column, value, settings=None) -> PhysicianFeedback:
+    """Weighted physician contribution: flag/unknown/deceased each worth
+    weight_per_physician_flag, did_not_order worth weight_did_not_order, total
+    capped at max_physician_flag_contribution.
+
+    The one definition of this arithmetic. The scorer calls it to build the stored
+    risk_score, dashboard.get_npi_detail calls it for the "Physician feedback" row
+    of the score breakdown, and chat_tools calls it so the assistant explains a
+    score with the same number the screen shows. `column` lets it serve both
+    physicians (Action.npi) and vendors (Action.vendor_id).
+    """
+    settings = settings or get_settings()
     rows = (
         db.query(Action.action_type, func.count(Action.id))
         .filter(column == value, Action.action_type.in_(SCORED_PHYS_ACTIONS))
         .group_by(Action.action_type).all()
     )
     counts = {a: c for a, c in rows}
-    total = sum(counts.values())
     weighted = (
         (counts.get("flag_supplier", 0) + counts.get("unknown_patient", 0) + counts.get("deceased_patient", 0))
         * settings.weight_per_physician_flag
         + counts.get("did_not_order", 0) * settings.weight_did_not_order
     )
-    return total, min(weighted, settings.max_physician_flag_contribution)
+    return PhysicianFeedback(
+        count=sum(counts.values()),
+        points=min(weighted, settings.max_physician_flag_contribution),
+        by_action=counts,
+    )
+
+
+def band_counts(db: Session, entity_type: str = "npi") -> dict:
+    """How many scored entities sit in each risk band, keyed by band name (plus
+    "total"). The one band-bucketing query — the plan summary, the analytics
+    risk-distribution chart and the assistant's plan_overview all read this, so
+    their numbers cannot drift."""
+    buckets = {
+        band: func.sum(case((and_(NpiRiskScore.risk_score >= lo,
+                                  NpiRiskScore.risk_score <= hi), 1), else_=0)).label(band)
+        for band, (lo, hi) in RISK_BAND_BOUNDS.items()
+    }
+    row = (db.query(func.count(NpiRiskScore.id).label("total"), *buckets.values())
+           .filter(NpiRiskScore.entity_type == entity_type).one())
+    out = {band: int(getattr(row, band) or 0) for band in RISK_BAND_ORDER}
+    out["total"] = int(row.total or 0)
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -159,8 +196,8 @@ def calculate_npi_scores(db: Session, settings) -> None:
     recs = []
     for npi, physician_name in npis:
         fired = _fired_rules(db, RulesFlag.npi, npi)
-        physician_flag_count, flag_contribution = _physician_signal(
-            db, Action.npi, npi, settings)
+        feedback = physician_feedback(db, Action.npi, npi, settings)
+        physician_flag_count, flag_contribution = feedback.count, feedback.points
 
         claim_count = db.query(func.count(Claim.id)).filter(Claim.npi == npi).scalar() or 0
         claim_amount = db.query(
@@ -262,8 +299,8 @@ def calculate_supplier_scores(db: Session, settings) -> None:
     recs = []
     for supplier_id in supplier_ids:
         fired = _fired_rules(db, RulesFlag.vendor_id, supplier_id)
-        physician_flag_count, flag_contribution = _physician_signal(
-            db, Action.vendor_id, supplier_id, settings)
+        feedback = physician_feedback(db, Action.vendor_id, supplier_id, settings)
+        physician_flag_count, flag_contribution = feedback.count, feedback.points
 
         supplier_name = (
             db.query(Claim.vendor_name)

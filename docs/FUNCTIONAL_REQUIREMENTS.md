@@ -356,7 +356,7 @@ The following requirements are **in scope for the 10-day MVP**. Requirements mar
 
 **Acceptance criteria:**
 - [ ] Total NPIs monitored = COUNT of rows in npi_risk_scores WHERE entity_type = 'npi'
-- [ ] High-risk NPI count = COUNT WHERE entity_type = 'npi' AND risk_score > 70
+- [ ] High-risk NPI count = COUNT WHERE entity_type = 'npi' AND risk_score >= 81 (the critical band)
 - [ ] Alerts today = COUNT of actions created today WHERE action_type IN ('flag_supplier','unknown_patient')
 - [ ] Total physician flags = COUNT of all actions WHERE action_type IN ('flag_supplier','unknown_patient')
 - [ ] All four counts update correctly after new physician actions are received
@@ -370,7 +370,7 @@ The following requirements are **in scope for the 10-day MVP**. Requirements mar
 **Acceptance criteria:**
 - [ ] Table shows all NPIs sorted by risk_score descending
 - [ ] Each row shows: physician name, NPI, specialty, state, risk score, total claim count, total claim amount, physician flag count, top supplier name
-- [ ] Risk score displayed with color coding: red for score > 70, amber for 40-70, green for below 40
+- [ ] Risk score displayed with the four standard bands: critical (81-100), high (61-80), medium (31-60), low (0-30) — colors come from `RISK_BANDS` in `frontend/src/lib/risk.js`
 - [ ] Dr. Wilson appears in the top 3 rows
 - [ ] Each row is clickable and navigates to the NPI detail page
 - [ ] Table supports filtering by state, specialty, and minimum risk score

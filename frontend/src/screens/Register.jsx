@@ -4,9 +4,10 @@ import { Stethoscope, Building2, Truck, Zap } from 'lucide-react'
 import AuthLayout, { Spinner } from '../components/AuthLayout'
 import { registerPhysician, registerPayer, registerVendor, verifyNpi, verifyUei, verifyVendorNpi } from '../api'
 
-const inputCls ="w-full px-4 py-2.5 rounded-lg border border-slate-300 text-slate-800 placeholder-slate-400 outline-none focus:border-[#1B3A5C] focus:ring-2 focus:ring-[#1B3A5C]/20 transition disabled:bg-slate-50"
 const labelCls = "block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1.5"
-const sectionCls = "text-xs font-bold text-[#1B3A5C] uppercase tracking-wider mt-6 mb-3"
+// Compact styles — keep each registration form on one screen without scrolling.
+const inputTight = "w-full px-3 py-2 rounded-lg border border-slate-300 text-sm text-slate-800 placeholder-slate-400 outline-none focus:border-[#1B3A5C] focus:ring-2 focus:ring-[#1B3A5C]/20 transition disabled:bg-slate-50"
+const sectionTight = "text-[11px] font-bold text-[#1B3A5C] uppercase tracking-wider mt-3.5 mb-2"
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 function StepIndicator({ text }) {
@@ -79,7 +80,7 @@ export default function Register() {
   const navigate = useNavigate()
   const [step, setStep] = useState('choose')
   return (
-    <AuthLayout>
+    <AuthLayout wide={step !== 'choose'}>
       {step === 'choose' && (
         <>
           <h1 className="text-3xl font-bold" style={{ color: '#1B3A5C' }}>Create an account</h1>
@@ -272,39 +273,43 @@ function PhysicianForm({ navigate, onBack }) {
 
   return (
     <form onSubmit={submit}>
-      <StepIndicator text="Step 1 of 2 — Your details" />
-      <h1 className="text-2xl font-bold" style={{ color: '#1B3A5C' }}>Physician registration</h1>
-      <div className="mt-3"><FillAllButton onClick={fillAll} /></div>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <StepIndicator text="Step 1 of 2 — Your details" />
+          <h1 className="text-xl font-bold" style={{ color: '#1B3A5C' }}>Physician registration</h1>
+        </div>
+        <FillAllButton onClick={fillAll} />
+      </div>
 
-      <div className={sectionCls}>Account</div>
-      <div className="space-y-4">
-        <Field label="Email address">
-          <input type="email" required className={inputCls} placeholder="physician@mediclaim.com" value={f.email} onChange={set('email')} />
-        </Field>
-        <Field label="Password" hint="Minimum 8 characters">
-          <input type="password" required className={inputCls} placeholder="demo1234" value={f.password} onChange={set('password')} />
+      <div className={sectionTight}>Account</div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2.5">
+        <div className="sm:col-span-2">
+          <Field label="Email address">
+            <input type="email" required className={inputTight} placeholder="physician@mediclaim.com" value={f.email} onChange={set('email')} />
+          </Field>
+        </div>
+        <Field label="Password">
+          <input type="password" required className={inputTight} placeholder="demo1234 — min 8 characters" value={f.password} onChange={set('password')} />
           <PwBar pw={f.password} />
           <DemoLink show={!f.password} onFill={() => fillField('password')} />
         </Field>
         <Field label="Confirm password">
-          <input type="password" required className={inputCls} placeholder="demo1234" value={f.confirm} onChange={set('confirm')} />
+          <input type="password" required className={inputTight} placeholder="demo1234" value={f.confirm} onChange={set('confirm')} />
         </Field>
       </div>
 
-      <div className={sectionCls}>Identity Verification</div>
-      <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="First name">
-            <input className={inputCls} placeholder="Sarah" value={f.first_name} onChange={set('first_name')} required />
-            <DemoLink show={!f.first_name} onFill={() => fillField('first_name')} />
-          </Field>
-          <Field label="Last name">
-            <input className={inputCls} placeholder="Mitchell" value={f.last_name} onChange={set('last_name')} required />
-            <DemoLink show={!f.last_name} onFill={() => fillField('last_name')} />
-          </Field>
-        </div>
-        <Field label="NPI number" hint="10-digit NPI — verified against the NPPES registry">
-          <input className={inputCls} placeholder="1003000126" value={f.npi}
+      <div className={sectionTight}>Identity Verification</div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2.5">
+        <Field label="First name">
+          <input className={inputTight} placeholder="Sarah" value={f.first_name} onChange={set('first_name')} required />
+          <DemoLink show={!f.first_name} onFill={() => fillField('first_name')} />
+        </Field>
+        <Field label="Last name">
+          <input className={inputTight} placeholder="Mitchell" value={f.last_name} onChange={set('last_name')} required />
+          <DemoLink show={!f.last_name} onFill={() => fillField('last_name')} />
+        </Field>
+        <Field label="NPI number">
+          <input className={inputTight} placeholder="1003000126 — NPPES-verified" value={f.npi}
                  onChange={(e) => { set('npi')(e); setNpiState(null) }}
                  onBlur={() => checkNpi()} inputMode="numeric" maxLength={10} required />
           {npiState?.checking && <p className="mt-1 text-[11px] text-slate-400 flex items-center gap-1"><Spinner size={12} /> Verifying NPI…</p>}
@@ -312,44 +317,42 @@ function PhysicianForm({ navigate, onBack }) {
           {npiState && !npiState.checking && npiState.valid === false && <p className="mt-1 text-[11px] text-rose-600">✗ NPI not found</p>}
           <DemoLink show={!f.npi} onFill={() => fillField('npi')} />
         </Field>
-        <Field label="Date of birth" hint="Optional — used only to match your identity if needed">
-          <input type="date" className={inputCls} value={f.date_of_birth} onChange={set('date_of_birth')} />
+        <Field label="Date of birth (optional)">
+          <input type="date" className={inputTight} value={f.date_of_birth} onChange={set('date_of_birth')} />
           <DemoLink show={!f.date_of_birth} onFill={() => fillField('date_of_birth')} />
         </Field>
       </div>
 
-      <div className={sectionCls}>Contact &amp; Practice</div>
-      <div className="space-y-4">
-        <Field label="Phone" hint="Best number to reach you">
-          <input type="tel" className={inputCls} placeholder="(415) 555-0142" value={f.phone} onChange={set('phone')} required />
+      <div className={sectionTight}>Contact &amp; Practice</div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2.5">
+        <Field label="Phone">
+          <input type="tel" className={inputTight} placeholder="(415) 555-0142" value={f.phone} onChange={set('phone')} required />
           <DemoLink show={!f.phone} onFill={() => fillField('phone')} />
         </Field>
         <Field label="Organization / Practice">
-          <input className={inputCls} placeholder="Bay Area Internal Medicine Group" value={f.organization_name} onChange={set('organization_name')} required />
+          <input className={inputTight} placeholder="Bay Area Internal Medicine Group" value={f.organization_name} onChange={set('organization_name')} required />
           <DemoLink show={!f.organization_name} onFill={() => fillField('organization_name')} />
         </Field>
         <Field label="Specialty">
-          <input className={inputCls} placeholder="Internal Medicine" value={f.specialty} onChange={set('specialty')} required />
+          <input className={inputTight} placeholder="Internal Medicine" value={f.specialty} onChange={set('specialty')} required />
           <DemoLink show={!f.specialty} onFill={() => fillField('specialty')} />
         </Field>
-        <Field label="Tax ID / EIN" hint="Organization-level EIN, if applicable (optional)">
-          <input className={inputCls} placeholder="94-3021555" value={f.tax_id} onChange={set('tax_id')} />
+        <Field label="Tax ID / EIN (optional)">
+          <input className={inputTight} placeholder="94-3021555" value={f.tax_id} onChange={set('tax_id')} />
           <DemoLink show={!f.tax_id} onFill={() => fillField('tax_id')} />
         </Field>
       </div>
 
-      <div className="mt-6 rounded-lg bg-slate-50 ring-1 ring-slate-200 px-4 py-3">
-        <p className="text-[11.5px] text-slate-500 leading-relaxed">
-          On submit we verify your identity against <span className="font-semibold text-slate-600">NPPES</span>,
-          <span className="font-semibold text-slate-600"> PECOS</span>, your
-          <span className="font-semibold text-slate-600"> state medical board</span>, and
-          <span className="font-semibold text-slate-600"> CMS enrollment records</span>. No documents needed.
-        </p>
-      </div>
+      <p className="mt-3 text-[11px] text-slate-400 leading-snug">
+        On submit we verify your identity against <span className="font-semibold text-slate-500">NPPES</span>,
+        <span className="font-semibold text-slate-500"> PECOS</span>, your
+        <span className="font-semibold text-slate-500"> state medical board</span>, and
+        <span className="font-semibold text-slate-500"> CMS enrollment records</span>. No documents needed.
+      </p>
 
-      {error && <div className="mt-5 rounded-lg bg-rose-50 ring-1 ring-rose-200 px-4 py-3 text-sm text-rose-700">{error}</div>}
-      <button type="submit" className="mt-6 w-full py-3 rounded-lg text-white font-semibold" style={{ backgroundColor: '#1B3A5C' }}>Create Physician Account</button>
-      <div className="mt-4 text-center"><button type="button" onClick={onBack} className="text-xs text-slate-400 hover:text-slate-600">← Back</button></div>
+      {error && <div className="mt-3 rounded-lg bg-rose-50 ring-1 ring-rose-200 px-4 py-2.5 text-sm text-rose-700">{error}</div>}
+      <button type="submit" className="mt-3 w-full py-2.5 rounded-lg text-white font-semibold text-sm" style={{ backgroundColor: '#1B3A5C' }}>Create Physician Account</button>
+      <div className="mt-2 text-center"><button type="button" onClick={onBack} className="text-xs text-slate-400 hover:text-slate-600">← Back</button></div>
     </form>
   )
 }
@@ -457,34 +460,40 @@ function PayerForm({ navigate, onBack }) {
 
   return (
     <form onSubmit={submit}>
-      <StepIndicator text="Step 1 of 2 — Organization details" />
-      <h1 className="text-2xl font-bold" style={{ color: '#1B3A5C' }}>Payer registration</h1>
-      <div className="mt-3"><FillAllButton onClick={fillAll} /></div>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <StepIndicator text="Step 1 of 2 — Organization details" />
+          <h1 className="text-xl font-bold" style={{ color: '#1B3A5C' }}>Payer registration</h1>
+        </div>
+        <FillAllButton onClick={fillAll} />
+      </div>
 
-      <div className={sectionCls}>Account</div>
-      <div className="space-y-4">
-        <Field label="Email address">
-          <input type="email" required className={inputCls} placeholder={STUBS.email} value={f.email} onChange={set('email')} />
-          <DemoLink show={!f.email} onFill={() => fillField('email')} />
-        </Field>
-        <Field label="Password" hint="Minimum 8 characters">
-          <input type="password" required className={inputCls} placeholder="Demo@12345!" value={f.password} onChange={set('password')} />
+      <div className={sectionTight}>Account</div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2.5">
+        <div className="sm:col-span-2">
+          <Field label="Email address">
+            <input type="email" required className={inputTight} placeholder={STUBS.email} value={f.email} onChange={set('email')} />
+            <DemoLink show={!f.email} onFill={() => fillField('email')} />
+          </Field>
+        </div>
+        <Field label="Password">
+          <input type="password" required className={inputTight} placeholder="Demo@12345! — min 8 characters" value={f.password} onChange={set('password')} />
           <PwBar pw={f.password} />
           <DemoLink show={!f.password} onFill={() => fillField('password')} />
         </Field>
         <Field label="Confirm password">
-          <input type="password" required className={inputCls} placeholder="Demo@12345!" value={f.confirm} onChange={set('confirm')} />
+          <input type="password" required className={inputTight} placeholder="Demo@12345!" value={f.confirm} onChange={set('confirm')} />
         </Field>
       </div>
 
-      <div className={sectionCls}>Organization</div>
-      <div className="space-y-4">
+      <div className={sectionTight}>Organization</div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2.5">
         <Field label="Organization name">
-          <input required className={inputCls} placeholder="Meridian Health Plan" value={f.organization_name} onChange={set('organization_name')} />
+          <input required className={inputTight} placeholder="Meridian Health Plan" value={f.organization_name} onChange={set('organization_name')} />
           <DemoLink show={!f.organization_name} onFill={() => fillField('organization_name')} />
         </Field>
-        <Field label="UEI" hint="Your 12-character SAM.gov Unique Entity Identifier">
-          <input className={inputCls} placeholder="ABC123DEF456" value={f.uei} onChange={set('uei')} onBlur={() => checkUei()} maxLength={12} required />
+        <Field label="UEI">
+          <input className={inputTight} placeholder="ABC123DEF456 — SAM.gov UEI" value={f.uei} onChange={set('uei')} onBlur={() => checkUei()} maxLength={12} required />
           {ueiState?.checking && <p className="mt-1 text-[11px] text-slate-400 flex items-center gap-1"><Spinner size={12} /> Verifying UEI…</p>}
           {ueiState && !ueiState.checking && ueiState.valid && <p className="mt-1 text-[11px] text-emerald-600">✓ Verified: {ueiState.name || 'organization'}</p>}
           {ueiState && !ueiState.checking && ueiState.valid === false && <p className="mt-1 text-[11px] text-rose-600">✗ UEI not found</p>}
@@ -492,27 +501,26 @@ function PayerForm({ navigate, onBack }) {
         </Field>
       </div>
 
-      <div className={sectionCls}>Authorized Signatory</div>
-      <div className="space-y-4">
+      <div className={sectionTight}>Authorized Signatory</div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2.5">
         <Field label="Full name">
-          <input required className={inputCls} placeholder="Dr. James Thornton" value={f.authorized_signatory_name} onChange={set('authorized_signatory_name')} />
+          <input required className={inputTight} placeholder="Dr. James Thornton" value={f.authorized_signatory_name} onChange={set('authorized_signatory_name')} />
           <DemoLink show={!f.authorized_signatory_name} onFill={() => fillField('authorized_signatory_name')} />
         </Field>
-        <Field label="Title" hint="e.g. Chief Compliance Officer, VP of Operations">
-          <input required className={inputCls} placeholder="Chief Compliance Officer" value={f.authorized_signatory_title} onChange={set('authorized_signatory_title')} />
+        <Field label="Title">
+          <input required className={inputTight} placeholder="Chief Compliance Officer" value={f.authorized_signatory_title} onChange={set('authorized_signatory_title')} />
           <DemoLink show={!f.authorized_signatory_title} onFill={() => fillField('authorized_signatory_title')} />
         </Field>
       </div>
 
-      <div className={sectionCls}>Attestation</div>
-      <label className="flex items-start gap-2 cursor-pointer select-none">
+      <label className="mt-3.5 flex items-start gap-2 cursor-pointer select-none">
         <input type="checkbox" checked={f.attestation} onChange={(e) => setF((s) => ({ ...s, attestation: e.target.checked }))} className="w-4 h-4 mt-0.5 rounded border-slate-300 text-[#1B3A5C] focus:ring-[#1B3A5C]/30" />
-        <span className="text-sm text-slate-600">I confirm that I am authorized to register this organization on MediClaim and that the information provided is accurate.</span>
+        <span className="text-xs text-slate-600 leading-snug">I confirm that I am authorized to register this organization on MediClaim and that the information provided is accurate.</span>
       </label>
 
-      {error && <div className="mt-5 rounded-lg bg-rose-50 ring-1 ring-rose-200 px-4 py-3 text-sm text-rose-700">{error}</div>}
-      <button type="submit" disabled={!f.attestation} className="mt-6 w-full py-3 rounded-lg text-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed" style={{ backgroundColor: '#1B3A5C' }}>Submit Registration Request</button>
-      <div className="mt-4 text-center"><button type="button" onClick={onBack} className="text-xs text-slate-400 hover:text-slate-600">← Back</button></div>
+      {error && <div className="mt-3 rounded-lg bg-rose-50 ring-1 ring-rose-200 px-4 py-2.5 text-sm text-rose-700">{error}</div>}
+      <button type="submit" disabled={!f.attestation} className="mt-3 w-full py-2.5 rounded-lg text-white font-semibold text-sm disabled:opacity-50 disabled:cursor-not-allowed" style={{ backgroundColor: '#1B3A5C' }}>Submit Registration Request</button>
+      <div className="mt-2 text-center"><button type="button" onClick={onBack} className="text-xs text-slate-400 hover:text-slate-600">← Back</button></div>
     </form>
   )
 }
@@ -640,55 +648,61 @@ function VendorForm({ navigate, onBack }) {
 
   return (
     <form onSubmit={submit}>
-      <StepIndicator text="Step 1 of 2 — Your details" />
-      <h1 className="text-2xl font-bold" style={{ color: '#1B3A5C' }}>Vendor registration</h1>
-      <div className="mt-3"><FillAllButton onClick={fillAll} /></div>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <StepIndicator text="Step 1 of 2 — Your details" />
+          <h1 className="text-xl font-bold" style={{ color: '#1B3A5C' }}>Vendor registration</h1>
+        </div>
+        <FillAllButton onClick={fillAll} />
+      </div>
 
-      <div className={sectionCls}>Account</div>
-      <div className="space-y-4">
-        <Field label="Email address">
-          <input type="email" required className={inputCls} placeholder="vendor@mediclaim.com" value={f.email} onChange={set('email')} />
-          <DemoLink show={!f.email} onFill={() => fillField('email')} />
-        </Field>
-        <Field label="Password" hint="Minimum 8 characters">
-          <input type="password" required className={inputCls} placeholder="demo1234" value={f.password} onChange={set('password')} />
+      <div className={sectionTight}>Account</div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2.5">
+        <div className="sm:col-span-2">
+          <Field label="Email address">
+            <input type="email" required className={inputTight} placeholder="vendor@mediclaim.com" value={f.email} onChange={set('email')} />
+            <DemoLink show={!f.email} onFill={() => fillField('email')} />
+          </Field>
+        </div>
+        <Field label="Password">
+          <input type="password" required className={inputTight} placeholder="demo1234 — min 8 characters" value={f.password} onChange={set('password')} />
           <PwBar pw={f.password} />
           <DemoLink show={!f.password} onFill={() => fillField('password')} />
         </Field>
         <Field label="Confirm password">
-          <input type="password" required className={inputCls} placeholder="demo1234" value={f.confirm} onChange={set('confirm')} />
+          <input type="password" required className={inputTight} placeholder="demo1234" value={f.confirm} onChange={set('confirm')} />
         </Field>
       </div>
 
-      <div className={sectionCls}>Supplier Identity</div>
-      <div className="space-y-4">
-        <Field label="NPI number" hint="10-digit organizational NPI — verified against the supplier registry">
-          <input className={inputCls} placeholder="1999000002" value={f.npi} onChange={set('npi')} onBlur={() => checkNpi()} inputMode="numeric" maxLength={10} required />
-          {npiState?.checking && <p className="mt-1 text-[11px] text-slate-400 flex items-center gap-1"><Spinner size={12} /> Verifying NPI…</p>}
-          {npiState && !npiState.checking && npiState.valid && <p className="mt-1 text-[11px] text-emerald-600">✓ NPI verified{npiState.name ? ` — ${npiState.name}` : ''}</p>}
-          {npiState && !npiState.checking && npiState.valid === false && <p className="mt-1 text-[11px] text-rose-600">✗ NPI not found or excluded</p>}
-          <DemoLink show={!f.npi} onFill={() => fillField('npi')} />
-        </Field>
-        <Field label="Contact name" hint="Optional — who should we address on account communications">
-          <input className={inputCls} placeholder="Alex Rivera" value={f.contact_name} onChange={set('contact_name')} />
+      <div className={sectionTight}>Supplier Identity</div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2.5">
+        <div className="sm:col-span-2">
+          <Field label="NPI number">
+            <input className={inputTight} placeholder="1999000002 — 10-digit organizational NPI" value={f.npi} onChange={set('npi')} onBlur={() => checkNpi()} inputMode="numeric" maxLength={10} required />
+            {npiState?.checking && <p className="mt-1 text-[11px] text-slate-400 flex items-center gap-1"><Spinner size={12} /> Verifying NPI…</p>}
+            {npiState && !npiState.checking && npiState.valid && <p className="mt-1 text-[11px] text-emerald-600">✓ NPI verified{npiState.name ? ` — ${npiState.name}` : ''}</p>}
+            {npiState && !npiState.checking && npiState.valid === false && <p className="mt-1 text-[11px] text-rose-600">✗ NPI not found or excluded</p>}
+            <DemoLink show={!f.npi} onFill={() => fillField('npi')} />
+          </Field>
+        </div>
+        <Field label="Contact name (optional)">
+          <input className={inputTight} placeholder="Alex Rivera" value={f.contact_name} onChange={set('contact_name')} />
           <DemoLink show={!f.contact_name} onFill={() => fillField('contact_name')} />
         </Field>
-        <Field label="Contact phone" hint="Optional">
-          <input type="tel" className={inputCls} placeholder="(312) 555-0199" value={f.contact_phone} onChange={set('contact_phone')} />
+        <Field label="Contact phone (optional)">
+          <input type="tel" className={inputTight} placeholder="(312) 555-0199" value={f.contact_phone} onChange={set('contact_phone')} />
           <DemoLink show={!f.contact_phone} onFill={() => fillField('contact_phone')} />
         </Field>
       </div>
 
-      <div className="mt-6 rounded-lg bg-slate-50 ring-1 ring-slate-200 px-4 py-3">
-        <p className="text-[11.5px] text-slate-500 leading-relaxed">
-          On submit we verify your NPI against the <span className="font-semibold text-slate-600">supplier registry</span> and
-          the <span className="font-semibold text-slate-600">OIG exclusion list</span>. No documents needed.
-        </p>
-      </div>
+      <p className="mt-3 text-[11px] text-slate-400 leading-snug">
+        On submit we verify your NPI against the <span className="font-semibold text-slate-500">supplier registry</span> and
+        the <span className="font-semibold text-slate-500">OIG exclusion list</span>. No documents needed.
+      </p>
 
-      {error && <div className="mt-5 rounded-lg bg-rose-50 ring-1 ring-rose-200 px-4 py-3 text-sm text-rose-700">{error}</div>}
-      <button type="submit" className="mt-6 w-full py-3 rounded-lg text-white font-semibold" style={{ backgroundColor: '#1B3A5C' }}>Create Vendor Account</button>
-      <div className="mt-4 text-center"><button type="button" onClick={onBack} className="text-xs text-slate-400 hover:text-slate-600">← Back</button></div>
+      {error && <div className="mt-3 rounded-lg bg-rose-50 ring-1 ring-rose-200 px-4 py-2.5 text-sm text-rose-700">{error}</div>}
+      <button type="submit" className="mt-3 w-full py-2.5 rounded-lg text-white font-semibold text-sm" style={{ backgroundColor: '#1B3A5C' }}>Create Vendor Account</button>
+      <div className="mt-2 text-center"><button type="button" onClick={onBack} className="text-xs text-slate-400 hover:text-slate-600">← Back</button></div>
     </form>
   )
 }

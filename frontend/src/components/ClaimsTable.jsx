@@ -52,9 +52,10 @@ function CategoryTag({ category }) {
 // Five decisions a physician can record on a claim — rendered as the button
 // grid on the Claim Detail screen's "Take action" card. UI id -> backend
 // action_type mapping lives in api.js (ACTION_TO_BACKEND).
-const ACTIONS = [
+// Exported so the physician bell's filters are these same five actions rather than a
+// hand-copied list of their names — rename one here and the filter renames with it.
+export const ACTIONS = [
   { id: 'confirmed',     label: 'Confirm',          desc: 'Claim is legitimate — you recognize the vendor',                            accent: '#3A7D5C', icon: 'check',      cls: 'bg-[#E9F3ED] text-[#3A7D5C] ring-[#D5E9DD] hover:bg-[#DCEDE4] hover:text-[#2E6B4F]' },
-  { id: 'disputed',      label: 'Dispute',          desc: 'Amount or service details look incorrect to you',                           accent: '#D1A85C', icon: 'message',    cls: 'bg-[#FBF3E4] text-[#D1A85C] ring-[#F0E0BE] hover:bg-[#F7ECD3] hover:text-[#8A6A34]' },
   { id: 'fraud',         label: 'Report Fraud',     desc: 'This claim appears fraudulent — vendor billed for a service never provided', accent: '#A6453F', icon: 'shieldAlert', cls: 'bg-[#F7EBEA] text-[#A6453F] ring-[#EBD3D1] hover:bg-[#F2DFDD] hover:text-[#8A423D]' },
   { id: 'flagged',       label: 'Flag Vendor',      desc: 'Vendor is unknown or suspicious — raise a flag',                            accent: '#647089', icon: 'flag',       cls: 'bg-[#F1F4F9] text-[#647089] ring-[#E1E6EE] hover:bg-[#E7ECF3] hover:text-[#46586F]' },
   { id: 'unknownPatient',label: 'Reassign Patient', desc: "You don't recognize the patient on this claim",                             accent: '#93A0B3', icon: 'userx',      cls: 'bg-[#F1F4F9] text-[#93A0B3] ring-[#E1E6EE] hover:bg-[#E7ECF3] hover:text-[#647089]' },
@@ -130,6 +131,40 @@ function undoTimerCls(r, actionType) {
   if (r > 30) return 'bg-slate-100 text-slate-500 ring-slate-200 hover:bg-slate-200 hover:text-slate-700'
   if (r > 10) return 'bg-amber-50 text-amber-600 ring-amber-200 hover:bg-amber-100'
   return 'bg-rose-50 text-rose-600 ring-rose-200 hover:bg-rose-100 animate-pulse'
+}
+
+// The in-row chip always counts its own visible 60s window per second,
+// independent of the longer backend allowance for vendor-notify actions
+// (those stay undoable from Claim Detail after the chip is gone).
+function chipRemaining(createdAt, now) {
+  const t = parseServerTime(createdAt)
+  if (!t) return 0
+  return Math.max(0, UNDO_WINDOW_DEFAULT - Math.floor((now - t) / 1000))
+}
+
+// In-row undo chip — replaces the quick-action icons on the row the user just
+// actioned: the chosen action's icon with a live countdown, flipping to an
+// explicit "Undo" affordance on hover. Clicking it retracts the action.
+function UndoChip({ pending, now, busy, onUndo }) {
+  const a = ACTIONS.find((x) => x.id === pending.uiAction) || ACTIONS[0]
+  const remaining = chipRemaining(pending.createdAt, now)
+  return (
+    <button onClick={onUndo} disabled={busy} aria-label={`Undo ${a.label}`} title={`Undo "${a.label}"`}
+            className={`group/undo h-7 px-2.5 rounded-lg ring-1 ring-inset inline-flex items-center gap-1.5 text-[11.5px] font-semibold tabular-nums transition-all duration-150 active:scale-95 ${a.cls}`}>
+      {busy ? <Spinner /> : (
+        <>
+          <span className="inline-flex items-center gap-1.5 group-hover/undo:hidden">
+            <Icon name={a.icon} size={13} stroke={2.4} />
+            {remaining}s
+          </span>
+          <span className="hidden group-hover/undo:inline-flex items-center gap-1.5">
+            {undoArrow}
+            Undo
+          </span>
+        </>
+      )}
+    </button>
+  )
 }
 
 // Subtle soft-green chip — no border, not a heavy badge.
@@ -209,6 +244,9 @@ export default function ClaimsTable({ npi = PHYSICIAN_NPI, onActioned, onSelectC
   const [sort, setSort] = useState({ key: null, dir: null })     // client-side column sort (null = default)
   const [rowPending, setRowPending] = useState(null)              // { claimId, action } — quick-action button mid-flight
   const [actionError, setActionError] = useState(null)            // transient row-action failure message
+  const [pendingUndos, setPendingUndos] = useState({})            // claimId -> { actionId, uiAction, backendType, createdAt } — actioned, still undoable in place
+  const [undoNow, setUndoNow] = useState(() => Date.now())        // shared countdown clock for the in-row undo chips
+  const [undoBusy, setUndoBusy] = useState(null)                  // claimId of an undo DELETE in flight
 
   // asc → desc → cleared. A different column starts fresh at asc.
   function onSort(key) {
@@ -221,22 +259,85 @@ export default function ClaimsTable({ npi = PHYSICIAN_NPI, onActioned, onSelectC
   // without the "add context" note. In the unreviewed queue an actioned claim
   // drops out of `data.items`; in the vendor-filtered view (which shows
   // reviewed claims too) it flips to its reviewed row state instead.
+  // Applies an actioned claim's final list state once its in-row undo chip
+  // expires (or an undo attempt fails): drop out of the unreviewed queue, or
+  // flip to the reviewed row state in the vendor-filtered view.
+  function finalizeRowAction(claimId, backendType) {
+    setData((d) => ({
+      ...d,
+      items: supFilter
+        ? d.items.map((c) => (c.id === claimId ? { ...c, reviewed: true, latestAction: backendType } : c))
+        : d.items.filter((c) => c.id !== claimId),
+    }))
+  }
+
   async function handleRowAction(claimId, action) {
     setRowPending({ claimId, action })
     try {
-      await postAction(claimId, npi, action)
-      setData((d) => ({
-        ...d,
-        items: supFilter
-          ? d.items.map((c) => (c.id === claimId ? { ...c, reviewed: true, latestAction: action } : c))
-          : d.items.filter((c) => c.id !== claimId),
-      }))
+      const res = await postAction(claimId, npi, action)
+      const backendType = ACTION_TO_BACKEND[action] || action
+      if (res?.id) {
+        // Keep the row in place: the actioned icon becomes a countdown undo
+        // chip, and the row only leaves the queue once the chip expires.
+        setPendingUndos((m) => ({ ...m, [claimId]: {
+          actionId: res.id, uiAction: action, backendType,
+          createdAt: res.created_at || new Date().toISOString(),
+        } }))
+      } else {
+        finalizeRowAction(claimId, backendType)
+      }
       onActioned?.()
     } catch (e) {
       setActionError(e.message || 'Could not record action. Please try again.')
       setTimeout(() => setActionError(null), 3500)
     } finally {
       setRowPending(null)
+    }
+  }
+
+  // In-row undo chips — same authoritative DELETE /actions/{id} the Claim
+  // Detail undo chip uses, shown as a 60s countdown on the actioned row's own
+  // icon. Vendor-notify actions stay undoable longer from Claim Detail; the
+  // chip is only the immediate window.
+  const undoRemaining = (p) => chipRemaining(p.createdAt, undoNow)
+  const hasPendingUndos = Object.keys(pendingUndos).length > 0
+
+  useEffect(() => {
+    if (!hasPendingUndos) return
+    setUndoNow(Date.now())
+    const id = setInterval(() => setUndoNow(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [hasPendingUndos])
+
+  // Expired chips → apply the row's final state and drop the chip.
+  useEffect(() => {
+    if (!hasPendingUndos) return
+    const expired = Object.entries(pendingUndos).filter(([, p]) => undoRemaining(p) <= 0)
+    if (expired.length === 0) return
+    expired.forEach(([claimId, p]) => finalizeRowAction(claimId, p.backendType))
+    setPendingUndos((m) => {
+      const next = { ...m }
+      expired.forEach(([claimId]) => delete next[claimId])
+      return next
+    })
+  }, [undoNow])  // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function handleUndoRow(claimId) {
+    const p = pendingUndos[claimId]
+    if (!p || undoBusy) return
+    setUndoBusy(claimId)
+    try {
+      const r = await fetch(`${API_BASE}/actions/${p.actionId}`, { method: 'DELETE', credentials: 'include' })
+      if (!r.ok) throw new Error('The undo window for this action has expired.')
+      setPendingUndos((m) => { const next = { ...m }; delete next[claimId]; return next })
+      onActioned?.()
+    } catch (e) {
+      setActionError(e.message || 'Could not undo. Please try again.')
+      setTimeout(() => setActionError(null), 3500)
+      setPendingUndos((m) => { const next = { ...m }; delete next[claimId]; return next })
+      finalizeRowAction(claimId, p.backendType)
+    } finally {
+      setUndoBusy(null)
     }
   }
 
@@ -458,7 +559,12 @@ export default function ClaimsTable({ npi = PHYSICIAN_NPI, onActioned, onSelectC
                   </span>
                   <div className="flex items-center justify-between gap-2">
                     <CategoryTag category={claim.category} />
-                    {reviewed ? (
+                    {pendingUndos[claim.id] ? (
+                      <div className="flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                        <UndoChip pending={pendingUndos[claim.id]} now={undoNow}
+                                  busy={undoBusy === claim.id} onUndo={() => handleUndoRow(claim.id)} />
+                      </div>
+                    ) : reviewed ? (
                       <button onClick={(e) => { e.stopPropagation(); onSelectClaim?.(claim) }} className="view-btn">View →</button>
                     ) : (
                       <div className="flex items-center gap-1.5 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
@@ -537,7 +643,12 @@ export default function ClaimsTable({ npi = PHYSICIAN_NPI, onActioned, onSelectC
                           (one-tap decision, no need to open Claim Detail); a
                           reviewed claim still links through to the full record. */}
                       <td className={`${CELL} text-right`} onClick={(e) => e.stopPropagation()}>
-                        {reviewed ? (
+                        {pendingUndos[claim.id] ? (
+                          <div className="flex justify-end">
+                            <UndoChip pending={pendingUndos[claim.id]} now={undoNow}
+                                      busy={undoBusy === claim.id} onUndo={() => handleUndoRow(claim.id)} />
+                          </div>
+                        ) : reviewed ? (
                           <div className="flex justify-end">
                             <button onClick={() => onSelectClaim?.(claim)} className="view-btn">View →</button>
                           </div>
@@ -575,6 +686,7 @@ export default function ClaimsTable({ npi = PHYSICIAN_NPI, onActioned, onSelectC
           </>
         )}
       </div>
+
     </div>
   )
 }

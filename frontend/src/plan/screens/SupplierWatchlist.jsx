@@ -3,6 +3,7 @@ import { getSuppliers } from '../../api'
 import TableSkeleton from '../../components/TableSkeleton'
 import { Icon, RiskPill, fmtUSD, fmtDate } from '../../components/ui'
 import { KpiCard } from '../../components/ui/kpi-card'
+import { RISK_BANDS, RISK_FILTER_OPTIONS, bandByName } from '../../lib/risk'
 
 // Table columns — Supplier / Risk / NPIs / First seen / Billed (OIG status and
 // Flags are folded into the supplier sub-line instead of their own columns).
@@ -14,7 +15,7 @@ const COLUMNS = [
   { key: 'totalAmount',  label: 'Billed',     align: 'right' },
 ]
 
-const RISK_RANK = { Low: 1, Medium: 2, High: 3, Critical: 4 }
+const RISK_RANK = Object.fromEntries(RISK_BANDS.map((b) => [b.label, b.rank]))
 const parseDate = (d) => { const t = Date.parse(d); return Number.isNaN(t) ? 0 : t }
 const hideCls   = (h) => h === 'sm' ? 'hidden sm:table-cell' : h === 'md' ? 'hidden md:table-cell' : h === 'lg' ? 'hidden lg:table-cell' : ''
 
@@ -22,13 +23,6 @@ const OIG_FILTER_OPTIONS = [
   { id: '',        label: 'All vendors' },
   { id: 'flagged', label: 'OIG Flagged' },
   { id: 'clean',   label: 'Clean' },
-]
-const RISK_FILTER_OPTIONS = [
-  { id: '',         label: 'All' },
-  { id: 'Critical', label: 'Critical' },
-  { id: 'High',     label: 'High' },
-  { id: 'Medium',   label: 'Medium' },
-  { id: 'Low',      label: 'Low' },
 ]
 
 // Risk column header — click opens a dropdown to filter by risk band, instead
@@ -47,12 +41,12 @@ function FilterTh({ label, options, value, onChange, hide, align }) {
 
   return (
     <th ref={ref}
-        className={`text-left py-2.5 px-3.5 text-[10.5px] font-semibold uppercase tracking-[0.04em] text-[#647089] bg-[#F7F9FC] border-b border-[#F1F4F9] whitespace-nowrap relative ${align === 'right' ? 'text-right' : ''} ${hideCls(hide)}`}>
+        className={`text-left py-2.5 px-3.5 text-[10.5px] font-semibold uppercase tracking-[0.04em] text-[var(--color-text-body)] bg-[var(--color-bg-soft)] border-b border-[var(--color-bg-soft)] whitespace-nowrap relative ${align === 'right' ? 'text-right' : ''} ${hideCls(hide)}`}>
       <button onClick={() => setOpen((o) => !o)}
               className="inline-flex items-center gap-1 bg-transparent border-0 p-0 m-0 cursor-pointer"
-              style={{ color: open || active ? '#0A1F3D' : 'inherit', font: 'inherit' }}>
+              style={{ color: open || active ? 'var(--color-primary)' : 'inherit', font: 'inherit' }}>
         {label}
-        <Icon name="chevronDown" size={10} className={open || active ? 'text-[#0A1F3D]' : 'text-slate-300'}
+        <Icon name="chevronDown" size={10} className={open || active ? 'text-[var(--color-primary)]' : 'text-slate-300'}
               style={{ transition: 'transform .15s ease', transform: open ? 'rotate(180deg)' : 'none' }} />
       </button>
       {open && (
@@ -61,7 +55,7 @@ function FilterTh({ label, options, value, onChange, hide, align }) {
           <div className="py-1">
             {options.map((opt) => (
               <button key={opt.id} onMouseDown={() => { onChange(opt.id); setOpen(false) }}
-                      className={`w-full text-left px-3.5 py-2 text-[12px] transition-colors flex items-center justify-between gap-3 ${value === opt.id ? 'bg-slate-50 text-[#0A1F3D] font-semibold' : 'font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-800'}`}>
+                      className={`w-full text-left px-3.5 py-2 text-[12px] transition-colors flex items-center justify-between gap-3 ${value === opt.id ? 'bg-slate-50 text-[var(--color-primary)] font-semibold' : 'font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-800'}`}>
                 <span className="truncate">{opt.label}</span>
                 {value === opt.id && <Icon name="check" size={12} />}
               </button>
@@ -90,12 +84,12 @@ function HeadFilterButton({ value, onChange }) {
   return (
     <div ref={ref} className="relative">
       <button onClick={() => setOpen((o) => !o)}
-              className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-[9px] border text-[12.5px] font-semibold transition-colors ${active ? 'border-[#0A1F3D] text-[#0A1F3D] bg-[#E9F0F6]' : 'border-[#C7D0DE] text-[#46586F] bg-white hover:border-[#93A0B3]'}`}>
+              className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-[9px] border text-[12.5px] font-semibold transition-colors ${active ? 'border-[var(--color-primary)] text-[var(--color-primary)] bg-[var(--color-bg-soft)]' : 'border-[var(--color-border-strong)] text-[#46586F] bg-white hover:border-[var(--color-text-muted)]'}`}>
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
           <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
         </svg>
         Filters
-        {active && <span className="w-[7px] h-[7px] rounded-full bg-[#0A1F3D]" />}
+        {active && <span className="w-[7px] h-[7px] rounded-full bg-[var(--color-primary)]" />}
       </button>
       {open && (
         <div className="absolute top-full right-0 mt-1.5 bg-white rounded-xl border border-slate-200 z-40 min-w-[190px] overflow-hidden"
@@ -104,7 +98,7 @@ function HeadFilterButton({ value, onChange }) {
           <div className="py-1">
             {OIG_FILTER_OPTIONS.map((opt) => (
               <button key={opt.id} onMouseDown={() => { onChange(opt.id); setOpen(false) }}
-                      className={`w-full text-left px-3.5 py-2 text-[12px] transition-colors flex items-center justify-between gap-3 ${value === opt.id ? 'bg-slate-50 text-[#0A1F3D] font-semibold' : 'font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-800'}`}>
+                      className={`w-full text-left px-3.5 py-2 text-[12px] transition-colors flex items-center justify-between gap-3 ${value === opt.id ? 'bg-slate-50 text-[var(--color-primary)] font-semibold' : 'font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-800'}`}>
                 <span className="truncate">{opt.label}</span>
                 {value === opt.id && <Icon name="check" size={12} />}
               </button>
@@ -139,7 +133,7 @@ function supplierSub(s) {
 }
 const urgencyScore = (s) => (s.risk === 'Critical' ? 300 : s.risk === 'High' ? 200 : s.risk === 'Medium' ? 100 : 0) + (s.oig ? 50 : 0) + (s.physicianFlags || 0)
 const actionLabel = (s) => s.risk === 'Critical' ? 'Escalate' : (s.oig || (s.physicianFlags || 0) > 0) ? 'Review' : 'View'
-const barColor = (s) => s.risk === 'Critical' ? '#A6453F' : s.risk === 'High' ? '#D1A85C' : '#5A9BC9'
+const barColor = (s) => bandByName(s.risk).color
 
 export default function SupplierWatchlist({ onSelect, onViewAll, search = '' }) {
   const [rows, setRows]       = useState([])
@@ -204,20 +198,8 @@ export default function SupplierWatchlist({ onSelect, onViewAll, search = '' }) 
   )
 
   return (
-    <div className="w-full h-full flex flex-col min-h-0 px-4 sm:px-7 py-4">
+    <div className="w-full h-full flex flex-col min-h-0 px-4 sm:px-7 pt-1 pb-4">
       <div className="w-full flex-1 min-h-0 flex flex-col gap-4">
-
-        {/* ── Page head — today's date on the right, same as the Physician
-             Leaderboard's greeting row ── */}
-        <div className="flex-shrink-0 flex items-baseline justify-between gap-3 flex-wrap">
-          <div>
-            <h1 className="text-[21px] font-bold text-slate-900 leading-tight">Vendor Watchlist</h1>
-            <p className="text-[12.5px] text-slate-400 mt-0.5">Monitor flagged and high-risk vendors across your claims network</p>
-          </div>
-          <span className="text-[12px] text-[#647089]">
-            {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-          </span>
-        </div>
 
         {/* ── Stat row — shared moodboard KpiCard (glow circle, icon badge,
              colored progress track), same recipe as the physician dashboard ── */}
@@ -244,21 +226,21 @@ export default function SupplierWatchlist({ onSelect, onViewAll, search = '' }) 
 
         {/* ── Billed summary + suppliers needing action ── */}
         <div className="flex-shrink-0 grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-4">
-          <div className="bg-white border border-[#E1E6EE] rounded-2xl px-5 py-4"
+          <div className="bg-white border border-[var(--color-border)] rounded-2xl px-5 py-4"
                style={{ boxShadow: '0 1px 2px rgba(10,31,61,.05), 0 1px 1px rgba(10,31,61,.03)' }}>
             <div className="flex items-start justify-between gap-3 mb-1">
               <div>
-                <h3 className="text-[14px] font-bold text-[#0A1F3D]">Billed summary</h3>
-                <span className="text-[11px] text-[#647089]">Top vendors by billed amount — bar color is risk level</span>
+                <h3 className="text-[14px] font-bold text-[var(--color-primary)]">Billed summary</h3>
+                <span className="text-[11px] text-[var(--color-text-body)]">Top vendors by billed amount — bar color is risk level</span>
               </div>
               <div className="flex items-center gap-3 shrink-0 pt-0.5">
-                <span className="flex items-center gap-1.5 text-[10.5px] text-[#647089]">
+                <span className="flex items-center gap-1.5 text-[10.5px] text-[var(--color-text-body)]">
                   <span className="w-2 h-2 rounded-full inline-block" style={{ background: '#A6453F' }} />Critical
                 </span>
-                <span className="flex items-center gap-1.5 text-[10.5px] text-[#647089]">
+                <span className="flex items-center gap-1.5 text-[10.5px] text-[var(--color-text-body)]">
                   <span className="w-2 h-2 rounded-full inline-block" style={{ background: '#D1A85C' }} />High
                 </span>
-                <span className="flex items-center gap-1.5 text-[10.5px] text-[#647089]">
+                <span className="flex items-center gap-1.5 text-[10.5px] text-[var(--color-text-body)]">
                   <span className="w-2 h-2 rounded-full inline-block" style={{ background: '#5A9BC9' }} />Medium/Low
                 </span>
               </div>
@@ -274,7 +256,7 @@ export default function SupplierWatchlist({ onSelect, onViewAll, search = '' }) 
                        onMouseEnter={() => setHoverBilled(i)} onMouseLeave={() => setHoverBilled((h) => (h === i ? null : h))}>
                     {hoverBilled === i && (
                       <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 z-10 pointer-events-none whitespace-nowrap rounded-lg px-2.5 py-1.5 text-white"
-                           style={{ background: '#0A1F3D', boxShadow: '0 4px 12px rgba(10,31,61,.25)' }}>
+                           style={{ background: 'var(--color-primary)', boxShadow: '0 4px 12px rgba(10,31,61,.25)' }}>
                         <div className="text-[10.5px] font-bold max-w-[180px] truncate">{s.name}</div>
                         <div className="text-[10px] flex items-center gap-1.5 mt-0.5">
                           <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ background: barColor(s) }} />
@@ -284,7 +266,7 @@ export default function SupplierWatchlist({ onSelect, onViewAll, search = '' }) 
                     )}
                     <div className="w-full max-w-[26px] rounded-t-[6px] transition-all duration-300 cursor-default"
                          style={{ height: `${Math.max(6, (s.totalAmount / topBilledMax) * 100)}%`, background: barColor(s), opacity: hoverBilled === null || hoverBilled === i ? 1 : 0.45 }} />
-                    <span className="text-[9.5px] truncate w-full text-center" style={{ color: hoverBilled === i ? '#0A1F3D' : '#647089', fontWeight: hoverBilled === i ? 700 : 400 }}>
+                    <span className="text-[9.5px] truncate w-full text-center" style={{ color: hoverBilled === i ? 'var(--color-primary)' : 'var(--color-text-body)', fontWeight: hoverBilled === i ? 700 : 400 }}>
                       {(s.name || '').split(' ')[0].slice(0, 9)}
                     </span>
                   </div>
@@ -293,11 +275,11 @@ export default function SupplierWatchlist({ onSelect, onViewAll, search = '' }) 
             )}
           </div>
 
-          <div className="bg-white border border-[#E1E6EE] rounded-2xl px-5 py-4"
+          <div className="bg-white border border-[var(--color-border)] rounded-2xl px-5 py-4"
                style={{ boxShadow: '0 1px 2px rgba(10,31,61,.05), 0 1px 1px rgba(10,31,61,.03)' }}>
             <div className="mb-1">
-              <h3 className="text-[14px] font-bold text-[#0A1F3D]">Vendors needing action</h3>
-              <span className="text-[11px] text-[#647089]">Sorted by urgency — flags and OIG status first</span>
+              <h3 className="text-[14px] font-bold text-[var(--color-primary)]">Vendors needing action</h3>
+              <span className="text-[11px] text-[var(--color-text-body)]">Sorted by urgency — flags and OIG status first</span>
             </div>
             {loading ? (
               <div className="mt-2 space-y-2">{[0, 1, 2, 3, 4].map((i) => <div key={i} className="h-9 rounded-lg bg-slate-100 animate-pulse" />)}</div>
@@ -306,13 +288,13 @@ export default function SupplierWatchlist({ onSelect, onViewAll, search = '' }) 
             ) : (
               <div className="mt-1">
                 {needingAction.map((s, i) => (
-                  <div key={s.id} className={`flex items-center gap-2.5 py-2.5 ${i > 0 ? 'border-t border-[#F1F4F9]' : ''}`}>
+                  <div key={s.id} className={`flex items-center gap-2.5 py-2.5 ${i > 0 ? 'border-t border-[var(--color-bg-soft)]' : ''}`}>
                     <span className="w-[7px] h-[7px] rounded-full flex-shrink-0" style={{ background: barColor(s) }} />
                     <div className="flex-1 min-w-0">
-                      <div className="text-[12.5px] font-semibold text-[#0A1F3D] truncate">{s.name}</div>
-                      <div className="text-[10.5px] text-[#647089] truncate">{supplierSub(s)}</div>
+                      <div className="text-[12.5px] font-semibold text-[var(--color-primary)] truncate">{s.name}</div>
+                      <div className="text-[10.5px] text-[var(--color-text-body)] truncate">{supplierSub(s)}</div>
                     </div>
-                    <span className="font-mono text-[12.5px] font-bold text-[#0A1F3D] flex-shrink-0 w-14 text-right">{fmtShortUSD(s.totalAmount)}</span>
+                    <span className="font-mono text-[12.5px] font-bold text-[var(--color-primary)] flex-shrink-0 w-14 text-right">{fmtShortUSD(s.totalAmount)}</span>
                     <button onClick={() => onSelect?.(s)}
                             className={`flex-shrink-0 ${actionLabel(s) === 'Escalate' ? 'take-action-btn' : 'view-btn'}`}>
                       {actionLabel(s)} →
@@ -326,15 +308,14 @@ export default function SupplierWatchlist({ onSelect, onViewAll, search = '' }) 
 
         {/* ── Suppliers table — absorbs whatever height is left of the viewport
              (the page itself never scrolls); long lists scroll inside the card ── */}
-        <div className="flex-1 flex flex-col bg-white border border-[#E1E6EE] rounded-2xl overflow-hidden min-h-[220px]"
+        <div className="flex-1 flex flex-col bg-white border border-[var(--color-border)] rounded-2xl overflow-hidden min-h-[220px]"
              style={{ boxShadow: '0 1px 2px rgba(10,31,61,.05), 0 1px 1px rgba(10,31,61,.03)' }}>
           <div className="flex-shrink-0 flex items-start justify-between gap-3 px-5 py-4">
             <div>
-              <h3 className="text-[14px] font-bold text-[#0A1F3D]">Vendors</h3>
-              <span className="text-[11px] text-[#647089]">{rows.length.toLocaleString()} total, sorted by billed amount</span>
+              <h3 className="text-[14px] font-bold text-[var(--color-primary)]">Vendors</h3>
             </div>
             <button onClick={() => onViewAll?.()}
-                    className="text-[11.5px] font-semibold text-[#5B84C4] hover:underline flex-shrink-0 pt-0.5">
+                    className="text-[11.5px] font-semibold text-[var(--color-primary-tint)] hover:underline flex-shrink-0 pt-0.5">
               View all →
             </button>
           </div>
@@ -369,12 +350,12 @@ function VendorsTable({ rows, sort, onSort, risk, setRisk, onSelect, onClearFilt
               const activeSort = sort.key === c.key
               return (
                 <th key={c.key} onClick={() => onSort(c.key)}
-                    className={`text-left py-2.5 px-3.5 text-[10.5px] font-semibold uppercase tracking-[0.04em] text-[#647089] bg-[#F7F9FC] border-b border-[#F1F4F9] whitespace-nowrap cursor-pointer select-none group ${c.align === 'right' ? 'text-right' : ''} ${hideCls(c.hide)}`}>
-                  <span className={`inline-flex items-center gap-1 group-hover:text-[#0A1F3D] transition-colors ${c.align === 'right' ? 'justify-end' : ''}`}>
+                    className={`text-left py-2.5 px-3.5 text-[10.5px] font-semibold uppercase tracking-[0.04em] text-[var(--color-text-body)] bg-[var(--color-bg-soft)] border-b border-[var(--color-bg-soft)] whitespace-nowrap cursor-pointer select-none group ${c.align === 'right' ? 'text-right' : ''} ${hideCls(c.hide)}`}>
+                  <span className={`inline-flex items-center gap-1 group-hover:text-[var(--color-primary)] transition-colors ${c.align === 'right' ? 'justify-end' : ''}`}>
                     {c.label}
                     {activeSort
-                      ? <span className="text-[#0A1F3D] font-bold">{sort.dir === 'asc' ? '↑' : '↓'}</span>
-                      : <span className="text-slate-300 group-hover:text-[#0A1F3D] transition-colors">↕</span>}
+                      ? <span className="text-[var(--color-primary)] font-bold">{sort.dir === 'asc' ? '↑' : '↓'}</span>
+                      : <span className="text-slate-300 group-hover:text-[var(--color-primary)] transition-colors">↕</span>}
                   </span>
                 </th>
               )
@@ -384,16 +365,16 @@ function VendorsTable({ rows, sort, onSort, risk, setRisk, onSelect, onClearFilt
         <tbody>
           {rows.map((s) => (
             <tr key={s.id} onClick={() => onSelect?.(s)}
-                className="cursor-pointer transition-colors duration-100 border-b border-[#F1F4F9] hover:bg-[#F7F9FC]">
+                className="cursor-pointer transition-colors duration-100 border-b border-[var(--color-bg-soft)] hover:bg-[var(--color-bg-soft)]">
 
               <td className="py-[11px] px-3.5 align-middle">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-[26px] h-[26px] rounded-[7px] bg-[#F1F4F9] text-[#647089] flex items-center justify-center flex-shrink-0">
+                  <div className="w-[26px] h-[26px] rounded-[7px] bg-[var(--color-bg-soft)] text-[var(--color-text-body)] flex items-center justify-center flex-shrink-0">
                     <Icon name="suppliers" size={13} />
                   </div>
                   <div className="min-w-0">
-                    <div className="font-semibold text-[#0A1F3D] leading-snug truncate">{s.name}</div>
-                    <div className="text-[10.5px] text-[#647089] font-mono truncate">{supplierSub(s)}</div>
+                    <div className="font-semibold text-[var(--color-primary)] leading-snug truncate">{s.name}</div>
+                    <div className="text-[10.5px] text-[var(--color-text-body)] font-mono truncate">{supplierSub(s)}</div>
                   </div>
                 </div>
               </td>
@@ -422,7 +403,7 @@ function VendorsTable({ rows, sort, onSort, risk, setRisk, onSelect, onClearFilt
                   <Icon name="search" size={28} stroke={1.5} className="text-slate-300" />
                   <span className="text-sm font-medium">No vendors match these filters</span>
                   <button onClick={() => onClearFilters?.()}
-                          className="text-xs font-semibold text-[#0A1F3D] hover:underline mt-1 cursor-pointer">
+                          className="text-xs font-semibold text-[var(--color-primary)] hover:underline mt-1 cursor-pointer">
                     Clear filters
                   </button>
                 </div>
@@ -488,12 +469,12 @@ export function AllVendors({ onSelect, search = '' }) {
 
   return (
     <div className="w-full h-full flex flex-col min-h-0 px-4 sm:px-7 pt-4 pb-5">
-      <div className="flex-1 min-h-0 flex flex-col bg-white border border-[#E1E6EE] rounded-2xl overflow-hidden"
+      <div className="flex-1 min-h-0 flex flex-col bg-white border border-[var(--color-border)] rounded-2xl overflow-hidden"
            style={{ boxShadow: '0 1px 2px rgba(10,31,61,.05), 0 1px 1px rgba(10,31,61,.03)' }}>
         <div className="flex-shrink-0 flex items-start justify-between gap-3 px-5 py-4">
           <div>
-            <h3 className="text-[14px] font-bold text-[#0A1F3D]">All vendors</h3>
-            <span className="text-[11px] text-[#647089]">
+            <h3 className="text-[14px] font-bold text-[var(--color-primary)]">All vendors</h3>
+            <span className="text-[11px] text-[var(--color-text-body)]">
               {sorted.length.toLocaleString()} of {rows.length.toLocaleString()} vendors, sorted by billed amount
             </span>
           </div>

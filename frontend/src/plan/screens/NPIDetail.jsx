@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { getNpiDetail, getNpiSummary, getSuppliers, API_BASE } from '../../api'
 import { Icon, StatCard, fmtUSD, fmtDate, timeAgo } from '../../components/ui'
 import FraudPatternPanel from '../components/FraudPatternPanel'
+import { riskBand } from '../../lib/risk'
 
 // Service Category tag — same light-glass pill recipe as the vendor/physician
 // claims tables (.cat-tag + .cat-dme/.cat-home-health/.cat-hospital/.cat-drugs
@@ -47,7 +48,7 @@ const ACTION_META = {
   confirmed: { label: 'Confirmed', dot: '#3A7D5C' },
   disputed: { label: 'Disputed', dot: '#D1A85C' },
   flagged: { label: 'Flagged Vendor', dot: '#A6453F' },
-  unknownPatient: { label: 'Unknown Patient', dot: '#C7D0DE' },
+  unknownPatient: { label: 'Unknown Patient', dot: 'var(--color-border-strong)' },
   deceasedPatient: { label: 'Deceased Patient', dot: '#7A6899' },
   deniedOrder: { label: 'Did Not Order', dot: '#A6453F' },
 }
@@ -77,13 +78,10 @@ const CLAIM_COMPARATORS = {
 // Compact 64px risk ring for the header card -- colored arc (score% of the
 // circumference, 12 o'clock start, clockwise) with the number + tier label
 // centered inside. Mirrors the NPI investigation mockup's risk-ring-wrap.
-function scoreTier(score) {
-  if (score > 80) return { color: '#A6453F', label: 'Critical' }
-  if (score > 65) return { color: '#D1A85C', label: 'High' }
-  if (score > 30) return { color: '#D1A85C', label: 'Medium' }
-  return { color: '#3A7D5C', label: 'Low' }
-}
-function HeaderRiskRing({ score, size = 64, strokeWidth = 6, trackColor = '#F1F4F9', numColor }) {
+// Cut at 65 before, and gave High and Medium the same color — both fixed by
+// deriving from the shared band definition.
+const scoreTier = (score) => riskBand(score)
+function HeaderRiskRing({ score, size = 64, strokeWidth = 6, trackColor = 'var(--color-bg-soft)', numColor }) {
   const { color, label } = scoreTier(score)
   const r = (size - strokeWidth) / 2, circ = 2 * Math.PI * r
   const offset = circ * (1 - Math.min(100, Math.max(0, score)) / 100)
@@ -134,7 +132,7 @@ function getSeverity(points) {
 // instead of every flag type sharing one flat rose chip.
 function FlagChip({ code, rulesFired, onClick }) {
   const rule = rulesFired?.find((r) => r.rule === FLAG_TO_RULE[code])
-  const sev = rule ? getSeverity(rule.points) : { badgeBg: '#F1F4F9', badgeTx: '#647089' }
+  const sev = rule ? getSeverity(rule.points) : { badgeBg: 'var(--color-bg-soft)', badgeTx: 'var(--color-text-body)' }
   return (
     <button onClick={onClick} title="Investigate this flag"
             className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap transition-opacity hover:opacity-80"
@@ -172,9 +170,9 @@ function ClaimFilterTh({ label, options, value, onChange, multi = false, cls = '
     <th ref={ref} className={`th select-none relative ${cls}`}>
       <button onClick={() => setOpen((o) => !o)}
               className="inline-flex items-center gap-1 bg-transparent border-0 p-0 m-0 cursor-pointer uppercase"
-              style={{ color: open || active ? '#0A1F3D' : 'inherit', font: 'inherit' }}>
+              style={{ color: open || active ? 'var(--color-primary)' : 'inherit', font: 'inherit' }}>
         {label}{multi && active ? ` (${value.length})` : ''}
-        <Icon name="chevronDown" size={10} className={open || active ? 'text-[#0A1F3D]' : 'text-slate-300'}
+        <Icon name="chevronDown" size={10} className={open || active ? 'text-[var(--color-primary)]' : 'text-slate-300'}
               style={{ transition: 'transform .15s ease', transform: open ? 'rotate(180deg)' : 'none' }} />
       </button>
       {open && (
@@ -182,7 +180,7 @@ function ClaimFilterTh({ label, options, value, onChange, multi = false, cls = '
              style={{ boxShadow: '0 8px 24px rgba(15,23,42,0.10), 0 2px 6px rgba(15,23,42,0.06)' }}>
           <div className="py-1">
             <button onMouseDown={(e) => { e.preventDefault(); pick('') }}
-                    className={`w-full text-left px-3.5 py-2 text-[12px] transition-colors flex items-center justify-between gap-3 ${allSelected ? 'bg-slate-50 text-[#0A1F3D] font-semibold' : 'font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-800'}`}>
+                    className={`w-full text-left px-3.5 py-2 text-[12px] transition-colors flex items-center justify-between gap-3 ${allSelected ? 'bg-slate-50 text-[var(--color-primary)] font-semibold' : 'font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-800'}`}>
               <span className="truncate">All</span>
               {allSelected && <Icon name="check" size={12} />}
             </button>
@@ -190,7 +188,7 @@ function ClaimFilterTh({ label, options, value, onChange, multi = false, cls = '
               const sel = multi ? value.includes(opt.id) : value === opt.id
               return (
                 <button key={opt.id} onMouseDown={(e) => { e.preventDefault(); pick(opt.id) }}
-                        className={`w-full text-left px-3.5 py-2 text-[12px] transition-colors flex items-center justify-between gap-3 ${sel ? 'bg-slate-50 text-[#0A1F3D] font-semibold' : 'font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-800'}`}>
+                        className={`w-full text-left px-3.5 py-2 text-[12px] transition-colors flex items-center justify-between gap-3 ${sel ? 'bg-slate-50 text-[var(--color-primary)] font-semibold' : 'font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-800'}`}>
                   <span className="truncate">{opt.label}</span>
                   {sel && <Icon name="check" size={12} />}
                 </button>
@@ -200,129 +198,6 @@ function ClaimFilterTh({ label, options, value, onChange, multi = false, cls = '
         </div>
       )}
     </th>
-  )
-}
-
-function fmtDueMonth(due) {
-  if (!due) return null
-  const s = String(due).trim()
-  if (!s || s.toUpperCase() === 'TBD') return null
-  const d = new Date(s)
-  if (isNaN(d.getTime())) return s
-  return `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`
-}
-
-function VRow({ label, tone, text }) {
-  const s = {
-    ok:    { bg: 'bg-[#E9F3ED]', txt: 'text-[#2E6B4F]', border: 'border-[#D5E9DD]', iconBg: 'bg-[#E9F3ED]', iconTx: 'text-[#3A7D5C]', icon: 'check'    },
-    warn:  { bg: 'bg-[#FBF3E4]', txt: 'text-[#8A6A34]', border: 'border-[#F0E0BE]', iconBg: 'bg-[#FBF3E4]', iconTx: 'text-[#D1A85C]', icon: 'clock'    },
-    bad:   { bg: 'bg-[#F7EBEA]', txt: 'text-[#8A423D]', border: 'border-[#EBD3D1]', iconBg: 'bg-[#F7EBEA]', iconTx: 'text-[#A6453F]', icon: 'alertTri' },
-    muted: { bg: 'bg-slate-50',  txt: 'text-slate-400',  border: 'border-slate-200/80', iconBg: 'bg-slate-100', iconTx: 'text-slate-300', icon: 'x' },
-  }[tone] || { bg: 'bg-slate-50', txt: 'text-slate-400', border: 'border-slate-200/80', iconBg: 'bg-slate-100', iconTx: 'text-slate-300', icon: 'x' }
-  return (
-    <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-3 sm:py-3.5 border-b border-slate-50 last:border-0 hover:bg-slate-50/60 transition-colors">
-      <div className="flex items-center gap-2.5 min-w-0">
-        <span className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${s.iconBg} ${s.iconTx}`}>
-          <Icon name={s.icon} size={11} stroke={2.4} />
-        </span>
-        <span className="text-[12px] sm:text-[13px] text-slate-600 truncate">{label}</span>
-      </div>
-      <span className={`inline-flex items-center px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-[11px] font-semibold border shrink-0 max-w-[180px] sm:max-w-none ${s.bg} ${s.txt} ${s.border}`}>
-        <span className="truncate">{text}</span>
-      </span>
-    </div>
-  )
-}
-
-// Row list shared by the Verification Status card and the header KPI —
-// returns null for pre-feature accounts with no verification record.
-function buildVerificationRows(verification) {
-  if (!verification || Object.keys(verification).length === 0) return null
-
-  // Handle both key schemas: newer physician register uses cms_* keys; the original
-  // CMS-verification register used order_referring / revalidation.
-  const or = verification.cms_order_referring || verification.order_referring || {}
-  const rv = verification.cms_revalidation || verification.revalidation || {}
-  const orManual = or.manual_review === true || !!or.warning
-
-  const due = fmtDueMonth(rv.due_date)
-  const rvMap = {
-    current:      { tone: 'ok',    mark: '✓', text: `Current${due ? ` (due: ${due})` : ''}` },
-    due_soon:     { tone: 'warn',  mark: '⚠', text: `Due soon${due ? ` (due: ${due})` : ''}` },
-    lapsed:       { tone: 'bad',   mark: '✗', text: `Lapsed${due ? ` (due: ${due})` : ''}` },
-    tbd:          { tone: 'muted', mark: '—', text: 'TBD' },
-    not_found:    { tone: 'muted', mark: '—', text: 'Not found' },
-    check_failed: { tone: 'warn',  mark: '⚠', text: 'Check unavailable' },
-  }
-  const rvRow = rvMap[rv.status] || { tone: 'muted', mark: '—', text: 'Not found' }
-
-  // Advisory license rows (DEA / State license): verified / pending review / not provided.
-  function licenseRow(r) {
-    if (!r || r.status === 'not_provided') return { tone: 'muted', mark: '—', text: 'Not provided' }
-    if (r.valid === true && !r.manual_review) return { tone: 'ok', mark: '✓', text: 'Verified' }
-    if (r.valid === false) return { tone: 'warn', mark: '⚠', text: 'Pending Review' }
-    return { tone: 'warn', mark: '⚠', text: 'Pending Review' }
-  }
-  const dea = licenseRow(verification.dea)
-  const lic = licenseRow(verification.state_license)
-  const ptanV = verification.ptan || {}
-  const ptanRow = ptanV.status === 'not_provided' || !ptanV.status
-    ? { tone: 'muted', mark: '—', text: 'Not provided' }
-    : { tone: 'warn', mark: '⚠', text: 'Self-reported, MAC verification pending' }
-
-  return [
-    { label: 'NPPES',             tone: 'ok',                     text: 'Verified'                              },
-    { label: 'OIG Exclusions',    tone: 'ok',                     text: 'Clear'                                 },
-    { label: 'Order & Referring', tone: orManual ? 'warn' : 'ok', text: orManual ? 'Manual Review' : 'Eligible' },
-    { label: 'Revalidation',      tone: rvRow.tone,               text: rvRow.text                              },
-    { label: 'DEA License',       tone: dea.tone,                 text: dea.text                                },
-    { label: 'State License',     tone: lic.tone,                 text: lic.text                                },
-    { label: 'PTAN',              tone: ptanRow.tone,             text: ptanRow.text                            },
-  ]
-}
-
-// Verification banner — replaces the old buried KPI card with a prominent,
-// color-coded strip (warning tone when not run / issues found, success tone
-// when clear). Clicking expands the same check list inline instead of a
-// popover, since a full-width banner reads better as an accordion.
-function VerificationBanner({ verification }) {
-  const [open, setOpen] = useState(false)
-  const rows = buildVerificationRows(verification)
-  // Pre-feature accounts (registered before CMS verification existed) have no
-  // record at all — nothing useful to show, so skip the banner entirely
-  // instead of a permanent "not run" strip.
-  if (rows == null) return null
-  const issues = rows.filter((r) => r.tone === 'bad' || r.tone === 'warn').length
-  const bad = issues > 0
-  const palette = bad
-    ? { bg: '#FBF3E4', border: '#F0E0BE', iconBg: '#D1A85C', text: '#8A6A34' }
-    : { bg: '#E9F3ED', border: '#D5E9DD', iconBg: '#3A7D5C', text: '#2E6B4F' }
-
-  return (
-    <div className="rounded-2xl mb-4 overflow-hidden lg:shrink-0" style={{ backgroundColor: palette.bg, border: `1px solid ${palette.border}` }}>
-      <button type="button" onClick={() => setOpen((v) => !v)}
-              className="w-full flex items-center gap-3.5 px-4 sm:px-5 py-3.5 text-left cursor-pointer flex-wrap">
-        <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: palette.iconBg }}>
-          <Icon name="shield" size={16} style={{ color: '#fff' }} />
-        </div>
-        <div className="flex-1 min-w-[220px] text-[13px]">
-          <b style={{ color: palette.text }}>
-            {bad ? `Verification — ${issues} issue${issues !== 1 ? 's' : ''}` : 'Verification — all clear'}
-          </b>
-          {' — '}
-          <span className="text-slate-600">
-            {bad ? 'review the flagged checks below.' : 'CMS & registry checks passed at registration.'}
-          </span>
-        </div>
-        <Icon name="chevronDown" size={14} stroke={2.5} className="text-slate-400 transition-transform duration-150 shrink-0"
-              style={{ transform: open ? 'rotate(180deg)' : 'none' }} />
-      </button>
-      {open && (
-        <div className="bg-white" style={{ borderTop: `1px solid ${palette.border}` }}>
-          {rows.map((r) => <VRow key={r.label} label={r.label} tone={r.tone} text={r.text} />)}
-        </div>
-      )}
-    </div>
   )
 }
 
@@ -484,7 +359,7 @@ export default function NPIDetail({ npi: row, onBack, backLabel, onOpenSupplier,
           const sev = getSeverity(r.points)
           return (
             <button key={i} onClick={() => onPatternClick(r)} disabled={!r.rule}
-                    className={`text-left rounded-xl border p-3.5 flex items-start gap-3 transition-colors duration-150 disabled:cursor-default ${selected ? 'border-[#0A1F3D]/25 bg-[#E9F0F6]/60' : 'border-slate-200 hover:bg-slate-50'}`}>
+                    className={`text-left rounded-xl border p-3.5 flex items-start gap-3 transition-colors duration-150 disabled:cursor-default ${selected ? 'border-[var(--color-primary)]/25 bg-[var(--color-bg-soft)]/60' : 'border-slate-200 hover:bg-slate-50'}`}>
               <div className="w-8 h-8 rounded-[10px] flex items-center justify-center shrink-0" style={{ background: sev.badgeBg, color: sev.badgeTx }}>
                 <Icon name={RULE_ICON[r.rule] || 'alertTri'} size={15} />
               </div>
@@ -535,13 +410,13 @@ export default function NPIDetail({ npi: row, onBack, backLabel, onOpenSupplier,
       {/* Hero -- navy risk-first identity card: gauge + identity + claims/billed
           stats in one band, replacing the old row of 5 separate white cards. */}
       <div className="relative overflow-hidden rounded-2xl px-5 sm:px-7 py-5 sm:py-6 mb-4 flex items-center gap-5 sm:gap-8 flex-wrap lg:shrink-0"
-           style={{ background: 'linear-gradient(135deg, #0A1F3D, #12335E)' }}>
+           style={{ background: 'linear-gradient(135deg, var(--color-primary), #12335E)' }}>
         <div className="absolute -bottom-16 -right-10 w-44 h-44 rounded-full pointer-events-none" style={{ background: 'rgba(255,255,255,.06)' }} />
 
         <HeaderRiskRing score={npi.score} size={88} strokeWidth={8} trackColor="rgba(255,255,255,.15)" numColor="#fff" />
 
         <div className="flex-1 min-w-[220px] relative">
-          <p className="text-[11px] font-bold uppercase tracking-widest" style={{ color: '#8FA6C9' }}>NPI Investigation</p>
+          <p className="text-[11px] font-bold uppercase tracking-widest" style={{ color: 'var(--color-text-on-primary)' }}>NPI Investigation</p>
           <h1 className="font-extrabold text-white text-lg sm:text-xl leading-tight mt-0.5" style={{ fontFamily: "'Manrope',sans-serif" }}>{npi.name}</h1>
           <p className="text-[13px] mt-0.5" style={{ color: '#B9CBE8' }}>NPI <span className="font-mono">{npi.npi}</span> · {npi.city}, {npi.state}</p>
           <span className="inline-block mt-1.5 text-[12px] font-semibold px-3 py-0.5 rounded-full" style={{ background: 'rgba(255,255,255,.12)', color: '#fff' }}>{npi.specialty}</span>
@@ -549,17 +424,15 @@ export default function NPIDetail({ npi: row, onBack, backLabel, onOpenSupplier,
 
         <div className="flex gap-6 sm:gap-8 relative">
           <button onClick={scrollToClaims} className="text-left cursor-pointer">
-            <div className="text-[10px] font-bold uppercase tracking-wider" style={{ color: '#8FA6C9' }}>Claims</div>
+            <div className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--color-text-on-primary)' }}>Claims</div>
             <div className="font-extrabold text-white text-xl mt-1" style={{ fontFamily: "'Manrope',sans-serif" }}>{(npi.totalClaims || 0).toLocaleString()}</div>
           </button>
           <button onClick={scrollToClaims} className="text-left cursor-pointer">
-            <div className="text-[10px] font-bold uppercase tracking-wider" style={{ color: '#8FA6C9' }}>Billed</div>
+            <div className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--color-text-on-primary)' }}>Billed</div>
             <div className="font-extrabold text-white text-xl mt-1" style={{ fontFamily: "'Manrope',sans-serif" }}>{fmtUSD(npi.totalAmount)}</div>
           </button>
         </div>
       </div>
-
-      <VerificationBanner verification={npi.verification} />
 
       {/* AI strip */}
       <div className="rounded-2xl px-4 sm:px-5 py-3.5 mb-4 flex items-center gap-3.5 flex-wrap lg:shrink-0"
@@ -584,7 +457,7 @@ export default function NPIDetail({ npi: row, onBack, backLabel, onOpenSupplier,
         <div className="flex items-center gap-2 shrink-0">
           <button type="button" onClick={() => setPatternsOpen((o) => !o)}
                   className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-lg border text-[12.5px] font-bold transition-colors whitespace-nowrap ${
-                    patternsOpen ? 'bg-[#0A1F3D] text-white border-[#0A1F3D]' : 'bg-white text-[#0A1F3D] border-slate-200 hover:bg-slate-50'
+                    patternsOpen ? 'bg-[var(--color-primary)] text-white border-[var(--color-primary)]' : 'bg-white text-[var(--color-primary)] border-slate-200 hover:bg-slate-50'
                   }`}>
             <Icon name="alertTri" size={14} />
             Fraud patterns
@@ -641,7 +514,7 @@ export default function NPIDetail({ npi: row, onBack, backLabel, onOpenSupplier,
                       </span>
                     )}
                     <button type="button" onClick={() => setPatternsOpen(false)} title="Close"
-                            className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:text-[#0A1F3D] hover:bg-slate-100 transition-colors">
+                            className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:text-[var(--color-primary)] hover:bg-slate-100 transition-colors">
                       <Icon name="x" size={15} stroke={2} />
                     </button>
                   </div>
@@ -669,13 +542,13 @@ export default function NPIDetail({ npi: row, onBack, backLabel, onOpenSupplier,
           <h2 className="text-sm font-bold text-slate-900">Claims ({(claimFilter || claimWindow || claimSupplier || categoryFilter || flagsFilter.length) ? `${sortedClaims.length} of ${npi.claims.length}` : npi.claims.length})</h2>
           <div className="flex items-center gap-3 shrink-0">
             {(claimFilter || claimWindow || claimSupplier || categoryFilter || flagsFilter.length > 0) && (
-              <button onClick={() => { setClaimFilter(null); setClaimWindow(null); setClaimSupplier(null); setCategoryFilter(''); setFlagsFilter([]) }} className="text-[11px] font-semibold text-[#0A1F3D] hover:underline whitespace-nowrap">
+              <button onClick={() => { setClaimFilter(null); setClaimWindow(null); setClaimSupplier(null); setCategoryFilter(''); setFlagsFilter([]) }} className="text-[11px] font-semibold text-[var(--color-primary)] hover:underline whitespace-nowrap">
                 Clear ✕
               </button>
             )}
             <button onClick={() => setClaimsPopped((v) => !v)}
                     title={claimsPopped ? 'Collapse' : 'Expand'}
-                    className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:text-[#0A1F3D] hover:bg-slate-100 transition-colors">
+                    className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:text-[var(--color-primary)] hover:bg-slate-100 transition-colors">
               <Icon name={claimsPopped ? 'minimize' : 'maximize'} size={15} stroke={2} />
             </button>
           </div>
@@ -691,7 +564,7 @@ export default function NPIDetail({ npi: row, onBack, backLabel, onOpenSupplier,
             const shown = (c.flags || []).filter((f) => !HIDDEN_FLAGS.includes(f))
             return (
               <div key={c.id} id={`claimrow-${c.id}`}
-                   className={`px-4 py-3 transition-colors ${c.id === highlightId ? 'bg-[#E9F0F6]' : ''}`}>
+                   className={`px-4 py-3 transition-colors ${c.id === highlightId ? 'bg-[var(--color-bg-soft)]' : ''}`}>
                 <div className="flex items-start justify-between gap-2 mb-1.5">
                   <div className="min-w-0">
                     <div className="text-[13px] font-semibold text-slate-800 truncate">{c.patient}</div>
@@ -727,7 +600,7 @@ export default function NPIDetail({ npi: row, onBack, backLabel, onOpenSupplier,
         <div className="hidden sm:block overflow-x-auto lg:overflow-x-visible">
           <table className="w-full">
             <thead className="lg:sticky lg:top-0 lg:z-10">
-              <tr className="border-b-2 border-slate-200 bg-[#F1F4F9]">
+              <tr className="border-b-2 border-slate-200 bg-[var(--color-bg-soft)]">
                 {CLAIM_COLUMNS.map((c) => {
                   // Category/Flags headers ARE their column's filter (dropdown);
                   // the rest keep the plain sort toggle.
@@ -743,10 +616,10 @@ export default function NPIDetail({ npi: row, onBack, backLabel, onOpenSupplier,
                   return (
                     <th key={c.key} onClick={() => onClaimSort(c.key)}
                         className={`th cursor-pointer select-none group ${c.right ? 'text-right' : ''} ${c.cls || ''}`}>
-                      <span className="inline-flex items-center gap-1 group-hover:text-[#0A1F3D] transition-colors">
+                      <span className="inline-flex items-center gap-1 group-hover:text-[var(--color-primary)] transition-colors">
                         {c.label}
                         {active
-                          ? <span className="text-[#0A1F3D]">{claimSort.dir === 'asc' ? '↑' : '↓'}</span>
+                          ? <span className="text-[var(--color-primary)]">{claimSort.dir === 'asc' ? '↑' : '↓'}</span>
                           : <span className="text-slate-300 group-hover:text-slate-500 transition-colors">↕</span>}
                       </span>
                     </th>
@@ -757,7 +630,7 @@ export default function NPIDetail({ npi: row, onBack, backLabel, onOpenSupplier,
             <tbody className="divide-y divide-slate-100">
               {sortedClaims.map((c) => (
                 <tr key={c.id} id={`claimrow-${c.id}`}
-                    className={`transition-colors ${c.id === highlightId ? 'bg-[#E9F0F6] ring-1 ring-inset ring-[#D2E1EB]' : 'hover:bg-slate-50'}`}>
+                    className={`transition-colors ${c.id === highlightId ? 'bg-[var(--color-bg-soft)] ring-1 ring-inset ring-[#D2E1EB]' : 'hover:bg-slate-50'}`}>
                   <td className="td text-xs tabular-nums whitespace-nowrap">{fmtDate(c.date)}</td>
                   <td className="td hidden sm:table-cell text-sm font-medium text-slate-700">{c.patient}</td>
                   <td className="td hidden md:table-cell text-xs">{c.description}</td>
@@ -819,7 +692,7 @@ export default function NPIDetail({ npi: row, onBack, backLabel, onOpenSupplier,
                                 {a.supplier && (
                                   <span className="text-xs text-slate-600">·{' '}
                                     <button type="button" onClick={() => openSupplier(a.supplier)}
-                                            className="font-bold text-[#0A1F3D] rounded px-0.5 transition-colors hover:bg-[#0A1F3D]/[0.08] hover:underline cursor-pointer max-w-[130px] sm:max-w-none truncate inline-block align-bottom">
+                                            className="font-bold text-[var(--color-primary)] rounded px-0.5 transition-colors hover:bg-[var(--color-primary)]/[0.08] hover:underline cursor-pointer max-w-[130px] sm:max-w-none truncate inline-block align-bottom">
                                       {a.supplier}
                                     </button>
                                   </span>

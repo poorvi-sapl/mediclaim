@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import { Icon, fmtUSD } from './ui'
-import { KpiCard } from './ui/kpi-card'
+import { KpiCard } from './ui/kpi-card-flat'
 
 /* ─── KPI Card Hover Preview (iframe thumbnail) ──────────────────── */
 const IS_PREVIEW = typeof window !== 'undefined' && window.location.search.includes('preview=1')
@@ -77,7 +77,6 @@ const DEFAULT_SUMMARY = { totalClaimsMonth: 0, totalAmountBilled: 0 }
 
 const HOW_IT_WORKS = [
   { icon: 'check',  label: 'Confirm',         desc: 'Claim is legitimate and you recognize the vendor',   iconCls: 'bg-emerald-50 text-emerald-600',  badge: 'bg-emerald-50 text-emerald-700 ring-emerald-200/60',  badgeLabel: 'Approve'  },
-  { icon: 'x',      label: 'Dispute',          desc: 'Amount or service details are incorrect',            iconCls: 'bg-rose-50 text-rose-500',         badge: 'bg-rose-50 text-rose-600 ring-rose-200/60',          badgeLabel: 'Dispute'  },
   { icon: 'flag',   label: 'Flag Vendor',      desc: 'Vendor is unknown or suspicious to you',             iconCls: 'bg-amber-50 text-amber-500',        badge: 'bg-amber-50 text-amber-700 ring-amber-200/60',        badgeLabel: 'Flag'     },
   { icon: 'userx',  label: 'Unknown Patient',  desc: "You don't recognize the patient on this claim",      iconCls: 'bg-violet-50 text-violet-500',      badge: 'bg-violet-50 text-violet-700 ring-violet-200/60',      badgeLabel: 'Unknown'  },
 ]

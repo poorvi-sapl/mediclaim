@@ -18,9 +18,14 @@ Distribution across the batch — deliberately spans every DisputeCase status
 the UI has a view for:
   8  OPEN                         — still within the 15-day window, unanswered
   6  RESPONDED_TO_MEDICARE        — vendor escalated straight to Medicare
-  4  PENDING_PHYSICIAN_CONFIRMATION — vendor resolved w/ physician, awaiting confirm
+  4  PENDING_PHYSICIAN_REVIEW     — vendor uploaded docs, awaiting physician review
   5  RESOLVED_BY_PHYSICIAN        — physician already confirmed it
   2  NON_RESPONSIVE               — vendor missed the deadline, escalated
+
+These 4 used to be seeded as PENDING_PHYSICIAN_CONFIRMATION, which the app no
+longer produces: the physician's dispute list doesn't show that status and
+/confirm rejects it, so those demo cases were invisible and unactionable until a
+7-day timer drained them. PENDING_PHYSICIAN_REVIEW is the live equivalent.
 
 Run:
     python -m backend.data.seed_demo_wilson_fraud
@@ -40,7 +45,7 @@ VENDOR_NPI = "1999000008"
 STATUS_PLAN = (
     ["OPEN"] * 8 +
     ["RESPONDED_TO_MEDICARE"] * 6 +
-    ["PENDING_PHYSICIAN_CONFIRMATION"] * 4 +
+    ["PENDING_PHYSICIAN_REVIEW"] * 4 +
     ["RESOLVED_BY_PHYSICIAN"] * 5 +
     ["NON_RESPONSIVE"] * 2
 )
@@ -176,10 +181,11 @@ def run():
                 vendor_responded_at = min(opened_at + timedelta(days=random.randint(1, 10)), now - timedelta(hours=1))
                 provider_response_type = "RESPONDED_TO_MEDICARE"
                 vendor_response_text = random.choice(MEDICARE_RESPONSE_NOTES)
-            elif case_status == "PENDING_PHYSICIAN_CONFIRMATION":
+            elif case_status == "PENDING_PHYSICIAN_REVIEW":
+                # Awaiting the physician's approve/decline of the vendor's docs.
+                # No confirmation deadline: that timer belongs to the retired flow.
                 vendor_responded_at = now - timedelta(hours=random.randint(1, 96))
                 vendor_response_text = random.choice(PHYSICIAN_RESOLUTION_NOTES)
-                physician_confirmation_due_date = vendor_responded_at + timedelta(days=7)
             elif case_status == "RESOLVED_BY_PHYSICIAN":
                 vendor_responded_at = min(opened_at + timedelta(days=random.randint(1, 8)), now - timedelta(hours=2))
                 vendor_response_text = random.choice(PHYSICIAN_RESOLUTION_NOTES)

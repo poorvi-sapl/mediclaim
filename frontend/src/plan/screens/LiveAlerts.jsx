@@ -68,9 +68,9 @@ export default function LiveAlerts() {
         </div>
         <div className="relative">
           <button onClick={() => setShowSettings((v) => !v)}
-                  className={`px-3.5 py-2 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-colors ${filtersActive ? 'border-[#0A1F3D] text-[#0A1F3D] bg-[#0A1F3D]/5' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                  className={`px-3.5 py-2 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-colors ${filtersActive ? 'border-[var(--color-primary)] text-[var(--color-primary)] bg-[var(--color-primary)]/5' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
             <Icon name="alerts" size={13} /> Alert Settings
-            {filtersActive && <span className="w-1.5 h-1.5 rounded-full bg-[#0A1F3D]" />}
+            {filtersActive && <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-primary)]" />}
           </button>
 
           {showSettings && (
@@ -86,7 +86,7 @@ export default function LiveAlerts() {
                   {TYPE_OPTIONS.map((t) => (
                     <label key={t.key} className="flex items-center gap-2.5 cursor-pointer select-none">
                       <input type="checkbox" checked={settings.types[t.key] !== false} onChange={() => toggleType(t.key)}
-                             className="w-4 h-4 rounded border-slate-300 text-[#0A1F3D] focus:ring-[#0A1F3D]/30" />
+                             className="w-4 h-4 rounded border-slate-300 text-[var(--color-primary)] focus:ring-[var(--color-primary)]/30" />
                       <span className="text-sm text-slate-600">{t.label}</span>
                     </label>
                   ))}
@@ -96,7 +96,7 @@ export default function LiveAlerts() {
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
                   <input type="number" min="0" step="100" value={settings.minAmount}
                          onChange={(e) => setSettings((s) => ({ ...s, minAmount: Math.max(0, Number(e.target.value) || 0) }))}
-                         className="w-full pl-7 pr-3 py-2 rounded-lg border border-slate-200 text-sm text-slate-700 outline-none focus:border-[#0A1F3D] focus:ring-2 focus:ring-[#0A1F3D]/15" />
+                         className="w-full pl-7 pr-3 py-2 rounded-lg border border-slate-200 text-sm text-slate-700 outline-none focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-primary)]/15" />
                 </div>
                 <button onClick={resetSettings} className="mt-4 w-full py-2 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50">
                   Reset to defaults
@@ -108,7 +108,7 @@ export default function LiveAlerts() {
       </div>
 
       <div className="mc-card overflow-hidden">
-        <div className="px-5 py-3 bg-slate-50/70 border-b border-slate-100 text-xs font-medium text-[#0A1F3D] flex items-center gap-2">
+        <div className="px-5 py-3 bg-slate-50/70 border-b border-slate-100 text-xs font-medium text-[var(--color-primary)] flex items-center gap-2">
           <Icon name="bolt" size={13} /> New physician flags appear here automatically — updates instantly.
           {filtersActive && <span className="ml-auto text-slate-400 font-normal">{hidden} hidden by filters</span>}
         </div>

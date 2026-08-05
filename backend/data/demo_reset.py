@@ -93,6 +93,19 @@ def main() -> int:
                 "'rapid_cycling','supplier_concentration','ghost_billing'))"))
         print("rule_name CHECK constraint widened for new rules")
 
+        # Canonicalize vendor identity to the supplier NPI BEFORE rules/scoring, so
+        # one real vendor (one NPI) is never split across multiple synthetic ids —
+        # matching how real ingested claims are keyed (routers/ingest.py).
+        from backend.data.canonicalize_vendors import canonicalize_vendor_ids
+        db = SessionLocal()
+        try:
+            cs = canonicalize_vendor_ids(db)
+            print(f"Vendor identity canonicalized to NPI: "
+                  f"{cs['vendor_ids_before']} -> {cs['vendor_ids_after']} vendor_ids "
+                  f"({cs['claims_updated']} claims re-keyed)")
+        finally:
+            db.close()
+
         settings = get_settings()
         db = SessionLocal()
         try:

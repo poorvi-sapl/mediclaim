@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { FileText, CheckCircle2, Clock, Flag, User } from 'lucide-react'
 import { getClaimsPage, getNpiWatchStats, API_BASE } from '../api'
 import { fmtUSD } from './ui'
-import { KpiCard } from './ui/kpi-card'
+import { KpiCard } from './ui/kpi-card-flat'
 
 /* ─── KPI Card Hover Preview (iframe thumbnail) — same recipe as the
    payer/vendor dashboards' KPI cards: hovering a card after a short delay
@@ -125,7 +125,7 @@ function velocityBarColor(count, max, isPeak) {
   return count / max < 0.4 ? SLATE_BLUE_LIGHT : SLATE_BLUE
 }
 
-// Top-row KPI cards use the shared `KpiCard` (./ui/kpi-card) — the same
+// Top-row KPI cards use the shared `KpiCard` (./ui/kpi-card-flat) — the same
 // component the vendor and Vendor Watchlist dashboards render, so all three
 // portals' KPI cards are pixel-identical rather than three near-duplicates.
 const KPI_TONE_MAP = { info: 'primary', error: 'danger', neutral: 'default', success: 'success', warning: 'warning' }

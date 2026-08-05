@@ -17,7 +17,9 @@ import NPILeaderboard, { AllPhysicians } from './plan/screens/NPILeaderboard'
 import NPIDetail from './plan/screens/NPIDetail'
 import SupplierWatchlist, { AllVendors } from './plan/screens/SupplierWatchlist'
 import SupplierDetail from './plan/screens/SupplierDetail'
+import RulesCatalog from './plan/screens/RulesCatalog'
 import SummaryCardSkeleton from './components/SummaryCardSkeleton'
+import AssistantWidget from './components/AssistantWidget'
 import { PHYSICIAN_NPI, getPhysician, getNotificationsCount, markNotificationsSeen, getNpiWatchNotifications, getNpiWatchStats, getPhysicianBellNotifications, getPlanDisputes, getPlanNotifications, confirmDisputeResolution, decideDisputeClaim, subscribeDisputeStream, submitComplianceAction, getSupplierById, API_BASE } from './api'
 import { PhysicianPortal, PhysDashboardScreen, PhysClaimsScreen, PhysClaimDetailScreen, PhysDisputesScreen, PhysDisputeDetailScreen } from './physician/PhysicianPortal'
 
@@ -25,9 +27,10 @@ const PLAN_NAV = [
   { id: 'home', label: 'Dashboard', icon: 'dashboard' },
   { id: 'leaderboard', label: 'Physician Leaderboard', icon: 'leaderboard' },
   { id: 'watchlist', label: 'Vendor Watchlist', icon: 'suppliers' },
+  { id: 'rules', label: 'Detection Console', icon: 'shieldAlert' },
   { id: 'disputes', label: 'NPI Disputes', icon: 'alertTri' },
 ]
-const PLAN_TITLES = { home: 'Payer Portal', leaderboard: 'Physician Risk Leaderboard', physicians: 'All Physicians', detail: 'NPI Detail', watchlist: 'Vendor Watchlist', vendors: 'All Vendors', supplierDetail: 'Vendor Case', alerts: 'Live Alerts', disputes: 'NPI Disputes', disputeDetail: 'Dispute Detail' }
+const PLAN_TITLES = { home: 'Payer Portal', leaderboard: 'Physician Risk Leaderboard', physicians: 'All Physicians', detail: 'NPI Detail', watchlist: 'Vendor Watchlist', vendors: 'All Vendors', supplierDetail: 'Vendor Case', rules: 'Detection Console', alerts: 'Live Alerts', disputes: 'NPI Disputes', disputeDetail: 'Dispute Detail' }
 
 // ─── Payer portal routing ────────────────────────────────────────────────────
 // The URL is the single source of truth for which payer screen is showing.
@@ -41,6 +44,7 @@ const PLAN_SCREEN_PATH = {
   physicians: '/payer/physicians',
   watchlist: '/payer/watchlist',
   vendors: '/payer/vendors',
+  rules: '/payer/rules',
   disputes: '/payer/disputes',
 }
 
@@ -60,6 +64,7 @@ function parsePlanRoute(location) {
     case 'npi':         return { screen: 'detail', npi: id }
     case 'watchlist':   return { screen: 'watchlist' }
     case 'vendors':     return { screen: 'vendors' }
+    case 'rules':       return { screen: 'rules' }
     case 'vendor':      return { screen: 'supplierDetail', vendorId: id }
     case 'disputes':    return id ? { screen: 'disputeDetail', caseId: id } : { screen: 'disputes' }
     default:            return { screen: 'home' }
@@ -98,6 +103,22 @@ function planDisputeTypeBadge(type) {
       <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap"
             style={{ background: 'linear-gradient(180deg,#F2EEF7,#EAE3F2)', color: '#5F4E80' }}>
         Deceased Patient
+      </span>
+    )
+  }
+  if (type === 'FLAG') {
+    return (
+      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap"
+            style={{ background: 'linear-gradient(180deg,#F1F4F9,#E7ECF3)', color: '#46586F' }}>
+        Flag Vendor
+      </span>
+    )
+  }
+  if (type === 'UNKNOWN_PATIENT') {
+    return (
+      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap"
+            style={{ background: 'linear-gradient(180deg,#F1F4F9,#E7ECF3)', color: '#647089' }}>
+        Reassign Patient
       </span>
     )
   }
@@ -220,12 +241,18 @@ function PlanNotifBell({ count, notifications, open, onToggle, onMarkRead, onSel
       {open && (
         <div className="absolute right-0 top-full mt-2 w-[400px] max-w-[calc(100vw-16px)] bg-white rounded-xl z-50 overflow-hidden border border-slate-200"
              style={{ boxShadow: '0 8px 24px rgba(15,23,42,0.10), 0 2px 6px rgba(15,23,42,0.06)' }}>
-          <div className="flex items-center justify-between px-4 pt-3.5 pb-3 border-b border-slate-100">
+          <div className="flex items-center justify-between gap-3 px-4 pt-3.5 pb-3 border-b border-slate-100">
             <span className="text-[13px] font-bold text-slate-800">Notifications</span>
-            <button onClick={onMarkRead} disabled={marking || count === 0}
-                    className="text-[11.5px] font-semibold text-slate-500 hover:text-slate-800 disabled:text-slate-300 disabled:cursor-default">
-              Mark all read
-            </button>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button onClick={onMarkRead} disabled={marking || count === 0}
+                      className="text-[11.5px] font-semibold text-slate-500 hover:text-slate-800 disabled:text-slate-300 disabled:cursor-default">
+                Mark all read
+              </button>
+              <button onClick={() => onToggle(false)} aria-label="Close notifications" title="Close"
+                      className="w-6 h-6 flex items-center justify-center rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors">
+                <Icon name="x" size={13} stroke={2.4} />
+              </button>
+            </div>
           </div>
 
           <>
@@ -275,9 +302,11 @@ function PlanNotifBell({ count, notifications, open, onToggle, onMarkRead, onSel
 // NPI Disputes table — column-header dropdown options (Type/Status filter, Days Left sort).
 const PLAN_DISPUTE_TYPE_OPTIONS = [
   { id: 'ALL',              label: 'All Types' },
-  { id: 'DISPUTE',          label: 'Dispute' },
   { id: 'FRAUD_REPORT',     label: 'Fraud Report' },
   { id: 'DECEASED_PATIENT', label: 'Deceased Patient' },
+  { id: 'FLAG',             label: 'Flag Vendor' },
+  { id: 'UNKNOWN_PATIENT',  label: 'Reassign Patient' },
+  { id: 'DISPUTE',          label: 'Dispute' },
 ]
 const PLAN_DISPUTE_STATUS_OPTIONS = [
   { id: 'all',      label: 'All Statuses' },
@@ -503,14 +532,10 @@ function PlanPortalInner() {
     }
   })()
 
-  // On the leaderboard (dashboard-overview) screen the header shows a personal
-  // greeting instead of breadcrumbs — the in-page greeting block used to live
-  // there and was moved up here to reclaim vertical space for the table.
-  const investigatorName = (user?.full_name || 'Investigator').trim()
-  const todayLabel = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
-  const headerGreeting = screen === 'leaderboard'
-    ? { title: `Hey ${investigatorName}`, sub: todayLabel }
-    : undefined
+  // No headerGreeting: PlainNavbar renders the greeting *instead of* breadcrumbs, so
+  // setting one on the leaderboard was why that screen alone had no trail. Every
+  // payer screen now shows breadcrumbs, and the dashboard resets to just "Dashboard"
+  // (Shell falls back to that when the switch above returns an empty list).
 
   return (
     <Shell navItems={PLAN_NAV}
@@ -527,7 +552,6 @@ function PlanPortalInner() {
            onOpenNpi={(row) => openNpi(row, null)}
            onOpenSupplier={openSupplier}
            breadcrumbs={breadcrumbs}
-           headerGreeting={headerGreeting}
            notifCount={notif} bellTitle="New activity"
            onBellClick={() => { markNotificationsSeen().then(() => setNotif(0)).catch(() => {}); go('home') }}
            bellSlot={
@@ -562,6 +586,7 @@ function PlanPortalInner() {
       {screen === 'watchlist' && <SupplierWatchlist search={search} onSelect={openSupplier}
           onViewAll={() => go('vendors')} />}
       {screen === 'vendors' && <AllVendors search={search} onSelect={openSupplier} />}
+      {screen === 'rules' && <RulesCatalog onExplore={() => go('leaderboard')} />}
       {screen === 'supplierDetail' && <SupplierDetail supplier={selectedSupplier} onBack={goBack} onSelectPhysician={openNpiFromSupplier} />}
       {screen === 'disputes' && (() => {
         const q = normalizeSearchQuery(disputeSearch)
@@ -596,7 +621,9 @@ function PlanPortalInner() {
         }
 
         return (
-        <div className="w-full h-full flex flex-col min-h-0 px-4 sm:px-7 py-6">
+        // pt-2 rather than py-6: the header above already contributes its own py-4,
+        // so a matching 24px here left a ~40px gap before the table.
+        <div className="w-full h-full flex flex-col min-h-0 px-4 sm:px-7 pt-2 pb-6">
           <div className="mc-card overflow-hidden flex flex-col flex-1 min-h-0">
 
             {planDisputesLoading ? (
@@ -604,7 +631,16 @@ function PlanPortalInner() {
                 <div className="animate-spin h-7 w-7 rounded-full border-2 border-navy border-t-transparent" />
               </div>
             ) : filteredDisputes.length === 0 ? (
-              <div className="px-6 py-10 text-center text-slate-400 text-sm">No disputes match these filters.</div>
+              <div className="px-6 py-12 text-center">
+                <div className="text-slate-500 text-sm">No disputes match these filters.</div>
+                {(disputeTypeFilter !== 'ALL' || disputeStatusFilter !== 'all' || disputeSortOrder !== 'NONE' || (disputeSearch || '').trim()) && (
+                  <button type="button"
+                          onClick={() => { setDisputeTypeFilter('ALL'); setDisputeStatusFilter('all'); setDisputeSortOrder('NONE'); setDisputeSearch('') }}
+                          className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-slate-200 bg-white text-[13px] font-semibold text-slate-700 shadow-sm hover:border-[#0A1F3D]/25 hover:bg-[#E9F0F6] hover:text-[#0A1F3D] transition-all">
+                    <Icon name="refresh" size={13} stroke={2.2} /> Clear filters
+                  </button>
+                )}
+              </div>
             ) : (
               <>
                 {/* Mobile card view (< sm) — the table's columns don't fit a phone
@@ -934,7 +970,15 @@ function DisputeDetailScreen({ dispute: d, onActioned }) {
 }
 
 function PlanPortal() {
-  return <AlertsProvider><PlanPortalInner /></AlertsProvider>
+  // AssistantWidget is mounted here rather than inside PlanPortalInner's Shell so
+  // it survives screen changes — the conversation stays intact while the payer
+  // navigates from the dashboard into an NPI detail and back.
+  return (
+    <AlertsProvider>
+      <PlanPortalInner />
+      <AssistantWidget />
+    </AlertsProvider>
+  )
 }
 
 function VendorPortal() {

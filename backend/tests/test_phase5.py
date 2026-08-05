@@ -264,8 +264,9 @@ def test_vendor_session_respond(db):
     case = _create_dispute(db, TEST_VENDOR_NPI_A, "R01")
     assert case is not None and case.status == "OPEN"
 
-    # RESOLVED_WITH_PHYSICIAN is the only response_type available on a fresh case —
-    # RESPONDED_TO_MEDICARE only unlocks after the physician rejects that resolution.
+    # response_type is accepted for backward-compat and ignored — uploading
+    # documents is the vendor's only response, and it always lands in
+    # PENDING_PHYSICIAN_REVIEW for the physician to approve or decline.
     resp = client.post(
         f"/api/v1/vendor/portal/disputes/{case.case_id}/respond",
         headers=_auth(_session_token(user)),
@@ -274,11 +275,11 @@ def test_vendor_session_respond(db):
     assert resp.status_code == 200
     data = resp.json()
     assert data["success"] is True
-    assert data["status"] == "PENDING_PHYSICIAN_CONFIRMATION"
+    assert data["status"] == "PENDING_PHYSICIAN_REVIEW"
 
     db.expire_all()
     updated = db.query(DisputeCase).filter(DisputeCase.case_id == case.case_id).first()
-    assert updated.status == "PENDING_PHYSICIAN_CONFIRMATION"
+    assert updated.status == "PENDING_PHYSICIAN_REVIEW"
 
     print(f"\n  [PASS] portal respond: case_id={case.case_id}, new status={updated.status}")
 

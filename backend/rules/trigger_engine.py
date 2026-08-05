@@ -134,10 +134,24 @@ def escalate_overdue_disputes(db: Session) -> int:
 
 
 def escalate_unconfirmed_physician_resolutions(db: Session) -> int:
-    """Flips any PENDING_PHYSICIAN_CONFIRMATION case whose confirmation window has
-    passed back to OPEN, with escalation_unlocked=True so the vendor's next response
-    can also pick RESPONDED_TO_MEDICARE. Idempotent; see escalate_overdue_disputes
-    for why this loads rows instead of a single bulk UPDATE."""
+    """LEGACY DRAIN — kept deliberately, not live functionality.
+
+    Flips any PENDING_PHYSICIAN_CONFIRMATION case whose confirmation window has
+    passed back to OPEN, with escalation_unlocked=True. Idempotent; see
+    escalate_overdue_disputes for why this loads rows instead of a bulk UPDATE.
+
+    PENDING_PHYSICIAN_CONFIRMATION belonged to the retired "vendor resolves with
+    the physician" flow. Nothing creates it anymore — a vendor response now always
+    lands in PENDING_PHYSICIAN_REVIEW (vendor.py's _apply_vendor_docs). This stays
+    because rows may still sit in that status in deployed databases, and they have
+    no other way out: /confirm rejects any status but PENDING_PHYSICIAN_REVIEW and
+    the physician's dispute list doesn't show them, so without this they are stuck
+    permanently.
+
+    Safe to delete — along with its 5 call sites and
+    test_legacy_confirmation_timeout_drains_to_open — once
+      SELECT count(*) FROM dispute_cases WHERE status='PENDING_PHYSICIAN_CONFIRMATION'
+    returns 0 in every environment, production included."""
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     cases = (
         db.query(DisputeCase)

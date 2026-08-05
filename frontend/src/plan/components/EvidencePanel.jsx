@@ -66,7 +66,7 @@ export default function EvidencePanel({ variant, evidence = [], practice, physic
   return (
     <div>
       {variant === 'geo' && practice && (
-        <div className="rounded-lg bg-[#F7F9FC] border border-slate-200 px-4 py-2.5 text-sm text-slate-600 mb-4">
+        <div className="rounded-lg bg-[var(--color-bg-soft)] border border-slate-200 px-4 py-2.5 text-sm text-slate-600 mb-4">
           Practice: <span className="font-semibold text-slate-800">{practice.city || '—'}, {practice.state || '—'}</span>
         </div>
       )}
@@ -127,7 +127,7 @@ export default function EvidencePanel({ variant, evidence = [], practice, physic
           ))}
         </div>
       ) : variant === 'geo' ? (
-        <div className="divide-y divide-[#F1F4F9]">
+        <div className="divide-y divide-[var(--color-bg-soft)]">
           {rows.slice(0, cap).map((c) => (
             <div key={c.id} className="py-3">
               <div className="flex items-center justify-between gap-3">
@@ -140,7 +140,7 @@ export default function EvidencePanel({ variant, evidence = [], practice, physic
           ))}
         </div>
       ) : (
-        <div className="divide-y divide-[#F1F4F9]">
+        <div className="divide-y divide-[var(--color-bg-soft)]">
           {rows.slice(0, cap).map((c) => <TwoLine key={c.id} c={c} />)}
         </div>
       )}

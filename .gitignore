@@ -34,3 +34,22 @@ physician sample data.pdf
 # curl cookie jar — contains live session/auth tokens
 cookies.txt
 
+# Derived docs embedding index for the payer assistant (backend/doc_index.py).
+# Rebuilds itself whenever docs/ changes, so it's regenerated rather than tracked.
+# Run `python -m backend.doc_index` after deploy to avoid paying the ~8s build on
+# a user's first product question.
+backend/data/doc_index.npy
+backend/data/doc_index.json
+
+# Local database dumps / pre-change backups. The existing *.dump and *.sql.gz
+# patterns miss these plain-.sql ones. 202MB and 15MB respectively — git keeps
+# every revision forever, so committing one makes the repo painful to clone.
+local_db_dump.sql
+backup_vendor_fix_*.sql
+
+# Runtime uploads (config.document_upload_dir). Vendor proof-of-work documents
+# submitted against dispute cases — user-submitted claim evidence, not source.
+# The directory is kept so a fresh clone still has somewhere to write.
+uploads/*
+!uploads/.gitkeep
+

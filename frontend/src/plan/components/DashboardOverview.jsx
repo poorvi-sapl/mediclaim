@@ -4,13 +4,12 @@ import {
   Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
 import { API_BASE } from '../../api'
+import { RISK_BANDS, bandByName } from '../../lib/risk'
 
-const bandColor = (band) => {
-  if (band === 'high') return '#A6453F'
-  if (band === 'mid') return '#D1A85C'
-  return '#3A7D5C'
-}
-const PIE_COLORS = ['#A6453F', '#D1A85C', '#3A7D5C', '#5B84C4']
+// Was 'high'/'mid'/'low' with its own colors; the API now returns the product's
+// four band ids, so the color comes from the shared definition.
+const bandColor = (band) => bandByName(band).color
+const PIE_COLORS = RISK_BANDS.map((b) => b.color)
 
 const RULE_ABBR = {
   'Cross-NPI Vendor': 'CNV', 'OIG LEIE Hit': 'OLH', 'Volume Spike': 'VS',
@@ -22,9 +21,9 @@ const RULE_ABBR = {
 function PillTick({ x, y, payload }) {
   return (
     <g transform={`translate(${x},${y})`}>
-      <rect x={-22} y={5} width={44} height={17} rx={8.5} fill="#E9F0F6" />
+      <rect x={-22} y={5} width={44} height={17} rx={8.5} fill="var(--color-bg-soft)" />
       <text x={0} y={14} textAnchor="middle" dominantBaseline="middle"
-        fontSize={8} fontWeight={700} fill="#0A1F3D">
+        fontSize={8} fontWeight={700} fill="var(--color-primary)">
         {payload.value}
       </text>
     </g>
@@ -93,12 +92,8 @@ export default function DashboardOverview() {
     )
   }
 
-  const total = (risk?.high || 0) + (risk?.mid || 0) + (risk?.low || 0)
-  const riskPie = [
-    { name: 'High Risk', value: risk?.high || 0 },
-    { name: 'Mid Risk', value: risk?.mid || 0 },
-    { name: 'Low Risk', value: risk?.low || 0 },
-  ]
+  const total = risk?.total || 0
+  const riskPie = RISK_BANDS.map((b) => ({ name: `${b.label} Risk`, value: risk?.[b.id] || 0 }))
 
   // Reverse so highest-risk NPI appears at the top of the horizontal bar chart
   const npiData = (npis?.npis || []).slice().reverse().map(n => ({
@@ -138,7 +133,7 @@ export default function DashboardOverview() {
                 height={32}
                 interval={0}
               />
-              <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} width={40} domain={[0, 'auto']} />
+              <YAxis tick={{ fontSize: 10, fill: 'var(--color-text-muted)' }} axisLine={false} tickLine={false} width={40} domain={[0, 'auto']} />
               <Tooltip
                 labelFormatter={(_, payload) => payload?.[0]?.payload?.label || ''}
                 formatter={(value) => [value, 'Flags']}
@@ -147,7 +142,7 @@ export default function DashboardOverview() {
               <Bar dataKey="count" radius={[4, 4, 0, 0]} maxBarSize={28}>
                 {ruleData.map((entry, i) => {
                   const maxCount = ruleData[0]?.count || 1
-                  return <Cell key={i} fill="#0A1F3D" fillOpacity={Math.max(0.12, entry.count / maxCount)} />
+                  return <Cell key={i} fill="var(--color-primary)" fillOpacity={Math.max(0.12, entry.count / maxCount)} />
                 })}
               </Bar>
             </BarChart>
@@ -158,18 +153,19 @@ export default function DashboardOverview() {
         <ChartCard title="Top 10 NPIs by Risk Score" subtitle="Ranked by risk score · color = risk band" className="col-span-1 lg:col-span-2">
           <div className="space-y-0.5 max-h-[220px] sm:max-h-[260px] overflow-y-auto">
             {npiData.map((n, i) => {
-              const bs = n.band === 'high'
-                ? { badge: 'bg-[#F7EBEA] text-[#A6453F] ring-[#EBD3D1]',       label: 'High Risk' }
-                : n.band === 'mid'
-                ? { badge: 'bg-[#FBF3E4] text-[#8A6A34] ring-[#F0E0BE]',       label: 'Mid Risk'  }
-                : { badge: 'bg-[#E9F0F6] text-[#0A1F3D] ring-[#0A1F3D]/10',  label: 'Low Risk'  }
+              // Was a hardcoded high/mid/low ternary. /overview/top-npis now returns
+              // the product's four band ids, so 'mid' never matched and mediums fell
+              // through to the "Low Risk" style — derive from the shared bands instead.
+              const b = bandByName(n.band)
               return (
                 <div key={i} className="flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-gray-50 transition-colors">
                   <div className="min-w-0 flex-1">
                     <p className="text-[12px] font-semibold text-gray-900 truncate">{n.fullName}</p>
                     <p className="text-[10px] text-gray-400">{n.claims} claims</p>
                   </div>
-                  <span className={`text-[10px] font-semibold px-2.5 py-0.5 rounded-full ring-1 flex-shrink-0 whitespace-nowrap ${bs.badge}`}>
+                  <span className="text-[10px] font-semibold px-2.5 py-0.5 rounded-full flex-shrink-0 whitespace-nowrap"
+                        style={{ background: b.soft, color: b.text, boxShadow: `inset 0 0 0 1px ${b.color}33` }}
+                        title={`${b.label} risk`}>
                     Score {n.score}
                   </span>
                 </div>
@@ -187,14 +183,14 @@ export default function DashboardOverview() {
               <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
               <XAxis
                 dataKey="month"
-                tick={{ fontSize: 10, fill: '#9ca3af' }}
+                tick={{ fontSize: 10, fill: 'var(--color-text-muted)' }}
                 axisLine={false}
                 tickLine={false}
                 tickFormatter={(v) => v.split(' ')[0]}
                 interval={0}
               />
               <YAxis
-                tick={{ fontSize: 10, fill: '#9ca3af' }}
+                tick={{ fontSize: 10, fill: 'var(--color-text-muted)' }}
                 axisLine={false}
                 tickLine={false}
                 width={36}
@@ -211,8 +207,8 @@ export default function DashboardOverview() {
                   <span style={{ color: '#6b7280', fontSize: 11 }}>{value}</span>
                 )}
               />
-              <Line type="monotone" dataKey="total" name="Total Claims" stroke="#0A1F3D" strokeWidth={2}
-                dot={{ r: 3, fill: '#0A1F3D', strokeWidth: 0 }} activeDot={{ r: 5 }} />
+              <Line type="monotone" dataKey="total" name="Total Claims" stroke="var(--color-primary)" strokeWidth={2}
+                dot={{ r: 3, fill: 'var(--color-primary)', strokeWidth: 0 }} activeDot={{ r: 5 }} />
               <Line type="monotone" dataKey="flagged" name="Fraud Rules Hit" stroke="#A6453F" strokeWidth={2}
                 strokeDasharray="5 4" dot={{ r: 3, fill: '#A6453F', strokeWidth: 0 }} activeDot={{ r: 5 }} />
             </LineChart>

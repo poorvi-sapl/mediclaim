@@ -109,7 +109,11 @@ class ErrorResponse(BaseModel):
 # --------------------------------------------------------------------------
 class PlanSummaryResponse(BaseModel):
     total_npis: int
+    # The critical band (81-100) — the same cut the NPI leaderboard's "High-risk
+    # NPIs" tile shows. band_counts below carries the full breakdown so nothing
+    # has to re-derive a union from an ambiguous single number.
     high_risk_npis: int
+    band_counts: dict[str, int]
     alerts_today: int
     total_physician_flags: int
 
@@ -221,11 +225,44 @@ class AlertEvent(BaseModel):
     vendor_id: Optional[str] = None
 
 
+# ---------------------------------------------------------------------------
+# Risk bands — the product's ONE risk classification.
+#
+# Every label, count, filter and chart derives from these bounds, so no surface
+# can disagree with another (they previously used 70, 80 and 60 in five places,
+# and a separate 3-band high/mid/low scheme in the analytics charts).
+#
+#   critical  81-100      high  61-80      medium  31-60      low  0-30
+#
+# The frontend mirror lives in frontend/src/lib/risk.js — change both together.
+# ---------------------------------------------------------------------------
+CRITICAL_MIN = 81
+HIGH_MIN = 61
+MEDIUM_MIN = 31
+RISK_BAND_ORDER = ("critical", "high", "medium", "low")
+
+# Single "high risk" cutoff shared by /plan/summary, analytics, and chat_tools:
+# `risk_score > HIGH_RISK_THRESHOLD` is the top-severity count. Pinned to the
+# critical floor so this count equals the critical band (81-100) everywhere.
+HIGH_RISK_THRESHOLD = CRITICAL_MIN - 1   # 80
+
+# Inclusive score bounds per band, for building count queries and range labels.
+RISK_BAND_BOUNDS = {
+    "critical": (CRITICAL_MIN, 100),
+    "high": (HIGH_MIN, CRITICAL_MIN - 1),
+    "medium": (MEDIUM_MIN, HIGH_MIN - 1),
+    "low": (0, MEDIUM_MIN - 1),
+}
+
+
 def get_risk_band(score: int) -> str:
-    if score > 80:
+    """Score -> band name. The only place a score becomes a band, backend-side."""
+    if score is None:
+        return "low"
+    if score >= CRITICAL_MIN:
         return "critical"
-    if score > 60:
+    if score >= HIGH_MIN:
         return "high"
-    if score > 30:
+    if score >= MEDIUM_MIN:
         return "medium"
     return "low"

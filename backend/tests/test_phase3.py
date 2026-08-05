@@ -19,6 +19,7 @@ from datetime import date
 import pytest
 from sqlalchemy.orm import Session
 
+from backend.config import get_settings
 from backend.database import SessionLocal, engine, Base
 from backend.models import Physician, ClaimNotification, DisputeCase, SupplierProfile
 from backend.rules.trigger_engine import respond_to_notification, process_incoming_claim
@@ -172,7 +173,15 @@ def test_normalize_vendor_type():
 # ---------------------------------------------------------------------------
 
 
-def test_dispute_triggers_vendor_email(db, caplog):
+def _force_console_email(monkeypatch):
+    """Vendor emails are only logged to console when EMAIL_ENABLED=false, and this
+    repo's .env sets it true. Pin it off so these tests assert on behavior instead
+    of on whichever way the local environment happens to be configured."""
+    monkeypatch.setattr(get_settings(), "email_enabled", False)
+
+
+def test_dispute_triggers_vendor_email(db, caplog, monkeypatch):
+    _force_console_email(monkeypatch)
     _insert_physician(db)
     notif = _create_notification(db, TEST_VENDOR_NPI_DME, "DME")
 
@@ -188,7 +197,10 @@ def test_dispute_triggers_vendor_email(db, caplog):
     assert case is not None, "DisputeCase not created"
     assert case.billing_provider_notified_at is not None, \
         "billing_provider_notified_at not set"
-    assert "[URGENT]" in caplog.text, "Expected [URGENT] in console output"
+    # The subject asks for documents and says nothing about why. It used to lead
+    # with [URGENT]; the vendor is now told only that a review is underway.
+    assert "[ACTION REQUIRED]" in caplog.text, "Expected the document-request email"
+    assert "[URGENT]" not in caplog.text
 
     print(f"\n  [PASS] DISPUTE: case_id={case.case_id}, "
           f"notified_at={case.billing_provider_notified_at.isoformat()}")
@@ -199,7 +211,11 @@ def test_dispute_triggers_vendor_email(db, caplog):
 # ---------------------------------------------------------------------------
 
 
-def test_fraud_triggers_vendor_email(db, caplog):
+def test_fraud_triggers_vendor_email(db, caplog, monkeypatch):
+    """A fraud report must reach the vendor as an ordinary document request. The
+    case records FRAUD_REPORT for the physician and payer; the vendor's email is
+    type-blind, so it cannot tell a fraud report from a routine dispute."""
+    _force_console_email(monkeypatch)
     _insert_physician(db)
     notif = _create_notification(db, TEST_VENDOR_NPI_HOME_HEALTH, "HH")
 
@@ -213,8 +229,11 @@ def test_fraud_triggers_vendor_email(db, caplog):
         .first()
     )
     assert case is not None
-    assert case.dispute_type == "FRAUD_REPORT"
-    assert "[FRAUD ALERT]" in caplog.text, "Expected [FRAUD ALERT] in console output"
+    assert case.dispute_type == "FRAUD_REPORT", "the reason is recorded server-side"
+    assert "[ACTION REQUIRED]" in caplog.text, "Expected the document-request email"
+    assert "[FRAUD ALERT]" not in caplog.text, "the vendor must not be told it's a fraud report"
+    assert "FRAUD" not in caplog.text.upper().replace("FRAUD_REPORT_LINK", ""), \
+        "no mention of fraud anywhere in the vendor's email"
 
     print(f"\n  [PASS] FRAUD_REPORT: case_id={case.case_id}, "
           f"dispute_type={case.dispute_type}")

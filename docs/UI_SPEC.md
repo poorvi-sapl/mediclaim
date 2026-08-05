@@ -383,7 +383,7 @@ Four cards in a horizontal row:
 ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
 │      15      │ │      3       │ │      4       │ │      7       │
 │  NPIs        │ │  High Risk   │ │  Alerts      │ │  Total       │
-│  Monitored   │ │  (Score >70) │ │  Today       │ │  Physician   │
+│  Monitored   │ │  (Score >80) │ │  Today       │ │  Physician   │
 │              │ │              │ │              │ │  Flags       │
 └──────────────┘ └──────────────┘ └──────────────┘ └──────────────┘
 ```

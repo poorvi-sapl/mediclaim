@@ -338,6 +338,7 @@ Four summary counts for the plan dashboard home cards.
 {
   "total_npis": 15,
   "high_risk_npis": 3,
+  "band_counts": { "critical": 3, "high": 1, "medium": 5, "low": 6 },
   "alerts_today": 4,
   "total_physician_flags": 7
 }
@@ -348,7 +349,8 @@ Four summary counts for the plan dashboard home cards.
 | Field | Type | Description |
 |---|---|---|
 | `total_npis` | integer | COUNT of npi_risk_scores WHERE entity_type = 'npi' |
-| `high_risk_npis` | integer | COUNT WHERE entity_type = 'npi' AND risk_score > 70 |
+| `high_risk_npis` | integer | COUNT WHERE entity_type = 'npi' AND risk_score >= 81 — i.e. the critical band, the same cut the NPI leaderboard's "High-risk NPIs" tile uses |
+| `band_counts` | object | Count per risk band: `critical`, `high`, `medium`, `low`. Sums to `total_npis`. Prefer this over deriving unions from `high_risk_npis` |
 | `alerts_today` | integer | COUNT of actions WHERE action_type IN ('flag_supplier','unknown_patient') AND created_at >= today 00:00:00 |
 | `total_physician_flags` | integer | COUNT of all actions WHERE action_type IN ('flag_supplier','unknown_patient') |
 
@@ -408,7 +410,7 @@ NPI risk leaderboard. All NPIs sorted by risk score descending.
 | `practice_state` | string \| null | 2-letter state |
 | `practice_city` | string \| null | Practice city |
 | `risk_score` | integer | 0-100 composite risk score |
-| `risk_band` | string | "high" (>70), "medium" (40-70), "low" (<40) |
+| `risk_band` | string | One of `critical` (81-100), `high` (61-80), `medium` (31-60), `low` (0-30). Defined once in `backend/schemas.py` (`RISK_BAND_BOUNDS` / `get_risk_band`); the frontend mirror is `frontend/src/lib/risk.js` |
 | `total_claim_count` | integer | Total claims under this NPI |
 | `total_claim_amount` | decimal | Total dollar value |
 | `physician_flag_count` | integer | Number of flag_supplier/unknown_patient actions by this physician |

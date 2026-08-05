@@ -5,20 +5,22 @@ import uuid as _uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
-from sqlalchemy import func
+from sqlalchemy import func, distinct
 from sqlalchemy.orm import Session
 
 from backend.database import get_db
 from backend.config import get_settings
-from backend.models import NpiRiskScore, NpiProfile, Claim, Action, ActionStatusLog, RulesFlag, User, DisputeCase, DisputeCaseEvent, SupplierProfile, ClaimNotification, Physician
+from backend.models import NpiRiskScore, NpiProfile, Claim, Action, ActionStatusLog, RulesFlag, User, DisputeCase, DisputeCaseEvent, SupplierProfile, ClaimNotification, Physician, OigExcludedNpi
 from backend.rules.trigger_engine import escalate_overdue_disputes, serialize_dispute_events, record_dispute_event, broadcast_dispute_event
 from backend.schemas import (
     PlanSummaryResponse, NpiRiskRow, NpiRiskPageResponse,
     NpiDetailResponse, SupplierWatchlistRow, SupplierPageResponse,
-    PlanActionDetail, AlertEvent, StatusLogEntry, get_risk_band,
+    PlanActionDetail, AlertEvent, StatusLogEntry, get_risk_band, RISK_BAND_BOUNDS,
 )
+from backend.scoring.risk_score import band_counts, physician_feedback
+from backend.rule_glossary import FIXED_POINTS, RULE_INFO_PAIRS, rule_label
 from backend.auth import extract_token, decode_token
-from backend.ai_summary import generate_npi_summary
+from backend.ai_summary import generate_npi_summary, generate_vendor_summary
 from backend.routers.claims import build_claims_page
 
 router = APIRouter()
@@ -68,14 +70,7 @@ def _build_action_detail(db: Session, a) -> PlanActionDetail:
 # ---------------------------------------------------------------------------
 @router.get("/plan/summary", response_model=PlanSummaryResponse)
 def get_plan_summary(db: Session = Depends(get_db)):
-    total_npis = db.query(func.count(NpiRiskScore.id)).filter(
-        NpiRiskScore.entity_type == "npi"
-    ).scalar() or 0
-
-    high_risk_npis = db.query(func.count(NpiRiskScore.id)).filter(
-        NpiRiskScore.entity_type == "npi",
-        NpiRiskScore.risk_score > 70,
-    ).scalar() or 0
+    bands = band_counts(db, "npi")
 
     today_start = datetime.combine(date.today(), time.min)
     alerts_today = db.query(func.count(Action.id)).filter(
@@ -88,11 +83,69 @@ def get_plan_summary(db: Session = Depends(get_db)):
     ).scalar() or 0
 
     return PlanSummaryResponse(
-        total_npis=total_npis,
-        high_risk_npis=high_risk_npis,
+        total_npis=bands["total"],
+        high_risk_npis=bands["critical"],
+        band_counts={k: v for k, v in bands.items() if k != "total"},
         alerts_today=alerts_today,
         total_physician_flags=total_physician_flags,
     )
+
+
+# ---------------------------------------------------------------------------
+# GET /plan/rules — the detection-engine rule catalog (all 16 rules) with live
+# flag counts + a sample triggering record. Powers the Detection Console screen.
+# ---------------------------------------------------------------------------
+# (rule_name, code, category, severity) — order is the display order.
+RULE_CATALOG = [
+    ("oig_leie_hit",             "R-01", "Provider-identity & network fraud", "critical"),
+    ("cross_npi_supplier",       "R-02", "Provider-identity & network fraud", "critical"),
+    ("supplier_concentration",   "R-03", "Provider-identity & network fraud", "high"),
+    ("identity_reuse",           "R-04", "Provider-identity & network fraud", "high"),
+    ("volume_spike",             "R-05", "Volume & behavioral anomalies",     "high"),
+    ("impossible_day",           "R-06", "Volume & behavioral anomalies",     "critical"),
+    ("rapid_cycling",            "R-07", "Volume & behavioral anomalies",     "high"),
+    ("ghost_billing",            "R-08", "Volume & behavioral anomalies",     "high"),
+    ("upcoding",                 "R-09", "Coding & billing manipulation",     "medium"),
+    ("unbundling",               "R-10", "Coding & billing manipulation",     "high"),
+    ("modifier_abuse",           "R-11", "Coding & billing manipulation",     "medium"),
+    ("duplicate_billing",        "R-12", "Coding & billing manipulation",     "high"),
+    ("deceased_patient",         "R-13", "Clinical & eligibility integrity",  "high"),
+    ("abnormal_hospice_duration","R-14", "Clinical & eligibility integrity",  "high"),
+    ("new_high_value_supplier",  "R-15", "Clinical & eligibility integrity",  "medium"),
+    ("geographic_anomaly",       "R-16", "Clinical & eligibility integrity",  "medium"),
+]
+
+
+@router.get("/plan/rules")
+def get_rules_catalog(db: Session = Depends(get_db)):
+    counts = dict(db.query(RulesFlag.rule_name, func.count(RulesFlag.id))
+                  .group_by(RulesFlag.rule_name).all())
+    npi_counts = dict(db.query(RulesFlag.rule_name, func.count(distinct(RulesFlag.npi)))
+                      .group_by(RulesFlag.rule_name).all())
+    ven_counts = dict(db.query(RulesFlag.rule_name, func.count(distinct(RulesFlag.vendor_id)))
+                      .group_by(RulesFlag.rule_name).all())
+    samples = dict(db.query(RulesFlag.rule_name, func.min(RulesFlag.rule_description))
+                   .group_by(RulesFlag.rule_name).all())
+
+    rules = []
+    for rn, code, cat, sev in RULE_CATALOG:
+        label, explanation = RULE_INFO.get(rn, (rn.replace("_", " ").title(), "Fraud-detection rule."))
+        rules.append({
+            "rule": rn, "code": code, "category": cat, "severity": sev,
+            "name": label, "description": explanation,
+            "flag_count": counts.get(rn, 0),
+            "distinct_npis": npi_counts.get(rn, 0),
+            "distinct_vendors": ven_counts.get(rn, 0),
+            "sample_evidence": samples.get(rn),
+        })
+
+    return {
+        "rules": rules,
+        "total_rules": len(rules),
+        "critical_rules": sum(1 for r in rules if r["severity"] == "critical"),
+        "total_flags": sum(counts.get(rn, 0) for rn, *_ in RULE_CATALOG),
+        "categories": len({c for _, _, c, _ in RULE_CATALOG}),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -105,7 +158,7 @@ def get_npi_risk_list(
     min_score: int = Query(0, ge=0),
     state: Optional[str] = None,
     specialty: Optional[str] = None,
-    risk_band: Optional[str] = Query(None, regex="^(high|medium|low|all)$"),
+    risk_band: Optional[str] = Query(None, regex="^(critical|high|medium|low|all)$"),
     pattern_filter: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
@@ -119,13 +172,11 @@ def get_npi_risk_list(
         q = q.filter(func.upper(NpiProfile.practice_state) == state.upper())
     if specialty:
         q = q.filter(NpiProfile.specialty.ilike(f"%{specialty}%"))
+    # Each band is now its own bucket. "high" previously meant >60, which silently
+    # included criticals and made the filtered rows disagree with their own pills.
     if risk_band and risk_band != "all":
-        if risk_band == "high":
-            q = q.filter(NpiRiskScore.risk_score > 60)
-        elif risk_band == "medium":
-            q = q.filter(NpiRiskScore.risk_score > 30, NpiRiskScore.risk_score <= 60)
-        else:  # low
-            q = q.filter(NpiRiskScore.risk_score <= 30)
+        lo, hi = RISK_BAND_BOUNDS[risk_band]
+        q = q.filter(NpiRiskScore.risk_score >= lo, NpiRiskScore.risk_score <= hi)
 
     # Only NPIs that have ≥1 rule_flag of the requested pattern (rule_flags.rule_name).
     if pattern_filter:
@@ -250,16 +301,13 @@ def get_npi_detail(npi: str, db: Session = Depends(get_db)):
             if rule_key in present:
                 breakdown.append({"factor": factor, "points": pts, "rule": rule_key})
         if score.physician_flag_count > 0:
-            prows = (db.query(Action.action_type, func.count(Action.id))
-                     .filter(Action.npi == npi,
-                             Action.action_type.in_(("flag_supplier", "unknown_patient", "did_not_order", "deceased_patient")))
-                     .group_by(Action.action_type).all())
-            pc = {a: c for a, c in prows}
-            flags = pc.get("flag_supplier", 0) + pc.get("unknown_patient", 0) + pc.get("deceased_patient", 0)
-            denials = pc.get("did_not_order", 0)
-            pts = min(flags * settings.weight_per_physician_flag
-                      + denials * settings.weight_did_not_order,
-                      settings.max_physician_flag_contribution)
+            # Same helper the scorer used to build risk_score itself, so this row
+            # can never disagree with the score it's explaining.
+            fb = physician_feedback(db, Action.npi, npi, settings)
+            flags = (fb.by_action.get("flag_supplier", 0)
+                     + fb.by_action.get("unknown_patient", 0)
+                     + fb.by_action.get("deceased_patient", 0))
+            denials = fb.by_action.get("did_not_order", 0)
             parts = []
             if flags:
                 parts.append(f"{flags} flag×{settings.weight_per_physician_flag}")
@@ -267,7 +315,7 @@ def get_npi_detail(npi: str, db: Session = Depends(get_db)):
                 parts.append(f"{denials} denial×{settings.weight_did_not_order}")
             breakdown.append({
                 "factor": f"Physician feedback ({', '.join(parts)})",
-                "points": pts, "rule": None,
+                "points": fb.points, "rule": None,
             })
         score_dict = {
             "risk_score": score.risk_score,
@@ -348,48 +396,14 @@ def npi_risk_summary(npi: str, db: Session = Depends(get_db)):
 # ---------------------------------------------------------------------------
 # GET /plan/npi/{npi}/rule/{rule_name}  — drill-down: what a rule means + evidence
 # ---------------------------------------------------------------------------
-RULE_INFO = {
-    "volume_spike": ("Volume Spike",
-        "This provider's claim rate in the last 30 days is far above their own prior baseline — a sign of sudden over-billing."),
-    "geographic_anomaly": ("Geographic Anomaly",
-        "Claims were filed for patients located far from the provider's practice address — unusual for legitimate care."),
-    "cross_npi_supplier": ("Cross-NPI Vendor",
-        "A vendor on these claims bills under many unrelated physician NPIs — the classic kickback-ring pattern."),
-    "oig_leie_hit": ("OIG LEIE Hit",
-        "A vendor on these claims appears on the federal OIG exclusion list — Medicare/Medicaid cannot reimburse excluded providers."),
-    "new_high_value_supplier": ("New High-Value Vendor",
-        "A brand-new vendor relationship appeared with unusually high-dollar claims."),
-    "identity_reuse": ("Patient Identity Reuse",
-        "The same patient is billed under multiple unrelated physician NPIs — a phantom-billing / identity-reuse signal."),
-    "abnormal_hospice_duration": ("Abnormal Hospice Duration",
-        "A hospice patient was kept enrolled far longer than is clinically typical — a known hospice fraud pattern."),
-    "upcoding": ("Upcoding",
-        "Claim amounts are far above the norm for the service category — a sign of billing a higher-paying code than warranted."),
-    "unbundling": ("Unbundling",
-        "A single service was split into multiple separately-billed component codes to inflate reimbursement."),
-    "duplicate_billing": ("Duplicate Billing",
-        "The same service was billed twice for one patient within a short window — a duplicate-billing signal."),
-    "deceased_patient": ("Deceased Patient",
-        "Claims were filed for patients with no prior activity in over six months, then resurfacing under a different physician — consistent with billing after patient death or identity reuse."),
-    "impossible_day": ("Impossible Day",
-        "The provider billed an implausible number of claims on a single day — more patients than is physically possible to see."),
-    "modifier_abuse": ("Modifier Abuse",
-        "Near-identical services were billed separately for the same patient on the same date — consistent with reworded line items to bypass duplicate checks."),
-    "rapid_cycling": ("Rapid Patient Cycling",
-        "The provider billed an unusually high number of distinct patients in one day — implausible patient turnover."),
-    "supplier_concentration": ("Vendor Concentration",
-        "An unusually large share of this provider's billing flows through a single vendor — consistent with a kickback or referral relationship."),
-}
+# Rule label + explanation now live in one place, backend/rule_glossary.py, so this
+# drill-down, the vendor page's pattern cards and the payer assistant all describe a
+# rule with the same words. Same (label, explanation) shape as before for callers.
+RULE_INFO = RULE_INFO_PAIRS
 
-# New rules + their NPI-detail breakdown weight (the per-unit caps live in the scorer;
-# these are the representative point values shown on the detail page).
-NEW_RULE_BREAKDOWN = [
-    ("deceased_patient", "Deceased patient", 30),
-    ("impossible_day", "Impossible day", 40),
-    ("modifier_abuse", "Modifier abuse", 24),
-    ("rapid_cycling", "Rapid patient cycling", 30),
-    ("supplier_concentration", "Vendor concentration", 18),
-]
+# The rules with no configurable weight, as (rule, factor label, points) for the NPI
+# detail score breakdown. Points come from the glossary's FIXED_POINTS.
+NEW_RULE_BREAKDOWN = [(rule, rule_label(rule), pts) for rule, pts in FIXED_POINTS.items()]
 
 
 @router.get("/plan/npi/{npi}/rule/{rule_name}")
@@ -421,11 +435,41 @@ def rule_evidence(npi: str, rule_name: str, db: Session = Depends(get_db)):
         "practice_lat": p_lat,
         "practice_lng": p_lng,
     } for rf, c in rows]
+
+    # OIG mirror of the vendor popup: is THIS physician on the LEIE list, and which
+    # vendors they deal with (on flagged claims) are also on it.
+    vendor_counts = (
+        db.query(Claim.vendor_id, func.max(Claim.vendor_name), func.count(RulesFlag.id))
+        .join(RulesFlag, RulesFlag.claim_id == Claim.id)
+        .filter(RulesFlag.npi == npi, RulesFlag.rule_name == rule_name)
+        .group_by(Claim.vendor_id)
+        .order_by(func.count(RulesFlag.id).desc())
+        .all()
+    )
+    vendor_ids = [v for v, _, _ in vendor_counts]
+    excluded_vendors = set()
+    if vendor_ids:
+        excluded_vendors = {
+            r[0] for r in db.query(OigExcludedNpi.npi)
+            .filter(OigExcludedNpi.npi.in_(vendor_ids)).all()
+        }
+    vendor_breakdown = [{
+        "vendor_id": vid, "vendor_name": vname, "claim_count": cnt,
+        "oig_excluded": vid in excluded_vendors,
+    } for vid, vname, cnt in vendor_counts]
+
+    npi_leie = (db.query(OigExcludedNpi.entity_name, OigExcludedNpi.exclusion_type)
+                .filter(OigExcludedNpi.npi == npi).first())
+
     return {
         "npi": npi, "rule_name": rule_name, "label": label,
         "explanation": explanation, "count": len(claims), "claims": claims,
         "physician_name": profile.physician_name if profile else None,
         "practice_lat": p_lat, "practice_lng": p_lng,
+        "npi_oig_excluded": npi_leie is not None,
+        "npi_exclusion_type": npi_leie[1] if npi_leie else None,
+        "excluded_vendor_count": len(excluded_vendors),
+        "vendor_breakdown": vendor_breakdown,
     }
 
 
@@ -585,11 +629,257 @@ def get_supplier_physicians(supplier_id: str, db: Session = Depends(get_db)):
             "has_denied": denial_count > 0,
         })
 
+    # Fraud patterns fired on THIS vendor's claims — rule_flags grouped by rule.
+    # Mirrors the NPI detail's score_breakdown so the vendor page can render the
+    # same "Fraud patterns detected" cards. label + points reuse the NPI maps.
+    settings = get_settings()
+    label_map = {k: v[0] for k, v in RULE_INFO.items()}
+    for k, factor, _p in NEW_RULE_BREAKDOWN:
+        label_map.setdefault(k, factor)
+    pts_map = {
+        "volume_spike": settings.weight_volume_spike,
+        "geographic_anomaly": settings.weight_geo_anomaly,
+        "cross_npi_supplier": settings.weight_cross_npi,
+        "oig_leie_hit": settings.weight_oig_hit,
+        "new_high_value_supplier": settings.weight_new_vendor,
+        "identity_reuse": settings.weight_identity_reuse,
+        "abnormal_hospice_duration": settings.weight_hospice_duration,
+        "upcoding": settings.weight_upcoding,
+        "unbundling": settings.weight_unbundling,
+        "duplicate_billing": settings.weight_duplicate_billing,
+        "ghost_billing": settings.weight_ghost_billing,
+    }
+    for k, _factor, p in NEW_RULE_BREAKDOWN:
+        pts_map[k] = p
+
+    pattern_rows = (
+        db.query(RulesFlag.rule_name, func.count(RulesFlag.id))
+        .filter(RulesFlag.vendor_id == supplier_id)
+        .group_by(RulesFlag.rule_name)
+        .all()
+    )
+    fraud_patterns = [{
+        "rule": rname,
+        "label": label_map.get(rname, rname.replace("_", " ").title()),
+        "points": pts_map.get(rname, 0),
+        "claim_count": cnt,
+    } for rname, cnt in pattern_rows]
+    fraud_patterns.sort(key=lambda x: (-x["points"], -x["claim_count"]))
+
     return {
         "supplier_id": supplier_id,
         "distinct_npi_count": len(result),
         "total_denials": sum(r["denial_count"] for r in result),
+        "fraud_patterns": fraud_patterns,
         "physicians": result,
+    }
+
+
+# ---------------------------------------------------------------------------
+# GET /plan/suppliers/{supplier_id}/summary — LLM vendor risk explanation
+# ---------------------------------------------------------------------------
+@router.get("/plan/suppliers/{supplier_id}/summary")
+def supplier_risk_summary(supplier_id: str, db: Session = Depends(get_db)):
+    score = (db.query(NpiRiskScore)
+             .filter_by(entity_type="supplier", entity_id=supplier_id).first())
+    if not score:
+        raise HTTPException(status_code=404, detail={
+            "error": "Vendor not found", "code": "SUPPLIER_NOT_FOUND"})
+    fired = [r[0] for r in db.query(RulesFlag.rule_name)
+             .filter(RulesFlag.vendor_id == supplier_id).distinct().all()]
+    text, source, cached = generate_vendor_summary(
+        score.entity_name, score, fired, score.distinct_npi_count or 0)
+    return {
+        "vendor_id": supplier_id,
+        "summary": text,
+        "source": source,          # 'llm' (GPT-4o) or 'rules' (deterministic fallback)
+        "cached": cached,
+        "risk_band": get_risk_band(score.risk_score),
+        "risk_score": score.risk_score,
+    }
+
+
+# ---------------------------------------------------------------------------
+# POST /plan/suppliers/{supplier_id}/run-fraud-check — ghost-billing sweep across
+# ALL of this vendor's claims (the vendor analogue of the per-NPI fraud check).
+# ---------------------------------------------------------------------------
+@router.post("/plan/suppliers/{supplier_id}/run-fraud-check")
+def run_supplier_fraud_check(supplier_id: str, db: Session = Depends(get_db)):
+    from collections import defaultdict
+    from rapidfuzz import fuzz
+    from backend.models import PhysicianBill
+    from backend.sse import broadcast_alert as _broadcast
+
+    claims = db.query(Claim).filter(Claim.vendor_id == supplier_id).all()
+    if not claims:
+        raise HTTPException(status_code=404, detail={
+            "error": "Vendor not found", "code": "SUPPLIER_NOT_FOUND"})
+
+    npis = {c.npi for c in claims}
+    bills_by_npi = defaultdict(list)
+    for b in db.query(PhysicianBill).filter(PhysicianBill.npi.in_(npis)).all():
+        bills_by_npi[b.npi].append(b)
+
+    ghost = []
+    for claim in claims:
+        candidates = [
+            b for b in bills_by_npi.get(claim.npi, [])
+            if abs((b.service_date - claim.date_of_service).days) <= 3
+        ]
+        matched = any(fuzz.ratio(claim.patient_name, b.patient_name) >= 85 for b in candidates)
+        if not matched:
+            claim.verification_status = "ghost_billing_suspected"
+            ghost.append(claim)
+
+    if ghost:
+        db.commit()
+        for npi in {c.npi for c in ghost}:
+            _broadcast({"type": "ghost_billing", "npi": npi,
+                        "count": sum(1 for c in ghost if c.npi == npi)},
+                       recipient="physician")
+
+    return {
+        "vendor_id": supplier_id,
+        "vendor_name": claims[0].vendor_name,
+        "ghost_count": len(ghost),
+        "checked_claims": len(claims),
+    }
+
+
+# ---------------------------------------------------------------------------
+# GET /plan/suppliers/{supplier_id}/rule/{rule_name} — drill-down evidence:
+# what the rule means + the claims under THIS vendor that fired it (across all
+# the physicians it bills). Vendor analogue of /plan/npi/{npi}/rule/{rule_name}.
+# ---------------------------------------------------------------------------
+_EVIDENCE_CLAIM_CAP = 300
+
+
+@router.get("/plan/suppliers/{supplier_id}/rule/{rule_name}")
+def supplier_rule_evidence(supplier_id: str, rule_name: str, db: Session = Depends(get_db)):
+    label, explanation = RULE_INFO.get(
+        rule_name, (rule_name.replace("_", " ").title(), "Fraud-detection rule."))
+
+    base = (
+        db.query(RulesFlag, Claim)
+        .join(Claim, Claim.id == RulesFlag.claim_id)
+        .filter(RulesFlag.vendor_id == supplier_id, RulesFlag.rule_name == rule_name)
+    )
+    total = base.count()
+    rows = base.order_by(Claim.date_of_service.desc()).limit(_EVIDENCE_CLAIM_CAP).all()
+
+    # Distinct-physician breakdown across ALL flagged claims (not just the shown
+    # cap). This is what actually justifies "N distinct NPIs" for cross_npi — and
+    # for every rule it shows which physicians the pattern touches.
+    npi_counts = (
+        db.query(Claim.npi, func.count(RulesFlag.id), func.sum(Claim.claim_amount))
+        .join(RulesFlag, RulesFlag.claim_id == Claim.id)
+        .filter(RulesFlag.vendor_id == supplier_id, RulesFlag.rule_name == rule_name)
+        .group_by(Claim.npi)
+        .order_by(func.count(RulesFlag.id).desc())
+        .all()
+    )
+    breakdown_npis = [row[0] for row in npi_counts]
+    name_map = {}
+    if breakdown_npis:
+        for npi, nm in (db.query(NpiProfile.npi, NpiProfile.physician_name)
+                        .filter(NpiProfile.npi.in_(breakdown_npis)).all()):
+            name_map[npi] = nm
+
+    # Which of these physicians are THEMSELVES on the OIG LEIE exclusion list
+    # (authoritative source: the oig_excluded_npis table, not npi_profiles).
+    # An excluded physician billing through this vendor is a far stronger signal.
+    excluded_npis = set()
+    if breakdown_npis:
+        excluded_npis = {
+            r[0] for r in db.query(OigExcludedNpi.npi)
+            .filter(OigExcludedNpi.npi.in_(breakdown_npis)).all()
+        }
+
+    npi_breakdown = [{
+        "npi": npi,
+        "physician_name": name_map.get(npi) or f"NPI {npi}",
+        "claim_count": cnt,
+        "claim_amount": float(amt or 0),
+        "oig_excluded": npi in excluded_npis,
+    } for npi, cnt, amt in npi_counts]
+    # Surface OIG-excluded physicians first.
+    npi_breakdown.sort(key=lambda x: (not x["oig_excluded"], -x["claim_count"]))
+
+    # Per-day breakdown for the day-based rules: which (physician, date) billed an
+    # implausible number of claims (impossible_day) or saw too many distinct
+    # patients (rapid_cycling). Each row is one offending day.
+    day_breakdown = []
+    if rule_name in ("impossible_day", "rapid_cycling"):
+        day_rows = (
+            db.query(Claim.date_of_service, Claim.npi,
+                     func.count(RulesFlag.id),
+                     func.count(distinct(Claim.patient_id)),
+                     func.sum(Claim.claim_amount))
+            .join(RulesFlag, RulesFlag.claim_id == Claim.id)
+            .filter(RulesFlag.vendor_id == supplier_id, RulesFlag.rule_name == rule_name)
+            .group_by(Claim.date_of_service, Claim.npi)
+            .order_by(func.count(RulesFlag.id).desc())
+            .all()
+        )
+        day_breakdown = [{
+            "date": d.isoformat() if d else None,
+            "npi": n,
+            "physician_name": name_map.get(n) or f"NPI {n}",
+            "claim_count": c,
+            "patient_count": pc,
+            "claim_amount": float(a or 0),
+        } for d, n, c, pc, a in day_rows]
+
+    # Practice coordinates per physician — only for the geographic_anomaly map
+    # (each physician the vendor bills has their own practice location).
+    prac = {}
+    if rule_name == "geographic_anomaly" and breakdown_npis:
+        for pn, plat, plng, pcity, pstate in (
+            db.query(NpiProfile.npi, NpiProfile.practice_lat, NpiProfile.practice_lng,
+                     NpiProfile.practice_city, NpiProfile.practice_state)
+            .filter(NpiProfile.npi.in_(breakdown_npis)).all()
+        ):
+            prac[pn] = {
+                "lat": float(plat) if plat is not None else None,
+                "lng": float(plng) if plng is not None else None,
+                "city": pcity, "state": pstate,
+            }
+
+    claims = [{
+        "claim_id": str(c.id),
+        "patient_name": c.patient_name,
+        "date_of_service": c.date_of_service.isoformat() if c.date_of_service else None,
+        "npi": c.npi,
+        "physician_name": name_map.get(c.npi) or f"NPI {c.npi}",
+        "service_description": c.service_description,
+        "service_category": c.service_category,
+        "claim_amount": float(c.claim_amount),
+        "why": rf.rule_description,
+        "severity": rf.severity,
+        "patient_lat": float(c.patient_lat) if c.patient_lat is not None else None,
+        "patient_lng": float(c.patient_lng) if c.patient_lng is not None else None,
+        "practice_lat": (prac.get(c.npi) or {}).get("lat"),
+        "practice_lng": (prac.get(c.npi) or {}).get("lng"),
+        "practice_city": (prac.get(c.npi) or {}).get("city"),
+        "practice_state": (prac.get(c.npi) or {}).get("state"),
+    } for rf, c in rows]
+
+    # Is the VENDOR itself on the LEIE list (the reason this pattern fired)?
+    vendor_leie = (db.query(OigExcludedNpi.entity_name, OigExcludedNpi.exclusion_type)
+                   .filter(OigExcludedNpi.npi == supplier_id).first())
+    vendor_name = (vendor_leie[0] if vendor_leie else None) or \
+        db.query(Claim.vendor_name).filter(Claim.vendor_id == supplier_id).limit(1).scalar()
+
+    return {
+        "supplier_id": supplier_id, "rule_name": rule_name, "label": label,
+        "explanation": explanation, "count": total, "shown": len(claims),
+        "capped": total > len(claims), "claims": claims,
+        "distinct_npis": len(npi_breakdown), "npi_breakdown": npi_breakdown,
+        "excluded_physician_count": len(excluded_npis),
+        "vendor_oig_excluded": vendor_leie is not None,
+        "vendor_name": vendor_name,
+        "vendor_exclusion_type": vendor_leie[1] if vendor_leie else None,
+        "day_breakdown": day_breakdown,
     }
 
 

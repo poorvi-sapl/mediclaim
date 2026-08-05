@@ -2,6 +2,56 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ───────────────────────────────────────────────────────────────────────────
+   Payer portal design tokens.
+
+   Declared at :root but referenced only from payer-facing files (plan/**,
+   AssistantWidget, and PlainNavbar/ProfileMenu in Shell.jsx). Declaring a custom
+   property has no effect on its own, so the physician and vendor portals — which
+   share ui.jsx and Shell.jsx — are untouched by this block.
+
+   Risk-band colours are deliberately NOT here: they live in
+   frontend/src/lib/risk.js as the single source for the critical/high/medium/low
+   scale, mirrored by backend/schemas.py. Bands carry meaning, so they stay put
+   while the surrounding chrome moves onto these tokens.
+   ─────────────────────────────────────────────────────────────────────────── */
+:root {
+  /* Brand navy */
+  --color-primary:        #092f56;   /* buttons, headers, hero band */
+  --color-primary-dark:   #061f3a;   /* gradient end, hover */
+  --color-primary-light:  #0d3d6e;   /* gradient start */
+  --color-accent:         #1a4d7a;
+
+  /* The spec has no light accent for icons sitting on white — without one, idle
+     nav icons render nearly as dark as the active pill and the distinction is
+     lost. This is an addition, not part of the supplied palette. */
+  --color-primary-tint:   #5b84c4;
+
+  /* Text */
+  --color-text-dark:      #1a1a2e;
+  --color-text-body:      #4b5563;
+  --color-text-muted:     #8a8a9a;
+  /* Muted text on the navy band; --color-text-muted is too low-contrast there. */
+  --color-text-on-primary: #8fa6c9;
+
+  /* Surfaces */
+  --color-card:           #ffffff;
+  --color-bg-soft:        #e8edf5;
+  --color-border:         #eef0f4;
+  --color-border-strong:  #c7d0de;
+
+  /* Gradients. The supplied "page background" gradient is dark navy — in this
+     portal the dark surface is the hero band, not the page, so it lands there. */
+  --gradient-hero:   radial-gradient(ellipse at 80% 10%, #103d6b 0%, #092f56 45%, #061f3a 100%);
+  --gradient-button: linear-gradient(135deg, #0d3d6e 0%, #144a82 100%);
+  --gradient-badge:  linear-gradient(135deg, #e8edf5, #dde6f2);
+
+  /* Elevation */
+  --shadow-card:         0 24px 60px rgba(0,0,0,.18), 0 8px 24px rgba(9,47,86,.08);
+  --shadow-button:       0 6px 18px rgba(9,47,86,.28);
+  --shadow-button-hover: 0 10px 24px rgba(9,47,86,.38);
+}
+
 @layer base {
   html, body, #root {
     height: 100%;

@@ -1,8 +1,16 @@
+import { fileURLToPath, URL } from 'node:url'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    alias: {
+      // shadcn-style "@/..." imports. Existing relative imports keep working;
+      // this just means pasted shadcn components resolve without rewriting them.
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+    },
+  },
   server: {
     host: true,
     port: 4000,

@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import Shell from '../components/Shell'
 import { Icon, StatCard, fmtUSD, fmtDate, timeAgo, normalizeSearchQuery } from '../components/ui'
-import { KpiCard } from '../components/ui/kpi-card'
+import { KpiCard } from '../components/ui/kpi-card-flat'
 import { FileText, CheckCircle2, AlertTriangle, Clock } from 'lucide-react'
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import {

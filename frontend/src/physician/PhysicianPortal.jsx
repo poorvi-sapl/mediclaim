@@ -10,7 +10,7 @@ import { AlertsProvider } from '../context/AlertsContext'
 import Shell from '../components/Shell'
 import { Icon, fmtUSD, fmtDate, timeAgo, buildDisputeTimeline, PFilterTh } from '../components/ui'
 import PhysicianDashboard from '../components/PhysicianDashboard'
-import ClaimsTable, { ClaimDetailScreen } from '../components/ClaimsTable'
+import ClaimsTable, { ACTIONS, ClaimDetailScreen } from '../components/ClaimsTable'
 import SummaryCardSkeleton from '../components/SummaryCardSkeleton'
 import GhostBillingToast from '../components/GhostBillingToast'
 import {
@@ -25,11 +25,39 @@ const PHYS_NAV = [
   { id: 'alerts', label: 'My Disputes', icon: 'alertTri' },
 ]
 const PHYS_TITLES = { summary: 'My Dashboard', claims: 'Claims Under My NPI', claimDetail: 'Claim Detail', alerts: 'My Disputes', disputeDetail: 'Dispute Detail' }
+// Built from ClaimsTable's ACTIONS, so each filter is named exactly as the button
+// the physician pressed — Confirm / Report Fraud / Flag Vendor / Reassign Patient /
+// Deceased Patient — and stays in step if a button is ever renamed.
+//
+// No Disputes tab: DISPUTE-type cases (from the emailed CONFIRM/DISPUTE/FRAUD_REPORT
+// links in respond.py) aren't one of the five in-app actions. They still arrive and
+// still render; they're reachable under All rather than having a filter of their own.
+// Shortened for the pill row: the buttons read "Report Fraud" / "Flag Vendor", which
+// are too long as tabs in a 360px panel. ACTIONS still decides WHICH filters exist —
+// add an action and its filter appears, falling back to the button's own label.
+const NOTIF_TAB_LABEL = {
+  confirmed:       'Confirm',
+  fraud:           'Fraud',
+  flagged:         'Flag',
+  unknownPatient:  'Reassign Patient',
+  deceasedPatient: 'Deceased Patient',
+}
 const PHYS_NOTIF_TABS = [
   { id: 'all', label: 'All' },
-  { id: 'fraud', label: 'Fraud' },
-  { id: 'dispute', label: 'Disputes' },
+  ...ACTIONS.map((a) => ({ id: a.id, label: NOTIF_TAB_LABEL[a.id] || a.label })),
 ]
+
+// Icon + tone per category, matching that action's own button in ClaimsTable so a
+// row is recognisable at a glance as "the fraud report I filed". `dispute` has no
+// tab but keeps an entry here so those rows still badge correctly under All.
+const PHYS_NOTIF_STYLE = {
+  confirmed:       { icon: 'check',       bg: '#E9F3ED', fg: '#3A7D5C' },
+  fraud:           { icon: 'shieldAlert', bg: '#F7EBEA', fg: '#A6453F' },
+  dispute:         { icon: 'message',     bg: '#E9F0F6', fg: '#5A9BC9' },
+  flagged:         { icon: 'flag',        bg: '#F1F4F9', fg: '#647089' },
+  unknownPatient:  { icon: 'userx',       bg: '#F1F4F9', fg: '#93A0B3' },
+  deceasedPatient: { icon: 'heartOff',    bg: '#F2EEF7', fg: '#7A6899' },
+}
 
 // Physician bell — recent-activity dropdown for the dashboard's bell icon.
 // Only shows events caused by someone else (a vendor responding, or an
@@ -70,7 +98,8 @@ function PhysicianNotifBell({ count, notifications, open, onToggle, onMarkRead, 
               Mark all read
             </button>
           </div>
-          <div className="flex gap-1 px-3 py-2.5">
+          {/* Wraps: six filters don't fit one row in a 360px panel. */}
+          <div className="flex flex-wrap gap-1 px-3 py-2.5">
             {PHYS_NOTIF_TABS.map((t) => (
               <button key={t.id} onClick={() => setTab(t.id)}
                       className={`px-2.5 py-1 rounded-lg text-[12px] font-semibold ${tab === t.id ? 'bg-slate-100 text-slate-800' : 'text-slate-400 hover:text-slate-600'}`}>
@@ -82,14 +111,12 @@ function PhysicianNotifBell({ count, notifications, open, onToggle, onMarkRead, 
             {filtered.length === 0 ? (
               <div className="py-8 text-center text-[12.5px] text-slate-400">No notifications yet.</div>
             ) : filtered.map((n) => {
-              const fraud = n.category === 'fraud'
-              const bg = fraud ? '#F7EBEA' : '#E9F0F6'
-              const fg = fraud ? '#A6453F' : '#5A9BC9'
+              const st = PHYS_NOTIF_STYLE[n.category] || PHYS_NOTIF_STYLE.dispute
               return (
                 <button key={n.id} onClick={() => onSelect(n)}
                         className={`w-full flex gap-2.5 text-left px-2 py-2.5 rounded-lg hover:bg-slate-50 ${!n.read ? 'bg-slate-50/80' : ''}`}>
-                  <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: bg }}>
-                    <Icon name={fraud ? 'shieldAlert' : 'message'} size={14} style={{ color: fg }} />
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: st.bg }}>
+                    <Icon name={st.icon} size={14} style={{ color: st.fg }} />
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">

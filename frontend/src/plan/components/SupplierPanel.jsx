@@ -107,7 +107,7 @@ export default function SupplierPanel({ supplierName, evidence = [], variant, on
 
       {/* cross-NPI explanation */}
       {variant === 'crossnpi' && (
-        <div className="mt-5 rounded-xl bg-[#E9F0F6] border border-slate-200 px-4 py-3">
+        <div className="mt-5 rounded-xl bg-[var(--color-bg-soft)] border border-slate-200 px-4 py-3">
           <div className="text-sm font-bold text-slate-900">Cross-NPI Pattern</div>
           <p className="text-xs text-slate-600 mt-1">
             This vendor is billing under {supplier?.distinctNPIs ?? data?.distinctNpis ?? physicians.length} distinct physician NPIs — a pattern consistent with coordinated fraud.
@@ -123,7 +123,7 @@ export default function SupplierPanel({ supplierName, evidence = [], variant, on
             <button onClick={() => exportCSV('vendor-physicians.csv',
                 ['Physician', 'NPI', 'City', 'State', 'Claims', 'Billed', 'Flags'],
                 sorted.map(p => [p.name, p.npi, p.city, p.state, p.claimCount, p.totalAmount, p.flagsOnThisSupplier || 0]))}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#0A1F3D]/20 bg-white text-[#0A1F3D] text-[12px] font-semibold hover:bg-[#E9F0F6] transition-colors">
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[var(--color-primary)]/20 bg-white text-[var(--color-primary)] text-[12px] font-semibold hover:bg-[var(--color-bg-soft)] transition-colors">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
               </svg>
@@ -139,10 +139,10 @@ export default function SupplierPanel({ supplierName, evidence = [], variant, on
                 return (
                   <th key={c.key} onClick={() => onSort(c.key)}
                       className={`th cursor-pointer select-none group ${c.right ? 'text-right' : ''}`}>
-                    <span className="inline-flex items-center gap-1 group-hover:text-[#0A1F3D] transition-colors">
+                    <span className="inline-flex items-center gap-1 group-hover:text-[var(--color-primary)] transition-colors">
                       {c.label}
                       {active
-                        ? <span className="text-[#0A1F3D]">{sort.dir === 'asc' ? '↑' : '↓'}</span>
+                        ? <span className="text-[var(--color-primary)]">{sort.dir === 'asc' ? '↑' : '↓'}</span>
                         : <span className="text-slate-300 group-hover:text-slate-500 transition-colors">↕</span>}
                     </span>
                   </th>
@@ -154,7 +154,7 @@ export default function SupplierPanel({ supplierName, evidence = [], variant, on
               {sorted.map((p) => (
                 <tr key={p.npi} onClick={() => onOpenNpi?.({ npi: p.npi, name: p.name })}
                     title={`Open NPI detail for ${p.name}`}
-                    className="group cursor-pointer transition-colors hover:bg-[#F7F9FC]">
+                    className="group cursor-pointer transition-colors hover:bg-[var(--color-bg-soft)]">
                   <td className="td">
                     <div className="font-semibold text-slate-800 text-sm">{p.name}</div>
                     <div className="text-[11px] text-slate-400 tabular-nums">{p.npi} · {p.city}, {p.state}</div>
@@ -212,7 +212,7 @@ export default function SupplierPanel({ supplierName, evidence = [], variant, on
             </div>
           ))}
           {evidence.length > evLimit && (
-            <button onClick={() => setEvLimit((n) => n + 20)} className="py-3 text-xs font-semibold text-[#0A1F3D] hover:underline">
+            <button onClick={() => setEvLimit((n) => n + 20)} className="py-3 text-xs font-semibold text-[var(--color-primary)] hover:underline">
               Show more ({evidence.length - evLimit} remaining)
             </button>
           )}

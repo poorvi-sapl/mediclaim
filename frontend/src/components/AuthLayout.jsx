@@ -11,7 +11,7 @@ function ShieldLogo({ size = 18, color = 'white' }) {
   )
 }
 
-export default function AuthLayout({ children }) {
+export default function AuthLayout({ children, wide = false }) {
   return (
     <div className="min-h-screen flex items-center justify-center p-6"
          style={{ backgroundImage: `url(${bgImage})`, backgroundSize: 'cover', backgroundPosition: 'center' }}>
@@ -32,7 +32,7 @@ export default function AuthLayout({ children }) {
         </div>
 
         {/* RIGHT — content */}
-        <div className="flex-1 bg-white flex flex-col justify-center px-10 py-10">
+        <div className={`flex-1 bg-white flex flex-col justify-center px-10 ${wide ? 'py-6' : 'py-10'}`}>
           {/* Mobile logo */}
           <div className="lg:hidden flex items-center gap-2 mb-8">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#1a3d7c' }}>
@@ -41,7 +41,7 @@ export default function AuthLayout({ children }) {
             <span className="text-[15px] font-bold text-slate-800 tracking-tight">MedClaim Analytics</span>
           </div>
 
-          <div className="w-full max-w-md mx-auto">
+          <div className={`w-full ${wide ? 'max-w-[560px]' : 'max-w-md'} mx-auto`}>
             {children}
           </div>
         </div>

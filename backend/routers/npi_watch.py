@@ -17,7 +17,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from backend.database import get_db
-from backend.models import Claim, ClaimNotification, DisputeCase, DisputeCaseEvent, User
+from backend.models import Action, Claim, ClaimNotification, DisputeCase, DisputeCaseEvent, User
 from backend.schemas import ActionRequest
 from backend.auth import decode_token, extract_token, is_blacklisted
 from backend.config import get_settings
@@ -179,6 +179,20 @@ _PHYSICIAN_EVENT_TITLES = {
     "CONFIRMATION_EXPIRED": "Confirmation window expired — case reopened",
 }
 
+# dispute_type -> the claim action that produced it, so the bell can filter and
+# badge by what the physician actually did rather than lumping four of the five
+# actions together as "dispute". Ids match ClaimsTable.jsx's ACTIONS.
+#
+# There is no `confirmed` entry on purpose: confirming a claim involves no vendor,
+# so it never opens a dispute case and can never appear in this feed.
+_BELL_CATEGORY = {
+    "FRAUD_REPORT":     "fraud",
+    "DISPUTE":          "dispute",
+    "FLAG":             "flagged",
+    "UNKNOWN_PATIENT":  "unknownPatient",
+    "DECEASED_PATIENT": "deceasedPatient",
+}
+
 
 @router.get("/notifications/bell")
 def get_bell_notifications(request: Request, db: Session = Depends(get_db)):
@@ -211,7 +225,7 @@ def get_bell_notifications(request: Request, db: Session = Depends(get_db)):
             title = _PHYSICIAN_EVENT_TITLES.get(event.event_type, event.event_type)
         notifications.append({
             "id":           f"event-{event.event_id}",
-            "category":     "fraud" if is_fraud else "dispute",
+            "category":     _BELL_CATEGORY.get(case.dispute_type, "dispute"),
             "title":        title,
             "description":  f"Claim {claim_number}" + (f" — {event.note}" if event.note else ""),
             "created_at":   event.created_at.isoformat(),
@@ -220,6 +234,36 @@ def get_bell_notifications(request: Request, db: Session = Depends(get_db)):
             "read":         event.created_at <= since,
         })
 
+    # Confirmations, so the bell's `confirmed` filter has something to filter.
+    # These are the only rows here caused by the physician rather than someone
+    # else, and they are the exception for a structural reason: confirming a claim
+    # involves no vendor, so it never opens a DisputeCase and can never appear as a
+    # case event. Without this the Confirm filter would be permanently empty.
+    #
+    # Always read=True — they are your own actions, so they must never contribute
+    # to the unread badge. (That badge counts DisputeCaseEvent rows in
+    # auth.py's /notifications/count and is unaffected by this block either way.)
+    confirms = (
+        db.query(Action, Claim.ccn)
+        .join(Claim, Claim.id == Action.claim_id)
+        .filter(Action.npi == user.npi, Action.action_type == "confirm")
+        .order_by(Action.created_at.desc())
+        .limit(30)
+        .all()
+    )
+    for action, ccn in confirms:
+        notifications.append({
+            "id":           f"action-{action.id}",
+            "category":     "confirmed",
+            "title":        "You confirmed a claim as legitimate",
+            "description":  f"Claim {ccn}" + (f" — {action.note}" if action.note else ""),
+            "created_at":   action.created_at.isoformat(),
+            "case_id":      None,
+            "claim_number": ccn,
+            "read":         True,
+        })
+
+    notifications.sort(key=lambda n: n["created_at"], reverse=True)
     return {"notifications": notifications}
 
 

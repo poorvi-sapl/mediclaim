@@ -1,0 +1,13 @@
+{
+  "//": "Editor-only. Teaches VS Code the same @/ alias vite.config.js resolves at build time, so Ctrl-click and autocomplete work on shadcn-style imports. No effect on the build.",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+    "jsx": "preserve",
+    "checkJs": false
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"]
+}

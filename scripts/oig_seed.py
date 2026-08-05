@@ -33,8 +33,25 @@ def main():
             "INSERT INTO oig_excluded_names (entity_name, exclusion_type, "
             "exclusion_date, state) VALUES (%s,'1128(a)(1)',CURRENT_DATE,%s)",
             (s["name"], s.get("state")))
+
+    # Demo case: one physician of an OIG-flagged vendor is ALSO on the LEIE list, so
+    # the vendor's OIG-evidence popup can show the strongest signal — an excluded
+    # provider billing through an excluded vendor. Kept in sync with
+    # npi_profiles.oig_excluded so the physician reads as excluded everywhere.
+    DEMO_EXCLUDED_PHYSICIANS = [
+        ("1003106014", "SINAE ANGELA KANE", "CA"),  # bills the OIG-excluded vendor 1ST CALEBS
+    ]
+    for npi, name, state in DEMO_EXCLUDED_PHYSICIANS:
+        cur.execute(
+            "INSERT INTO oig_excluded_npis (npi, entity_name, exclusion_type, "
+            "exclusion_date, state) VALUES (%s,%s,'1128(a)(1)',CURRENT_DATE,%s) "
+            "ON CONFLICT (npi) DO NOTHING",
+            (npi, name, state))
+        cur.execute("UPDATE npi_profiles SET oig_excluded=TRUE WHERE npi=%s", (npi,))
+
     cur.close(); conn.close()
-    print(f"oig_seed: inserted {len(tier3)} Tier-3 suppliers into OIG exclusion tables")
+    print(f"oig_seed: inserted {len(tier3)} Tier-3 suppliers + "
+          f"{len(DEMO_EXCLUDED_PHYSICIANS)} demo excluded physician(s) into OIG tables")
 
 
 if __name__ == "__main__":

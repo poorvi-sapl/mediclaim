@@ -4,6 +4,8 @@
 // already consume, so the components don't need rewriting.
 // ─────────────────────────────────────────────────────────────────────────
 
+import { riskLabel } from './lib/risk'
+
 export const API_BASE =
   import.meta.env.VITE_API_URL || 'http://localhost:4001'
 
@@ -548,6 +550,12 @@ export async function getRuleEvidence(npi, rule) {
     physicianName: d.physician_name || null,
     practiceLat: d.practice_lat != null ? Number(d.practice_lat) : null,
     practiceLng: d.practice_lng != null ? Number(d.practice_lng) : null,
+    npiOigExcluded: !!d.npi_oig_excluded,
+    npiExclusionType: d.npi_exclusion_type,
+    excludedVendorCount: d.excluded_vendor_count ?? 0,
+    vendorBreakdown: (d.vendor_breakdown || []).map((v) => ({
+      vendorId: v.vendor_id, vendorName: v.vendor_name, claimCount: v.claim_count, oigExcluded: !!v.oig_excluded,
+    })),
     claims: (d.claims || []).map((c) => ({
       id: c.claim_id,
       patient: c.patient_name,
@@ -605,8 +613,7 @@ export async function getNpiDetail(npi) {
 
 export async function getSuppliers() {
   const data = await get('/plan/suppliers?page=0&page_size=100')
-  const band = (score) => score > 80 ? 'Critical' : score > 60 ? 'High'
-    : score > 30 ? 'Medium' : 'Low'
+  const band = riskLabel
   return data.items.map((s, i) => ({
     id: s.vendor_id || i,
     name: s.vendor_name,
@@ -636,6 +643,9 @@ export async function getSupplierPhysicians(supplierId) {
     supplierId: d.supplier_id,
     distinctNpis: d.distinct_npi_count,
     totalDenials: d.total_denials,
+    fraudPatterns: (d.fraud_patterns || []).map((f) => ({
+      rule: f.rule, label: f.label, points: f.points, claimCount: f.claim_count,
+    })),
     physicians: (d.physicians || []).map((p) => ({
       npi: p.npi, name: p.physician_name, specialty: p.specialty,
       city: p.practice_city, state: p.practice_state,
@@ -643,6 +653,63 @@ export async function getSupplierPhysicians(supplierId) {
       flags: p.physician_flag_count, flagsOnThisSupplier: p.flags_on_this_supplier ?? 0,
       denials: p.denial_count, hasDenied: p.has_denied,
       firstClaim: p.first_claim_date, lastClaim: p.last_claim_date,
+    })),
+  }
+}
+
+// Vendor AI risk summary (grounded in the rules that fired on the vendor's claims).
+export async function getSupplierSummary(supplierId) {
+  const d = await request(`/plan/suppliers/${supplierId}/summary`)
+  return { summary: d.summary, source: d.source, riskBand: d.risk_band, riskScore: d.risk_score }
+}
+// Vendor ghost-billing sweep across all of the vendor's claims.
+export async function runSupplierFraudCheck(supplierId) {
+  return request(`/plan/suppliers/${supplierId}/run-fraud-check`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+  })
+}
+// Drill-down: what a rule means + the claims under THIS vendor that fired it.
+export async function getSupplierRuleEvidence(supplierId, ruleName) {
+  const d = await request(`/plan/suppliers/${supplierId}/rule/${ruleName}`)
+  return {
+    label: d.label, explanation: d.explanation, count: d.count, shown: d.shown, capped: d.capped,
+    distinctNpis: d.distinct_npis ?? 0,
+    excludedPhysicianCount: d.excluded_physician_count ?? 0,
+    vendorOigExcluded: !!d.vendor_oig_excluded,
+    vendorName: d.vendor_name,
+    vendorExclusionType: d.vendor_exclusion_type,
+    dayBreakdown: (d.day_breakdown || []).map((x) => ({
+      date: x.date, npi: x.npi, physician: x.physician_name,
+      claimCount: x.claim_count, patientCount: x.patient_count ?? x.claim_count,
+      claimAmount: Number(x.claim_amount || 0),
+    })),
+    npiBreakdown: (d.npi_breakdown || []).map((n) => ({
+      npi: n.npi, physician: n.physician_name, claimCount: n.claim_count,
+      claimAmount: Number(n.claim_amount || 0), oigExcluded: !!n.oig_excluded,
+    })),
+    claims: (d.claims || []).map((c) => ({
+      id: c.claim_id, patient: c.patient_name, date: c.date_of_service,
+      npi: c.npi, physician: c.physician_name, description: c.service_description,
+      category: c.service_category, amount: Number(c.claim_amount), why: c.why, severity: c.severity,
+      patientLat: c.patient_lat != null ? Number(c.patient_lat) : null,
+      patientLng: c.patient_lng != null ? Number(c.patient_lng) : null,
+      practiceLat: c.practice_lat != null ? Number(c.practice_lat) : null,
+      practiceLng: c.practice_lng != null ? Number(c.practice_lng) : null,
+      practiceCity: c.practice_city, practiceState: c.practice_state,
+    })),
+  }
+}
+
+// Detection-engine rule catalog (all 16 rules) with live flag counts + sample evidence.
+export async function getRules() {
+  const d = await request('/plan/rules')
+  return {
+    totalRules: d.total_rules, criticalRules: d.critical_rules,
+    totalFlags: d.total_flags, categories: d.categories,
+    rules: (d.rules || []).map((r) => ({
+      rule: r.rule, code: r.code, category: r.category, severity: r.severity,
+      name: r.name, description: r.description, flagCount: r.flag_count,
+      distinctNpis: r.distinct_npis, distinctVendors: r.distinct_vendors, sampleEvidence: r.sample_evidence,
     })),
   }
 }

@@ -12,6 +12,8 @@ from sqlalchemy.orm import Session
 from backend.config import get_settings
 from backend.database import get_db
 from backend.models import Action, Claim, NpiProfile, NpiRiskScore, RulesFlag
+from backend.schemas import RISK_BAND_BOUNDS, RISK_BAND_ORDER, get_risk_band
+from backend.scoring.risk_score import band_counts
 
 router = APIRouter()
 log = logging.getLogger("analytics")
@@ -165,13 +167,9 @@ def _build_plan_context(db: Session, filters: Optional[AnalyticsFilters]) -> str
     ninety_days_ago = today - timedelta(days=90)
     current_month_str = today.strftime("%Y-%m")
 
-    # Single query for risk summary counts using CASE — 1 round-trip instead of 4
-    risk_counts = db.query(
-        func.count(NpiRiskScore.id).label("total"),
-        func.sum(case((NpiRiskScore.risk_score > 70, 1), else_=0)).label("high"),
-        func.sum(case(((NpiRiskScore.risk_score > 30) & (NpiRiskScore.risk_score <= 70), 1), else_=0)).label("med"),
-        func.sum(case((NpiRiskScore.risk_score <= 30, 1), else_=0)).label("low"),
-    ).filter(NpiRiskScore.entity_type == "npi").one()
+    # Shared band bucketing — one round-trip, same numbers as /plan/summary and
+    # the risk-distribution chart.
+    risk_counts = band_counts(db, "npi")
 
     # Top 10 NPIs by risk (includes amount + flags — covers "top 10" queries)
     top_risk_rows = (
@@ -253,9 +251,13 @@ def _build_plan_context(db: Session, filters: Optional[AnalyticsFilters]) -> str
         .limit(10).all()
     )
 
+    bands_text = " | ".join(
+        f"{risk_counts[b]} {b} ({RISK_BAND_BOUNDS[b][0]}-{RISK_BAND_BOUNDS[b][1]})"
+        for b in RISK_BAND_ORDER
+    )
     lines = [
         "PLAN DATA",
-        f"NPIs: {risk_counts.total} total | {risk_counts.high} high-risk(>70) | {risk_counts.med} medium | {risk_counts.low} low",
+        f"NPIs: {risk_counts['total']} total | {bands_text}",
         "",
         "Top 5 NPIs by risk score (name, NPI, score, claims, amount, flags):",
     ]
@@ -307,16 +309,6 @@ def _cached_plan_context(db: Session, filters: Optional[AnalyticsFilters]) -> st
     return ctx
 
 
-def _risk_band(score) -> str:
-    if score is None:
-        return "low"
-    if score > 70:
-        return "high"
-    if score > 30:
-        return "mid"
-    return "low"
-
-
 _RULE_LABELS = {
     "geographic_anomaly": "Geographic Anomaly",
     "oig_leie_hit": "OIG LEIE Hit",
@@ -338,16 +330,9 @@ _RULE_LABELS = {
 
 @router.get("/overview/risk-distribution")
 def overview_risk_distribution(db: Session = Depends(get_db)):
-    counts = db.query(
-        func.sum(case((NpiRiskScore.risk_score > 70, 1), else_=0)).label("high"),
-        func.sum(case(((NpiRiskScore.risk_score > 30) & (NpiRiskScore.risk_score <= 70), 1), else_=0)).label("mid"),
-        func.sum(case((NpiRiskScore.risk_score <= 30, 1), else_=0)).label("low"),
-    ).filter(NpiRiskScore.entity_type == "npi").one()
-    return {
-        "high": int(counts.high or 0),
-        "mid": int(counts.mid or 0),
-        "low": int(counts.low or 0),
-    }
+    """Scored NPIs per risk band. Four bands (was high/mid/low), matching the
+    pills, filters and KPIs everywhere else in the product."""
+    return band_counts(db, "npi")
 
 
 @router.get("/overview/top-npis")
@@ -366,7 +351,7 @@ def overview_top_npis(db: Session = Depends(get_db)):
                 "name": p.physician_name or s.entity_id,
                 "risk_score": round(float(s.risk_score or 0), 1),
                 "total_claims": int(s.total_claim_count or 0),
-                "risk_band": _risk_band(s.risk_score),
+                "risk_band": get_risk_band(s.risk_score),
             }
             for s, p in rows
         ]

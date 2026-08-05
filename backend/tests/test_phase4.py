@@ -175,7 +175,10 @@ def test_get_dispute_endpoint_valid_token(db):
     assert resp.status_code == 200
     data = resp.json()
     assert data["case_id"] == case.case_id
-    assert data["dispute_type"] == "DISPUTE"
+    # Deliberately null: the vendor is never told WHY documents are required
+    # (dispute vs fraud report vs deceased patient). Asserting "DISPUTE" here
+    # would be asserting a privacy leak. See vendor.py's get_vendor_dispute.
+    assert data["dispute_type"] is None
     assert data["status"] == "OPEN"
     assert "claim" in data
     assert data["claim"]["claim_number"] == "CLM-P4-001"
@@ -219,32 +222,65 @@ def test_get_dispute_wrong_vendor(db):
 
 
 # ---------------------------------------------------------------------------
-# TEST 5 — POST respond with RESPONDED_TO_MEDICARE (only valid once escalation
-# is unlocked — a fresh dispute must try RESOLVED_WITH_PHYSICIAN first)
+# TEST 5 — POST respond: the vendor has one option, uploading documents.
+#
+# The old two-choice response is gone: "RESPONDED_TO_MEDICARE" was locked until
+# the physician rejected a "RESOLVED_WITH_PHYSICIAN" attempt, which unlocked it.
+# Both choices, and the lock, were removed — response_type is still accepted so
+# old clients don't break, but it is ignored. See vendor.py's _apply_vendor_docs.
 # ---------------------------------------------------------------------------
 
-def test_vendor_respond_option_a_locked_on_fresh_case(db):
+def test_vendor_respond_lands_in_physician_review(db):
     _insert_physician(db)
-    case = _create_dispute(db, claim_suffix="P4-004")
+    case = _create_dispute(db, claim_suffix="P4-005")
     token = generate_vendor_dispute_token(case.case_id, case.vendor_npi)
 
     resp = client.post(
         f"/api/v1/vendor/disputes/{case.case_id}/respond?token={token}",
         data={
-            "response_type":   "RESPONDED_TO_MEDICARE",
-            "vendor_response": "We have submitted the claim correction to Medicare.",
+            "response_type":   "RESOLVED_WITH_PHYSICIAN",
+            "vendor_response": "Billing error identified; supporting documents attached.",
         },
     )
-    assert resp.status_code == 403
-    assert resp.json()["error"] == "escalation_locked"
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["success"] is True
+    assert data["status"] == "PENDING_PHYSICIAN_REVIEW"
 
-    print("\n  [PASS] RESPONDED_TO_MEDICARE rejected on a fresh, not-yet-escalated case")
+    db.expire_all()
+    updated = db.query(DisputeCase).filter(DisputeCase.case_id == case.case_id).first()
+    assert updated.status == "PENDING_PHYSICIAN_REVIEW"
+    assert updated.vendor_responded_at is not None
+    assert updated.provider_response_type is None
+
+    print(f"\n  [PASS] Vendor responds -> {updated.status}, responded_at set")
 
 
-def test_vendor_respond_option_a_after_escalation_unlocked(db):
+@pytest.mark.parametrize("response_type", ["RESPONDED_TO_MEDICARE", "RESOLVED_WITH_PHYSICIAN", ""])
+def test_vendor_respond_ignores_response_type(db, response_type):
+    """Whatever the vendor posts as response_type — including the previously
+    locked RESPONDED_TO_MEDICARE, and nothing at all — the outcome is identical.
+    There is no longer an escalation lock to trip."""
+    _insert_physician(db)
+    case = _create_dispute(db, claim_suffix=f"P4-004-{response_type or 'blank'}")
+    token = generate_vendor_dispute_token(case.case_id, case.vendor_npi)
+
+    resp = client.post(
+        f"/api/v1/vendor/disputes/{case.case_id}/respond?token={token}",
+        data={"response_type": response_type, "vendor_response": "Documents attached."},
+    )
+    assert resp.status_code == 200, f"response_type={response_type!r} should not be rejected"
+    assert resp.json()["status"] == "PENDING_PHYSICIAN_REVIEW"
+
+    print(f"\n  [PASS] response_type={response_type or '(blank)'} -> PENDING_PHYSICIAN_REVIEW")
+
+
+def test_vendor_respond_unaffected_by_escalation_unlocked(db):
+    """escalation_unlocked used to gate which responses were allowed. It's now
+    inert for the respond path — only the legacy confirmation drain still sets it."""
     _insert_physician(db)
     case = _create_dispute(db, claim_suffix="P4-004b")
-    case.escalation_unlocked = True  # simulates: physician already rejected an earlier resolution
+    case.escalation_unlocked = True
     db.commit()
     token = generate_vendor_dispute_token(case.case_id, case.vendor_npi)
 
@@ -256,47 +292,9 @@ def test_vendor_respond_option_a_after_escalation_unlocked(db):
         },
     )
     assert resp.status_code == 200
-    data = resp.json()
-    assert data["success"] is True
-    assert data["status"] == "RESPONDED_TO_MEDICARE"
+    assert resp.json()["status"] == "PENDING_PHYSICIAN_REVIEW"
 
-    db.expire_all()
-    updated = db.query(DisputeCase).filter(DisputeCase.case_id == case.case_id).first()
-    assert updated.status == "RESPONDED_TO_MEDICARE"
-    assert updated.vendor_responded_at is not None
-
-    print(f"\n  [PASS] Option A after unlock: status={updated.status}, responded_at set")
-
-
-# ---------------------------------------------------------------------------
-# TEST 6 — POST respond with RESOLVED_WITH_PHYSICIAN goes to
-# PENDING_PHYSICIAN_CONFIRMATION, not straight to RESOLVED_BY_PHYSICIAN
-# ---------------------------------------------------------------------------
-
-def test_vendor_respond_option_b(db):
-    _insert_physician(db)
-    case = _create_dispute(db, claim_suffix="P4-005")
-    token = generate_vendor_dispute_token(case.case_id, case.vendor_npi)
-
-    resp = client.post(
-        f"/api/v1/vendor/disputes/{case.case_id}/respond?token={token}",
-        data={
-            "response_type":   "RESOLVED_WITH_PHYSICIAN",
-            "vendor_response": "Billing error identified; physician confirmed resolution.",
-        },
-    )
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["success"] is True
-    assert data["status"] == "PENDING_PHYSICIAN_CONFIRMATION"
-
-    db.expire_all()
-    updated = db.query(DisputeCase).filter(DisputeCase.case_id == case.case_id).first()
-    assert updated.status == "PENDING_PHYSICIAN_CONFIRMATION"
-    assert updated.vendor_responded_at is not None
-    assert updated.physician_confirmation_due_date is not None
-
-    print(f"\n  [PASS] Option B: status={updated.status}, awaiting physician confirmation")
+    print("\n  [PASS] escalation_unlocked=True changes nothing -> PENDING_PHYSICIAN_REVIEW")
 
 
 # ---------------------------------------------------------------------------
